@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -108,6 +109,37 @@ def parse_error_codes_page(html: str) -> dict[str, ErrorCodeInfo]:
                     cause = p.split(":", 1)[-1].strip()
                 if pl.startswith("solution") or pl.startswith("fix") or pl.startswith("action"):
                     fix = p.split(":", 1)[-1].strip()
+            out[code] = ErrorCodeInfo(code=code, title=title, cause=cause, fix=fix)
+
+    # 3) Если текст "пустой" (часть страницы рендерится/инжектится скриптами) —
+    # пробуем вытащить прямо из HTML по заголовкам вида:
+    # <h3 ...> CODE:11527 Title...</h3> <p>Cause of error: ...</p> <p>...upgrade...</p>
+    if not out:
+        for m in re.finditer(
+            r"<h3[^>]*>.*?CODE\s*:\s*(\d{4,7})\s+([^<]+)</h3>\s*(.*?)(?=<h3[^>]*>.*?CODE\s*:|\Z)",
+            html,
+            flags=re.IGNORECASE | re.DOTALL,
+        ):
+            code = m.group(1)
+            title = re.sub(r"\s+", " ", m.group(2)).strip()
+            chunk = m.group(3)
+            # вытащим абзацы внутри chunk
+            ps = [re.sub(r"\s+", " ", p).strip() for p in re.findall(r"<p[^>]*>(.*?)</p>", chunk, flags=re.IGNORECASE | re.DOTALL)]
+            ps_txt = [re.sub(r"<[^>]+>", " ", p) for p in ps]
+            ps_txt = [re.sub(r"\s+", " ", p).strip() for p in ps_txt if p.strip()]
+
+            cause = ""
+            fix = ""
+            for p in ps_txt:
+                pl = p.lower()
+                if "cause of error" in pl or pl.startswith("cause"):
+                    cause = p.split(":", 1)[-1].strip()
+                # на странице часто нет явного "solution", поэтому берём первую "instruction" строку
+                if not fix and ("need" in pl or "upgrade" in pl or "after" in pl or pl.startswith("solution")):
+                    fix = p.split(":", 1)[-1].strip()
+            # если fix не нашли — не дублируем cause
+            if fix == cause:
+                fix = ""
             out[code] = ErrorCodeInfo(code=code, title=title, cause=cause, fix=fix)
 
     return out
