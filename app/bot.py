@@ -215,6 +215,12 @@ def _topic_path_bonus(topic: str | None, url: str) -> int:
     tl = topic.lower()
     u = url.lower()
     b = 0
+    # Коды ошибок: предпочитаем раздел /error-codes/ и не уходим в FAQ.
+    if re.search(r"\b1\d{4}\b", tl):
+        if "/error-codes/" in u:
+            b += 70
+        if "/faq" in u or u.rstrip("/").endswith("/faq"):
+            b -= 55
     if "экструдер" in tl or "extruder" in tl:
         if "extruder" in u:
             b += 24
@@ -317,6 +323,10 @@ def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
 
 def _guide_url_matches_model_hints(url: str, hints: frozenset[str]) -> bool:
     """Если пользователь назвал модель — в ссылке должен быть тот же slug (иначе гайда «для неё» нет)."""
+    # Для кодов ошибок модель часто кодируется иначе (/s1, /kobra-3 и т.п.),
+    # поэтому жёсткое совпадение slug ломает выдачу. Разрешаем /error-codes/ всегда.
+    if "/error-codes/" in url.lower():
+        return True
     if not hints:
         return True
     u = url.lower()
