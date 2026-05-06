@@ -467,7 +467,57 @@ def _arm_clarify_correction_window(
         "original": original.strip(),
         "remaining": settings.clarify_correction_max,
         "ts": time.time(),
+        # Разрешаем продолжать цепочку только reply на последний ответ бота.
+        "expected_reply_to_mid": None,
     }
+
+
+def _is_reply_to_bot(update: Update, *, bot_id: int | None) -> tuple[bool, int | None]:
+    """
+    Возвращает (is_reply_to_bot, reply_message_id).
+    reply_message_id — message_id того сообщения, на которое отвечают.
+    """
+    msg = update.effective_message
+    if not msg or not msg.reply_to_message or not msg.reply_to_message.from_user:
+        return False, None
+    if bot_id is None:
+        return False, msg.reply_to_message.message_id
+    return msg.reply_to_message.from_user.id == bot_id, msg.reply_to_message.message_id
+
+
+def _reply_is_expected_by_bot(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """
+    В группах игнорируем любые reply, если бот сам их не просил.
+    Разрешаем только:
+    - reply на уточняющий prompt (clarify_pending.prompt_message_id)
+    - reply на последний ответ бота в рамках окна поправок (clarify_correction_state.expected_reply_to_mid)
+    """
+    msg = update.effective_message
+    if not msg or not update.effective_chat or not msg.from_user:
+        return False
+    bot_id = context.application.bot_data.get("bot_id")
+    is_reply_to_bot, reply_mid = _is_reply_to_bot(update, bot_id=bot_id)
+    if not is_reply_to_bot or reply_mid is None:
+        return False
+
+    key = (update.effective_chat.id, msg.from_user.id)
+
+    pending = context.application.bot_data.setdefault("clarify_pending", {})
+    _sync_clarify_pending_from_disk(pending)
+    item = pending.get(key)
+    if item:
+        expected_mid = item.get("prompt_message_id")
+        if expected_mid is not None and int(expected_mid) == int(reply_mid):
+            return True
+
+    st = context.application.bot_data.setdefault("clarify_correction_state", {})
+    corr = st.get(key)
+    if corr:
+        exp = corr.get("expected_reply_to_mid")
+        if exp is not None and int(exp) == int(reply_mid):
+            return True
+
+    return False
 
 
 async def _deliver_clarify_combined(
@@ -520,7 +570,8 @@ async def _deliver_clarify_combined(
             f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
             f"<i>совпадение: {best_score}%</i>"
         )
-        await msg.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False)
+        sent = await msg.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False)
+        # Подстрахуемся: даже если кто-то ответит reply, мы не хотим продолжать цепочку по кодам ошибок.
         _log_bot_reply(
             "error_code_wiki",
             chat_id,
@@ -555,7 +606,7 @@ async def _deliver_clarify_combined(
     wiki_kind = "clarify_correction_wiki" if trace == "correction" else "clarify_followup_wiki"
 
     if not best_doc or best_score < settings.min_score:
-        await msg.reply_text(
+        sent = await msg.reply_text(
             "Спасибо! Всё ещё не могу уверенно найти статью. Попробуй добавить модель и/или код ошибки.",
             disable_web_page_preview=True,
         )
@@ -566,6 +617,10 @@ async def _deliver_clarify_combined(
             score=best_score if best_doc else None,
             url=(best_doc.url if best_doc else None),
         )
+        # Разрешаем следующий reply только на этот ответ бота
+        st = context.application.bot_data.setdefault("clarify_correction_state", {})
+        if (chat_id, from_user) in st:
+            st[(chat_id, from_user)]["expected_reply_to_mid"] = sent.message_id
         return "uncertain"
 
     if not _response_wiki_url_acceptable(combined, best_doc.url):
@@ -587,7 +642,7 @@ async def _deliver_clarify_combined(
         f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
         f"<i>совпадение: {best_score}%</i>"
     )
-    await msg.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False)
+    sent = await msg.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False)
     hints = _model_slug_hints(combined)
     _log_bot_reply(
         wiki_kind,
@@ -597,6 +652,10 @@ async def _deliver_clarify_combined(
         url=url,
         hints=" ".join(sorted(hints)) if hints else "-",
     )
+    # Разрешаем следующий reply только на этот ответ бота
+    st = context.application.bot_data.setdefault("clarify_correction_state", {})
+    if (chat_id, from_user) in st:
+        st[(chat_id, from_user)]["expected_reply_to_mid"] = sent.message_id
     return "wiki"
 
 
@@ -925,6 +984,13 @@ async def _maybe_handle_clarify_correction_followup(update: Update, context: Con
         st.pop(key, None)
         return False
 
+    expected_mid = item.get("expected_reply_to_mid")
+    if expected_mid is not None:
+        # принимаем поправку только reply на последний ответ бота в цепочке
+        _, reply_mid = _is_reply_to_bot(update, bot_id=bot_id)
+        if reply_mid is None or int(reply_mid) != int(expected_mid):
+            return False
+
     combined = f"{original} {msg.text.strip()}"
     await _deliver_clarify_combined(
         msg,
@@ -965,11 +1031,6 @@ def _is_triggered_message(update: Update, *, bot_username: str | None, bot_id: i
     # В личке можно отвечать всегда
     if update.effective_chat and update.effective_chat.type == ChatType.PRIVATE:
         return True
-
-    # Reply на сообщение бота
-    if bot_id is not None and msg.reply_to_message and msg.reply_to_message.from_user:
-        if msg.reply_to_message.from_user.id == bot_id:
-            return True
 
     # Упоминание @username
     if bot_username and msg.entities:
@@ -1241,11 +1302,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if settings.log_all_messages:
         logging.info("Входящее сообщение chat=%s user=%s: %s", chat_id, msg.from_user.id if msg.from_user else "?", text[:200])
 
-    # В группах отвечаем только если к нам обратились (упоминание/reply), если включено.
+    # В группах отвечаем только если к нам обратились (упоминание) или это ожидаемый reply на уточнение.
     if settings.require_trigger:
         bot_username = context.application.bot_data.get("bot_username")
         bot_id = context.application.bot_data.get("bot_id")
-        if not _is_triggered_message(update, bot_username=bot_username, bot_id=bot_id):
+        if not _is_triggered_message(update, bot_username=bot_username, bot_id=bot_id) and not _reply_is_expected_by_bot(update, context):
             if settings.log_decisions:
                 logging.info("skip chat=%s reason=not_triggered", chat_id)
             return
