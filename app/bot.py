@@ -33,6 +33,8 @@ _COOLDOWN_EXEMPT_USERS: frozenset[int] = frozenset(
 
 
 _CLARIFY_STORE = Path(".cache/clarify_pending.json")
+_ANSWER_CTX_STORE = Path(".cache/answer_context.json")
+_FEEDBACK_STORE = Path(".cache/feedback.json")
 
 
 def _clarify_key(chat_id: int, user_id: int) -> str:
@@ -52,6 +54,157 @@ def _load_clarify_store() -> dict[str, dict]:
 def _save_clarify_store(data: dict[str, dict]) -> None:
     _CLARIFY_STORE.parent.mkdir(parents=True, exist_ok=True)
     _CLARIFY_STORE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def _norm_text(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "").lower()).strip()
+
+
+def _load_answer_ctx_store() -> dict[str, dict]:
+    try:
+        if not _ANSWER_CTX_STORE.exists():
+            return {}
+        raw = json.loads(_ANSWER_CTX_STORE.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_answer_ctx_store(data: dict[str, dict]) -> None:
+    _ANSWER_CTX_STORE.parent.mkdir(parents=True, exist_ok=True)
+    _ANSWER_CTX_STORE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def _answer_ctx_key(chat_id: int, bot_message_id: int) -> str:
+    return f"{chat_id}:{bot_message_id}"
+
+
+def _record_bot_answer_context(
+    *,
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    bot_message_id: int,
+    query: str,
+    url: str | None,
+) -> None:
+    """
+    Запоминаем, на какой запрос бот ответил данным сообщением.
+    Нужно для команды /error (перепоиск и "обучение").
+    """
+    store = context.application.bot_data.setdefault("answer_ctx_store", {})
+    if not isinstance(store, dict):
+        store = {}
+        context.application.bot_data["answer_ctx_store"] = store
+
+    store[_answer_ctx_key(chat_id, bot_message_id)] = {
+        "q": query,
+        "url": url,
+        "ts": time.time(),
+    }
+    # Ограничим размер, чтобы не разрасталось бесконечно
+    if len(store) > 800:
+        # удаляем самые старые
+        items = sorted(store.items(), key=lambda kv: float(kv[1].get("ts", 0.0)))
+        for k, _ in items[:200]:
+            store.pop(k, None)
+    _save_answer_ctx_store(store)
+
+
+def _load_feedback_store() -> dict[str, list[str]]:
+    """
+    query_norm -> [bad_url, ...]
+    """
+    try:
+        if not _FEEDBACK_STORE.exists():
+            return {}
+        raw = json.loads(_FEEDBACK_STORE.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return {}
+        out: dict[str, list[str]] = {}
+        for k, v in raw.items():
+            if isinstance(k, str) and isinstance(v, list):
+                out[k] = [str(x) for x in v if isinstance(x, str)]
+        return out
+    except Exception:
+        return {}
+
+
+def _save_feedback_store(data: dict[str, list[str]]) -> None:
+    _FEEDBACK_STORE.parent.mkdir(parents=True, exist_ok=True)
+    _FEEDBACK_STORE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _remember_bad_answer(*, context: ContextTypes.DEFAULT_TYPE, query: str, bad_url: str | None) -> None:
+    if not bad_url:
+        return
+    qn = _norm_text(query)
+    fb = context.application.bot_data.setdefault("feedback_store", {})
+    if not isinstance(fb, dict):
+        fb = {}
+        context.application.bot_data["feedback_store"] = fb
+    lst = fb.get(qn)
+    if not isinstance(lst, list):
+        lst = []
+    if bad_url not in lst:
+        lst.append(bad_url)
+    # ограничим на запрос
+    fb[qn] = lst[-20:]
+    _save_feedback_store(fb)
+
+
+def _excluded_urls_for_query(*, context: ContextTypes.DEFAULT_TYPE, query: str) -> set[str]:
+    fb = context.application.bot_data.get("feedback_store", {})
+    if not isinstance(fb, dict):
+        return set()
+    lst = fb.get(_norm_text(query), [])
+    if not isinstance(lst, list):
+        return set()
+    return {str(x) for x in lst if isinstance(x, str)}
+
+
+def _search_best_with_model_bias_excluding(
+    index: WebWikiIndex,
+    variants: list[str],
+    *,
+    context_text: str,
+    topic_for_keywords: str | None,
+    exclude_urls: set[str],
+    top_k: int = 28,
+) -> tuple[WebWikiDoc | None, int]:
+    doc, score = _search_best_with_model_bias(
+        index,
+        variants,
+        context_text=context_text,
+        topic_for_keywords=topic_for_keywords,
+        top_k=top_k,
+    )
+    if not doc:
+        return None, score
+    if doc.url in exclude_urls:
+        # попробуем найти следующий — делаем "ручной" проход без exclude
+        hints = _model_slug_hints(context_text)
+        by_url: dict[str, tuple[WebWikiDoc, int]] = {}
+        for q in variants:
+            q = (q or "").strip()
+            if not q:
+                continue
+            for d2, sc in index.search(q, top_k=top_k):
+                if d2.url in exclude_urls:
+                    continue
+                bonus = _url_model_bonus(d2.url, hints)
+                penalty = _url_model_penalty(d2.url, hints, topic_for_keywords)
+                kw = _topic_path_bonus(topic_for_keywords, d2.url)
+                part_pen = _wrong_part_for_topic_penalty(topic_for_keywords, d2.url)
+                adj_raw = int(sc) + bonus - penalty + kw - part_pen
+                prev = by_url.get(d2.url)
+                if prev is None or adj_raw > prev[1]:
+                    by_url[d2.url] = (d2, adj_raw)
+        if not by_url:
+            return None, -1
+        best_doc2, raw_best = max(by_url.values(), key=lambda x: x[1])
+        capped = max(0, min(100, raw_best))
+        return best_doc2, capped
+    return doc, score
 
 
 def _log_bot_reply(kind: str, chat_id: int, user_id: int | None = None, **extra: object) -> None:
@@ -1377,6 +1530,76 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     _log_bot_reply("cmd_status", chat_id, uid)
 
 
+async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    /error — использовать только reply на сообщение бота, чтобы:
+    - удалить неверный ответ бота
+    - перепоискать ответ
+    - запомнить, что тот URL был неверным (локальное обучение)
+    """
+    if not update.effective_chat or not update.effective_message:
+        return
+    msg = update.effective_message
+    chat_id = update.effective_chat.id
+    uid = msg.from_user.id if msg.from_user else None
+    settings = context.application.bot_data["settings"]
+
+    bot_id = context.application.bot_data.get("bot_id")
+    if not msg.reply_to_message or not msg.reply_to_message.from_user or bot_id is None or msg.reply_to_message.from_user.id != bot_id:
+        await msg.reply_text("Использование: ответь на сообщение бота командой /error", disable_web_page_preview=True)
+        _log_bot_reply("cmd_error_usage", chat_id, uid)
+        return
+
+    bad_mid = msg.reply_to_message.message_id
+    store = context.application.bot_data.setdefault("answer_ctx_store", _load_answer_ctx_store())
+    item = store.get(_answer_ctx_key(chat_id, bad_mid)) if isinstance(store, dict) else None
+    if not isinstance(item, dict) or not item.get("q"):
+        await msg.reply_text("Не понимаю, к какому запросу относится тот ответ. Попробуй повторить вопрос.", disable_web_page_preview=True)
+        _log_bot_reply("cmd_error_no_ctx", chat_id, uid, bad_mid=bad_mid)
+        return
+
+    query = str(item.get("q") or "").strip()
+    bad_url = str(item.get("url") or "").strip() or None
+    _remember_bad_answer(context=context, query=query, bad_url=bad_url)
+
+    # Удаляем неверный ответ бота (если есть права)
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=bad_mid)
+    except Exception:
+        pass
+
+    # Перепоиск
+    index: WebWikiIndex = context.application.bot_data["wiki_index"]
+    exclude = _excluded_urls_for_query(context=context, query=query)
+    variants = expand_queries(query) if settings.ru_layer_enabled else [query]
+    best_doc, best_score = _search_best_with_model_bias_excluding(
+        index,
+        variants,
+        context_text=query,
+        topic_for_keywords=query,
+        exclude_urls=exclude,
+        top_k=max(40, int(settings.top_k) * 20),
+    )
+
+    if not best_doc or best_score < settings.min_score or not _response_wiki_url_acceptable(query, best_doc.url):
+        await msg.reply_text("Понял. Попробовал поискать ещё раз — лучше не нашёл. Похоже, ответа нет.", disable_web_page_preview=True)
+        _log_bot_reply("cmd_error_no_better", chat_id, uid, score=(best_score if best_doc else None), url=(best_doc.url if best_doc else None))
+        return
+
+    title = html.escape(best_doc.title)
+    url = best_doc.url
+    sent = await msg.reply_text(
+        "Попробовал ещё раз, вот что нашёл:\n"
+        f"• <b>{title}</b>\n"
+        f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
+        f"<i>совпадение: {best_score}%</i>",
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=False,
+    )
+    _record_bot_answer_context(context=context, chat_id=chat_id, bot_message_id=sent.message_id, query=query, url=url)
+    _log_bot_reply("cmd_error_retry", chat_id, uid, score=best_score, url=url)
+
+
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logging.exception("Unhandled error while processing update: %s", context.error)
 
@@ -1539,10 +1762,17 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             catalog: dict[str, ErrorCodeInfo] = context.application.bot_data.get("error_codes_catalog", {})
             info = catalog.get(code) if isinstance(catalog, dict) else None
             if info:
-                await msg.reply_text(
+                sent = await msg.reply_text(
                     _format_error_code_info(info),
                     parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True,
+                )
+                _record_bot_answer_context(
+                    context=context,
+                    chat_id=chat_id,
+                    bot_message_id=sent.message_id,
+                    query=text,
+                    url=None,
                 )
                 _log_bot_reply("error_code_text", chat_id, msg.from_user.id if msg.from_user else None, code=code)
                 return
@@ -1680,13 +1910,20 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"<i>совпадение: {score}%</i>"
     )
 
-    await msg.reply_text(
+    sent = await msg.reply_text(
         reply,
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=False,
     )
     uid_r = msg.from_user.id if msg.from_user else None
     _log_bot_reply("wiki", chat_id, uid_r, score=best_score, url=url)
+    _record_bot_answer_context(
+        context=context,
+        chat_id=chat_id,
+        bot_message_id=sent.message_id,
+        query=text,
+        url=url,
+    )
 
     # фиксируем отправку после успешного ответа
     rl["last_reply_ts_by_chat"][chat_id] = now
@@ -1772,6 +2009,7 @@ def main() -> None:
     app.add_handler(CommandHandler("wiki", cmd_wiki))
     app.add_handler(CommandHandler("ping", cmd_ping))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("error", cmd_error))
     # Диагностика: первым делом логируем любой update
     app.add_handler(TypeHandler(Update, on_any_update), group=-1)
     # filters.UpdateType.* здесь не используем, чтобы не "отрезать" обычные сообщения.
