@@ -168,10 +168,7 @@ def _is_error_code_query(text: str) -> bool:
         return False
     t = text.lower()
     # если рядом есть явная "ошибка/err/error" — точно запрос по коду
-    if any(k in t for k in ("ошибк", "error", "err")):
-        return True
-    # или сообщение очень короткое и по сути только число
-    return len(t.strip()) <= 12
+    return any(k in t for k in ("ошибк", "error", "err"))
 
 
 def _needs_model_clarification(text: str) -> bool:

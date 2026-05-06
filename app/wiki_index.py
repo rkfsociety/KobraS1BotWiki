@@ -24,9 +24,6 @@ def _looks_like_question(text: str) -> bool:
     # Слово "ошибка" само по себе НЕ считаем вопросом (напр. "ошибка природы").
     if re.search(r"\b\d{4,7}\b", t) and re.search(r"\b(ошибк\w*|error|err)\b", t):
         return True
-    # Просто код (например "11407") тоже считаем вопросом
-    if re.fullmatch(r"\d{4,7}", t):
-        return True
     # "не помнит как ..." — обычно это комментарий, а не вопрос к боту (если нет "?").
     if re.search(r"\b(уже\s+)?не\s+помнит\s+как\b", t):
         return False
