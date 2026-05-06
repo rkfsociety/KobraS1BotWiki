@@ -103,9 +103,6 @@ def _printer_mentioned(text: str) -> bool:
 def _topic_needs_printer_model(text: str) -> bool:
     """Тема вопроса обычно специфична для модели (без модели ответ легко промахнется)."""
     t = text.lower()
-    # Коды ошибок (например 11518) почти всегда требуют уточнить модель принтера.
-    if re.search(r"\b1\d{4}\b", t):
-        return True
     ru = (
         "экструдер",
         "сопло",
@@ -149,7 +146,36 @@ def _topic_needs_printer_model(text: str) -> bool:
     return any(x in t for x in ru + en)
 
 
+def _extract_error_code(text: str) -> str | None:
+    """
+    Возвращает код ошибки вида 1xxxx (например 11407), если он явно присутствует в тексте.
+    """
+    m = re.search(r"\b(1\d{4})\b", text.lower())
+    return m.group(1) if m else None
+
+
+def _is_error_code_query(text: str) -> bool:
+    """
+    Сообщение, где ключевой смысл — код ошибки (например "ошибка 11407" или просто "11407").
+    Для таких запросов:
+    - модель не уточняем
+    - отвечаем только если есть точная страница по коду
+    """
+    code = _extract_error_code(text)
+    if not code:
+        return False
+    t = text.lower()
+    # если рядом есть явная "ошибка/err/error" — точно запрос по коду
+    if any(k in t for k in ("ошибк", "error", "err")):
+        return True
+    # или сообщение очень короткое и по сути только число
+    return len(t.strip()) <= 12
+
+
 def _needs_model_clarification(text: str) -> bool:
+    # Для кодов ошибок модель не спрашиваем — либо найдём страницу по коду, либо промолчим.
+    if _is_error_code_query(text):
+        return False
     return _topic_needs_printer_model(text) and not _printer_mentioned(text)
 
 
@@ -344,6 +370,14 @@ def _door_guide_url_plausible(url: str) -> bool:
 
 def _response_wiki_url_acceptable(question: str, url: str) -> bool:
     """Не слать ссылку, если модель в URL не та или тема (например дверь) явно не совпадает со slug статьи."""
+    # Для запросов по коду ошибки отдаём только точные страницы /error-codes/<code>-code...
+    code = _extract_error_code(question)
+    if code and _is_error_code_query(question):
+        u = url.lower()
+        if "/error-codes/" not in u:
+            return False
+        if f"/{code}-code" not in u and f"/{code}/" not in u and (not u.rstrip("/").endswith(f"/{code}")):
+            return False
     if not _guide_url_matches_model_hints(url, _model_slug_hints(question)):
         return False
     if _topic_is_door_intent(question) and not _door_guide_url_plausible(url):
