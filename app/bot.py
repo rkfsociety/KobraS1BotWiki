@@ -241,6 +241,49 @@ def _topic_is_door_intent(topic: str | None) -> bool:
     return any(k in tl for k in ("двер", "door", "петл", "hinge", "enclosure", "glass door"))
 
 
+def _topic_is_nozzle_intent(topic: str | None) -> bool:
+    if not topic:
+        return False
+    tl = topic.lower()
+    return any(k in tl for k in ("сопло", "nozzle"))
+
+
+def _topic_is_nozzle_silicone_intent(topic: str | None) -> bool:
+    if not topic:
+        return False
+    tl = topic.lower()
+    return any(
+        k in tl
+        for k in (
+            "силикон",
+            "втулк",
+            "носок",
+            "чехол",
+            "silicone",
+            "sock",
+        )
+    )
+
+
+def _nozzle_guide_url_plausible(url: str, *, allow_silicone: bool) -> bool:
+    """
+    Если спросили «как поменять сопло», не нужно отдавать гайды про silicone sock/sleeve.
+    """
+    u = url.lower().replace("_", "-")
+    if "nozzle" not in u:
+        return False
+    # если это явно про силиконовую втулку/носок — только когда пользователь просил именно это
+    if ("silicone" in u or "sock" in u) and not allow_silicone:
+        return False
+    # стараемся требовать "replacement/replace" для "поменять/заменить"
+    if any(k in u for k in ("replacement", "replace")):
+        return True
+    # иногда страницы названы странно, но всё равно про сопло — пропускаем, если хоть явно nozzle и guide
+    if "guide" in u:
+        return True
+    return True
+
+
 def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
     """Тема «дверь», а URL про другое узло — сильный штраф (иначе тянет purge-wiper из-за replace)."""
     if not _topic_is_door_intent(topic):
@@ -294,6 +337,10 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
     if not _guide_url_matches_model_hints(url, _model_slug_hints(question)):
         return False
     if _topic_is_door_intent(question) and not _door_guide_url_plausible(url):
+        return False
+    if _topic_is_nozzle_intent(question) and not _nozzle_guide_url_plausible(
+        url, allow_silicone=_topic_is_nozzle_silicone_intent(question)
+    ):
         return False
     return True
 
