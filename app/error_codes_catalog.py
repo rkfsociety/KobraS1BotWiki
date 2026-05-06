@@ -159,7 +159,10 @@ async def ensure_error_codes_catalog(
     cached = _load_json(cache_file)
     if cached and isinstance(cached, dict):
         ts = float(cached.get("ts", 0.0))
-        if ts and (_now() - ts) < float(refresh_hours) * 3600.0:
+        cached_count = int(cached.get("count", 0) or 0)
+        # Если в кэше 0 записей — считаем кэш невалидным и перекачиваем сразу
+        # (обычно это результат старого парсера или временной проблемы загрузки страницы).
+        if cached_count > 0 and ts and (_now() - ts) < float(refresh_hours) * 3600.0:
             data = cached.get("codes", {})
             if isinstance(data, dict):
                 return {k: ErrorCodeInfo(**v) for k, v in data.items() if isinstance(v, dict)}
@@ -170,6 +173,11 @@ async def ensure_error_codes_catalog(
             r = await client.get(url)
             r.raise_for_status()
             codes = parse_error_codes_page(r.text)
+            # Если парсер не вытащил ничего, не перетираем возможный непустой кэш.
+            if not codes and cached and isinstance(cached, dict):
+                data = cached.get("codes", {})
+                if isinstance(data, dict) and data:
+                    return {k: ErrorCodeInfo(**v) for k, v in data.items() if isinstance(v, dict)}
             _save_json(
                 cache_file,
                 {
