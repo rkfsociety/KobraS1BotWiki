@@ -79,6 +79,11 @@ def _looks_like_question(text: str) -> bool:
     t = _normalize(text)
     if "?" in text:
         return True
+    # Фразы вроде "уже не помнит как ..." — это скорее комментарий, а не вопрос к боту.
+    # В режиме QUESTIONS_ONLY такие сообщения лучше игнорировать, если нет явного "?",
+    # иначе бот будет "влезать" в разговор.
+    if "не помнит как" in t or "уже не помнит как" in t:
+        return False
     return any(
         w in t
         for w in (

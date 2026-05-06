@@ -20,6 +20,9 @@ def _looks_like_question(text: str) -> bool:
     t = _normalize(text)
     if "?" in text:
         return True
+    # "не помнит как ..." — обычно это комментарий, а не вопрос к боту (если нет "?").
+    if re.search(r"\b(уже\s+)?не\s+помнит\s+как\b", t):
+        return False
     return bool(
         re.search(
             r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает|ошибка)\b",
