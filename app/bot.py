@@ -318,6 +318,19 @@ def _needs_model_clarification(text: str) -> bool:
     return _topic_needs_printer_model(text) and not _printer_mentioned(text)
 
 
+def _is_generic_help_without_context(text: str) -> bool:
+    """
+    "помогите/спасите" без конкретики — лучше попросить уточнение, а не искать по вики наугад.
+    """
+    t = (text or "").lower()
+    if not any(k in t for k in ("помогите", "спасите", "help", "памагити", "спаситипамагити")):
+        return False
+    # если есть код ошибки или модель/принтер или тех. тема — это уже конкретика
+    if _is_error_code_query(text) or _printer_mentioned(text) or _topic_needs_printer_model(text):
+        return False
+    return True
+
+
 def _model_slug_hints(text: str) -> frozenset[str]:
     """Подстроки пути вики (латиница), по которым отличают линейки принтеров."""
     out: set[str] = set()
@@ -517,6 +530,11 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
             return False
         # Не отдаём общий раздел /error-codes — только страницу конкретного кода.
         if f"/{code}-code" not in u:
+            return False
+    else:
+        # Если это НЕ запрос по коду ошибки — не отдаём раздел /error-codes вообще,
+        # иначе фразы типа "ошибка природы, помогите" тянут туда.
+        if "/error-codes" in url.lower():
             return False
     if not _guide_url_matches_model_hints(url, _model_slug_hints(question)):
         return False
@@ -1490,6 +1508,17 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if settings.questions_only and not index.looks_like_question(text):
         if settings.log_decisions:
             logging.info("skip chat=%s reason=not_a_question", chat_id)
+        return
+
+    # Короткий "help" без контекста — просим уточнить, вместо бессмысленного поиска.
+    if _is_generic_help_without_context(text):
+        await msg.reply_text(
+            "Могу помочь, но нужно чуть больше данных.\n"
+            "Напиши, пожалуйста: модель принтера (например Kobra S1/Kobra 3) и что именно случилось "
+            "(ошибка с кодом, что не работает, что хотите сделать).",
+            disable_web_page_preview=True,
+        )
+        _log_bot_reply("generic_help_clarify", chat_id, msg.from_user.id if msg.from_user else None)
         return
 
     if await _maybe_reply_printer_design_vs_question(
