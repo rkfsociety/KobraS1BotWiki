@@ -179,6 +179,30 @@ def _is_error_code_query(text: str) -> bool:
     return any(k in t for k in ("ошибк", "error", "err"))
 
 
+def _pick_error_code_doc(index: WebWikiIndex, code: str) -> WebWikiDoc | None:
+    """
+    Для кодов ошибок не используем fuzzy-поиск (он может путать коды).
+    Ищем только страницы вида /error-codes/<code>-code...
+    """
+    target = f"/error-codes/{code}-code"
+    candidates: list[WebWikiDoc] = []
+    # Под lock не лезем: индекс immutable после загрузки.
+    for d in getattr(index, "_docs", []):  # type: ignore[attr-defined]
+        try:
+            u = (d.url or "").lower()
+        except Exception:
+            continue
+        if target in u:
+            candidates.append(d)
+    if not candidates:
+        return None
+    # Предпочитаем базовую страницу кода без суффиксов (/s1, /k3, и т.п.)
+    base = f"https://wiki.anycubic.com/en/error-codes/{code}-code"
+    for d in candidates:
+        if d.url.rstrip("/") == base:
+            return d
+    return candidates[0]
+
 def _needs_model_clarification(text: str) -> bool:
     # Для кодов ошибок модель не спрашиваем — либо найдём страницу по коду, либо промолчим.
     if _is_error_code_query(text):
@@ -546,26 +570,16 @@ async def _deliver_clarify_combined(
     # Либо находим точную страницу /error-codes/<code>-code..., либо молчим.
     if _is_error_code_query(original) or _is_error_code_query(combined):
         index: WebWikiIndex = context.application.bot_data["wiki_index"]
-        variants = expand_queries(combined) if settings.ru_layer_enabled else [combined]
-        best_doc, best_score = _search_best_with_model_bias(
-            index, variants, context_text=combined, topic_for_keywords=original
-        )
-        if not best_doc or best_score < settings.min_score:
+        code = _extract_error_code(combined) or _extract_error_code(original)
+        best_doc = _pick_error_code_doc(index, code) if code else None
+        best_score = 100 if best_doc else -1
+        if not best_doc:
             if settings.log_decisions:
                 logging.info(
                     "skip chat=%s reason=error_code_not_found trace=%s score=%d",
                     chat_id,
                     trace,
-                    best_score if best_doc else -1,
-                )
-            return "silent"
-        if not _response_wiki_url_acceptable(combined, best_doc.url):
-            if settings.log_decisions:
-                logging.info(
-                    "skip chat=%s reason=error_code_not_found trace=%s url=%s",
-                    chat_id,
-                    trace,
-                    best_doc.url,
+                    best_score,
                 )
             return "silent"
         url = best_doc.url
@@ -1336,14 +1350,22 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
 
     variants = expand_queries(text) if settings.ru_layer_enabled else [text]
-    best_doc, best_score = _search_best_with_model_bias(
-        index, variants, context_text=text, topic_for_keywords=text
-    )
     is_err = _is_error_code_query(text)
+    code = _extract_error_code(text)
+    if is_err and code:
+        best_doc = _pick_error_code_doc(index, code)
+        best_score = 100 if best_doc else -1
+    else:
+        best_doc, best_score = _search_best_with_model_bias(
+            index, variants, context_text=text, topic_for_keywords=text
+        )
 
     if not best_doc:
         if settings.log_decisions:
-            logging.info("skip chat=%s reason=no_results docs=%d", chat_id, index.doc_count)
+            if is_err and code:
+                logging.info("skip chat=%s reason=error_code_not_found code=%s", chat_id, code)
+            else:
+                logging.info("skip chat=%s reason=no_results docs=%d", chat_id, index.doc_count)
         return
     if best_score < settings.min_score:
         # Для кодов ошибок: либо находим точную страницу по коду, либо молчим (без уточнений).
