@@ -1,0 +1,79 @@
+from __future__ import annotations
+
+import re
+
+
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
+
+
+# Мини-словарь RU -> EN для поиска по англоязычной вики.
+# Добавляй сюда по мере появления типовых вопросов.
+_MAP: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\bэкструдер\b", re.I), "extruder module print head replacement"),
+    (re.compile(r"\bсопло\b|\bно(у)?зл\b", re.I), "nozzle"),
+    (re.compile(r"\bхотэнд\b|\bхотэн(д)?\b", re.I), "hotend"),
+    (re.compile(r"\bтерм(и)?стор\b", re.I), "thermistor"),
+    (re.compile(r"\bнагревател(ь|я)\b", re.I), "heater cartridge"),
+    (re.compile(r"\bстол\b|\bплатформ(а|ы)\b", re.I), "bed build plate"),
+    (re.compile(r"\bкалибр(овк)?а\b|\bуровн(ять|ень)\b|\bлевел(инг)?\b", re.I), "leveling calibration"),
+    (re.compile(r"\bпрошивк(а|у)\b|\bфирмвар(е)?\b", re.I), "firmware update"),
+    (re.compile(r"\bошибк(а|у)\b|\berr\b", re.I), "error"),
+    (re.compile(r"\bне печатает\b|\bне печата(ет|ю)\b", re.I), "not printing"),
+    (re.compile(r"\bзастрял(а|о)?\b|\bзаклинил(о|а)?\b", re.I), "jam stuck"),
+    (re.compile(r"\bнить\b|\bсопл(и|я)\b", re.I), "stringing"),
+    (re.compile(r"\bретракт\b", re.I), "retraction"),
+    (re.compile(r"\bшумит\b|\bшум\b", re.I), "noise"),
+    (re.compile(r"\bрем(е)?нь\b", re.I), "belt"),
+    (re.compile(r"\bось x\b|\bx-ось\b|\bx axis\b", re.I), "x axis"),
+    (re.compile(r"\bось y\b|\by-ось\b|\by axis\b", re.I), "y axis"),
+    (re.compile(r"\bось z\b|\bz-ось\b|\bz axis\b", re.I), "z axis"),
+    (re.compile(r"\bшаговик\b|\bшаговый двигатель\b", re.I), "stepper motor"),
+    (re.compile(r"\bпоменять\b|\bзаменить\b|\bсменить\b|\bустановить\b", re.I), "replace install"),
+    (re.compile(r"\bснять\b|\bразобрать\b", re.I), "remove disassemble"),
+    (re.compile(r"\bкобра\b", re.I), "kobra"),
+    (re.compile(r"\bкомбо\b", re.I), "combo"),
+    (re.compile(r"\bдвер(ь|и|ей|ью|ями)?\b", re.I), "glass door acrylic enclosure"),
+    (re.compile(r"\bпередн(яя|ей|юю|ие|их)?\b", re.I), "front"),
+    (re.compile(r"\bпетл(и|я|ей|ью)?\b", re.I), "hinge door"),
+]
+
+
+def expand_queries(text: str) -> list[str]:
+    """
+    Возвращает список вариантов запроса:
+    - исходный текст
+    - если есть кириллица: отдельный "английский" запрос по словарю
+    - плюс комбинированный (исходный + англ. слова)
+    """
+    base = text.strip()
+    if not base:
+        return []
+
+    out = [base]
+    if not _CYRILLIC_RE.search(base):
+        return out
+
+    extra: list[str] = []
+    for pat, repl in _MAP:
+        if pat.search(base):
+            extra.append(repl)
+
+    extra_txt = " ".join(sorted(set(extra))).strip()
+    if extra_txt:
+        # EN-only вариант часто матчится лучше с англоязычной вики
+        out.append(extra_txt)
+        # комбинированный оставляем на случай, если в базе есть и латиница (модель/код ошибки)
+        out.append(base + " " + extra_txt)
+        if "extruder" in extra_txt and any(x in extra_txt for x in ("replace", "install", "remov")):
+            out.append("extruder replacement module guide")
+        if "door" in extra_txt and any(x in extra_txt for x in ("replace", "install", "remov", "glass")):
+            out.append("glass door replacement install guide")
+
+    seen: set[str] = set()
+    uniq: list[str] = []
+    for item in out:
+        if item not in seen:
+            seen.add(item)
+            uniq.append(item)
+    return uniq
+

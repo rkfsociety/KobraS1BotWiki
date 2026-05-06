@@ -1,0 +1,17 @@
+.env
+.env.*
+!.env.example
+
+# кэш индекса вики
+.cache/
+logs/
+
+# питон
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# локальные артефакты/временные файлы
+sitemap.xml
