@@ -1429,7 +1429,9 @@ def main() -> None:
         name="index_step",
     )
     app.post_init = _post_init  # type: ignore[attr-defined]
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Важно: после перезапуска не "догоняем" накопившиеся сообщения.
+    # Telegram отдаёт накопленные updates при polling — drop_pending_updates их сбрасывает.
+    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
 
 if __name__ == "__main__":
