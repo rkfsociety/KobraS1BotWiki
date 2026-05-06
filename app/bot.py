@@ -35,6 +35,7 @@ _COOLDOWN_EXEMPT_USERS: frozenset[int] = frozenset(
 _CLARIFY_STORE = Path(".cache/clarify_pending.json")
 _ANSWER_CTX_STORE = Path(".cache/answer_context.json")
 _FEEDBACK_STORE = Path(".cache/feedback.json")
+_FIX_STORE = Path(".cache/fixes.json")
 
 
 def _clarify_key(chat_id: int, user_id: int) -> str:
@@ -162,6 +163,52 @@ def _excluded_urls_for_query(*, context: ContextTypes.DEFAULT_TYPE, query: str) 
     return {str(x) for x in lst if isinstance(x, str)}
 
 
+def _load_fix_store() -> dict[str, str]:
+    """
+    query_norm -> good_url
+    """
+    try:
+        if not _FIX_STORE.exists():
+            return {}
+        raw = json.loads(_FIX_STORE.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return {}
+        out: dict[str, str] = {}
+        for k, v in raw.items():
+            if isinstance(k, str) and isinstance(v, str) and v.strip():
+                out[k] = v.strip()
+        return out
+    except Exception:
+        return {}
+
+
+def _save_fix_store(data: dict[str, str]) -> None:
+    _FIX_STORE.parent.mkdir(parents=True, exist_ok=True)
+    _FIX_STORE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _remember_good_fix(*, context: ContextTypes.DEFAULT_TYPE, query: str, good_url: str) -> None:
+    qn = _norm_text(query)
+    fixes = context.application.bot_data.setdefault("fix_store", {})
+    if not isinstance(fixes, dict):
+        fixes = {}
+        context.application.bot_data["fix_store"] = fixes
+    fixes[qn] = good_url
+    # ограничим размер
+    if len(fixes) > 800:
+        # не знаем ts, поэтому просто обрежем по ключам
+        for k in sorted(fixes.keys())[:200]:
+            fixes.pop(k, None)
+    _save_fix_store(fixes)
+
+
+def _preferred_fix_url(*, context: ContextTypes.DEFAULT_TYPE, query: str) -> str | None:
+    fixes = context.application.bot_data.get("fix_store", {})
+    if not isinstance(fixes, dict):
+        return None
+    return fixes.get(_norm_text(query))
+
+
 def _search_best_with_model_bias_excluding(
     index: WebWikiIndex,
     variants: list[str],
@@ -171,6 +218,12 @@ def _search_best_with_model_bias_excluding(
     exclude_urls: set[str],
     top_k: int = 28,
 ) -> tuple[WebWikiDoc | None, int]:
+    # Если есть "правильная" ссылка, заданная через /fix — используем её.
+    preferred = _preferred_fix_url(context=context, query=context_text)
+    if preferred:
+        for d in getattr(index, "_docs", []):  # type: ignore[attr-defined]
+            if getattr(d, "url", None) == preferred:
+                return d, 100
     doc, score = _search_best_with_model_bias(
         index,
         variants,
@@ -1600,6 +1653,69 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _log_bot_reply("cmd_error_retry", chat_id, uid, score=best_score, url=url)
 
 
+def _extract_url_arg(args: list[str]) -> str | None:
+    for a in args or []:
+        s = (a or "").strip()
+        if s.startswith("http://") or s.startswith("https://"):
+            return s
+    return None
+
+
+async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    /fix <url> — reply на сообщение бота:
+    - удаляет старое сообщение бота
+    - отправляет "правильную" ссылку
+    - запоминает: старый URL плохой, новый — предпочтительный для этого запроса
+    """
+    if not update.effective_chat or not update.effective_message:
+        return
+    msg = update.effective_message
+    chat_id = update.effective_chat.id
+    uid = msg.from_user.id if msg.from_user else None
+
+    bot_id = context.application.bot_data.get("bot_id")
+    if not msg.reply_to_message or not msg.reply_to_message.from_user or bot_id is None or msg.reply_to_message.from_user.id != bot_id:
+        await msg.reply_text("Использование: ответь на сообщение бота командой /fix <ссылка>", disable_web_page_preview=True)
+        _log_bot_reply("cmd_fix_usage", chat_id, uid)
+        return
+
+    good_url = _extract_url_arg(list(context.args or []))
+    if not good_url:
+        await msg.reply_text("Использование: /fix <ссылка>", disable_web_page_preview=True)
+        _log_bot_reply("cmd_fix_usage", chat_id, uid)
+        return
+
+    bad_mid = msg.reply_to_message.message_id
+    store = context.application.bot_data.setdefault("answer_ctx_store", _load_answer_ctx_store())
+    item = store.get(_answer_ctx_key(chat_id, bad_mid)) if isinstance(store, dict) else None
+    if not isinstance(item, dict) or not item.get("q"):
+        await msg.reply_text("Не понимаю, к какому запросу относится тот ответ. Попробуй повторить вопрос.", disable_web_page_preview=True)
+        _log_bot_reply("cmd_fix_no_ctx", chat_id, uid, bad_mid=bad_mid)
+        return
+
+    query = str(item.get("q") or "").strip()
+    bad_url = str(item.get("url") or "").strip() or None
+
+    # учимся: старый URL плохой, новый — предпочтительный
+    _remember_bad_answer(context=context, query=query, bad_url=bad_url)
+    _remember_good_fix(context=context, query=query, good_url=good_url)
+
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=bad_mid)
+    except Exception:
+        pass
+
+    sent = await msg.reply_text(
+        "Ок, вот правильная ссылка:\n"
+        f"<a href=\"{html.escape(good_url)}\">{html.escape(good_url)}</a>",
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=False,
+    )
+    _record_bot_answer_context(context=context, chat_id=chat_id, bot_message_id=sent.message_id, query=query, url=good_url)
+    _log_bot_reply("cmd_fix", chat_id, uid, url=good_url)
+
+
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logging.exception("Unhandled error while processing update: %s", context.error)
 
@@ -2010,6 +2126,7 @@ def main() -> None:
     app.add_handler(CommandHandler("ping", cmd_ping))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("error", cmd_error))
+    app.add_handler(CommandHandler("fix", cmd_fix))
     # Диагностика: первым делом логируем любой update
     app.add_handler(TypeHandler(Update, on_any_update), group=-1)
     # filters.UpdateType.* здесь не используем, чтобы не "отрезать" обычные сообщения.
@@ -2041,6 +2158,12 @@ def main() -> None:
             )
         except Exception as e:
             logging.warning("Не удалось загрузить каталог кодов ошибок: %s", e)
+        # Локальные фиксы ссылок (/fix)
+        try:
+            application.bot_data["fix_store"] = _load_fix_store()
+            logging.info("Fix-store загружен: %d", len(application.bot_data["fix_store"]))
+        except Exception as e:
+            logging.warning("Не удалось загрузить fix-store: %s", e)
 
     async def _index_step(context) -> None:
         _ = context
