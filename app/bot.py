@@ -93,13 +93,33 @@ def _load_manual_error_codes() -> dict[str, ErrorCodeInfo]:
 
 
 def _format_error_code_info(info: ErrorCodeInfo) -> str:
-    parts: list[str] = [f"<b>CODE:{html.escape(info.code)}</b>"]
-    if info.title:
-        parts.append(f"<b>{html.escape(info.title)}</b>")
-    if info.cause:
-        parts.append(f"Причина: {html.escape(info.cause)}")
-    if info.fix:
-        parts.append(f"Что делать: {html.escape(info.fix)}")
+    def tr(s: str) -> str:
+        s2 = (s or "").strip()
+        if not s2:
+            return ""
+        # Точечные переводы для часто встречающихся ошибок ACE Pro.
+        # Если строка не распознана — оставляем EN, но с русскими подписью/контекстом ниже.
+        mapping = {
+            "The number of filaments in the ACE Pro does not meet the requirements of the model": "Количество филамента в ACE Pro не соответствует требованиям модели",
+            "The number of filaments placed in the ACE Pro is too small to perform color mapping of the multi-color model.": "В ACE Pro установлено слишком мало филамента, чтобы выполнить цветовое сопоставление для многоцветной модели.",
+            "ACE Pro is working and cannot be upgraded": "ACE Pro занят и не может быть обновлён",
+            "ACE Pro is performing other tasks.": "ACE Pro выполняет другие задачи.",
+            "The firmware of ACE Pro needs to be upgraded after the tasks are completed.": "Обновите прошивку ACE Pro после завершения текущих задач.",
+        }
+        return mapping.get(s2, s2)
+
+    code = html.escape(info.code)
+    title = tr(info.title)
+    cause = tr(info.cause)
+    fix = tr(info.fix)
+
+    parts: list[str] = [f"<b>Ошибка {code}</b>"]
+    if title:
+        parts.append(f"<b>{html.escape(title)}</b>")
+    if cause:
+        parts.append(f"Причина: {html.escape(cause)}")
+    if fix:
+        parts.append(f"Что делать: {html.escape(fix)}")
     return "\n".join(parts).strip()
 
 
