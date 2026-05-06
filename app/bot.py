@@ -148,9 +148,10 @@ def _topic_needs_printer_model(text: str) -> bool:
 
 def _extract_error_code(text: str) -> str | None:
     """
-    Возвращает код ошибки вида 1xxxx (например 11407), если он явно присутствует в тексте.
+    Возвращает числовой код ошибки (4–7 цифр), если он явно присутствует в тексте.
+    Формат на вики обычно: /error-codes/<code>-code/...
     """
-    m = re.search(r"\b(1\d{4})\b", text.lower())
+    m = re.search(r"\b(\d{4,7})\b", text.lower())
     return m.group(1) if m else None
 
 
@@ -376,7 +377,8 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
         u = url.lower()
         if "/error-codes/" not in u:
             return False
-        if f"/{code}-code" not in u and f"/{code}/" not in u and (not u.rstrip("/").endswith(f"/{code}")):
+        # Не отдаём общий раздел /error-codes — только страницу конкретного кода.
+        if f"/{code}-code" not in u:
             return False
     if not _guide_url_matches_model_hints(url, _model_slug_hints(question)):
         return False
@@ -484,6 +486,50 @@ async def _deliver_clarify_combined(
     trace: 'followup' | 'correction'
     Возвращает: printer_design | wiki | uncertain | no_guide
     """
+    # Защита: для кодов ошибок не уточняем и не отвечаем "общими" страницами.
+    # Либо находим точную страницу /error-codes/<code>-code..., либо молчим.
+    if _is_error_code_query(original) or _is_error_code_query(combined):
+        index: WebWikiIndex = context.application.bot_data["wiki_index"]
+        variants = expand_queries(combined) if settings.ru_layer_enabled else [combined]
+        best_doc, best_score = _search_best_with_model_bias(
+            index, variants, context_text=combined, topic_for_keywords=original
+        )
+        if not best_doc or best_score < settings.min_score:
+            if settings.log_decisions:
+                logging.info(
+                    "skip chat=%s reason=error_code_not_found trace=%s score=%d",
+                    chat_id,
+                    trace,
+                    best_score if best_doc else -1,
+                )
+            return "silent"
+        if not _response_wiki_url_acceptable(combined, best_doc.url):
+            if settings.log_decisions:
+                logging.info(
+                    "skip chat=%s reason=error_code_not_found trace=%s url=%s",
+                    chat_id,
+                    trace,
+                    best_doc.url,
+                )
+            return "silent"
+        url = best_doc.url
+        title = html.escape(best_doc.title)
+        reply = (
+            "Нашёл в вики:\n"
+            f"• <b>{title}</b>\n"
+            f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
+            f"<i>совпадение: {best_score}%</i>"
+        )
+        await msg.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False)
+        _log_bot_reply(
+            "error_code_wiki",
+            chat_id,
+            from_user,
+            score=best_score,
+            url=url,
+        )
+        return "wiki"
+
     if await _maybe_reply_printer_design_vs_question(
         msg,
         question=combined,
@@ -1226,12 +1272,24 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     best_doc, best_score = _search_best_with_model_bias(
         index, variants, context_text=text, topic_for_keywords=text
     )
+    is_err = _is_error_code_query(text)
 
     if not best_doc:
         if settings.log_decisions:
             logging.info("skip chat=%s reason=no_results docs=%d", chat_id, index.doc_count)
         return
     if best_score < settings.min_score:
+        # Для кодов ошибок: либо находим точную страницу по коду, либо молчим (без уточнений).
+        if is_err:
+            if settings.log_decisions:
+                logging.info(
+                    "skip chat=%s reason=error_code_not_found score=%d min=%d url=%s",
+                    chat_id,
+                    best_score,
+                    settings.min_score,
+                    best_doc.url,
+                )
+            return
         clarify_low = await _try_send_printer_clarify(
             msg=msg,
             context=context,
@@ -1266,6 +1324,15 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     url = best_doc.url
     if not _response_wiki_url_acceptable(text, url):
+        # Для кодов ошибок не шлём "нет гайда" — просто молчим.
+        if is_err:
+            if settings.log_decisions:
+                logging.info(
+                    "skip chat=%s reason=error_code_not_found url=%s",
+                    chat_id,
+                    url,
+                )
+            return
         await _reply_no_guide_for_model(
             msg,
             chat_id=chat_id,
