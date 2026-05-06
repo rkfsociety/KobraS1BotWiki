@@ -166,10 +166,7 @@ def _extract_error_code(text: str) -> str | None:
 
 def _is_error_code_query(text: str) -> bool:
     """
-    Сообщение, где ключевой смысл — код ошибки (например "ошибка 11407" или просто "11407").
-    Для таких запросов:
-    - модель не уточняем
-    - отвечаем только если есть точная страница по коду
+    Сообщение, где ключевой смысл — код ошибки (например "ошибка 11407").
     """
     code = _extract_error_code(text)
     if not code:
@@ -179,29 +176,82 @@ def _is_error_code_query(text: str) -> bool:
     return any(k in t for k in ("ошибк", "error", "err"))
 
 
-def _pick_error_code_doc(index: WebWikiIndex, code: str) -> WebWikiDoc | None:
+def _error_code_variant_suffix(code: str, url: str) -> str | None:
     """
-    Для кодов ошибок не используем fuzzy-поиск (он может путать коды).
-    Ищем только страницы вида /error-codes/<code>-code...
+    /en/error-codes/<code>-code/<suffix> -> suffix
+    /en/error-codes/<code>-code -> None
     """
+    u = (url or "").lower().rstrip("/")
+    base = f"/error-codes/{code}-code"
+    if base not in u:
+        return None
+    after = u.split(base, 1)[1]
+    if not after:
+        return None
+    after = after.lstrip("/")
+    if not after:
+        return None
+    return after.split("/", 1)[0] or None
+
+
+def _error_code_target_suffix(text: str) -> str | None:
+    """
+    Пытаемся понять, для какой линейки нужна страница кода ошибки.
+    Поддерживаем явные сокращения (s1/k3/k3m) и названия моделей (через hints).
+    """
+    tl = text.lower()
+    # явные сокращения
+    if re.search(r"\bk3m\b", tl):
+        return "k3m"
+    if re.search(r"\bk3\b", tl) or re.search(r"\bkobra\s*3\b", tl) or "kobra-3" in tl:
+        return "k3"
+    if re.search(r"\bs1\b", tl) or "kobra-s1" in tl or re.search(r"kobra\s*s\s*1\b", tl):
+        return "s1"
+
+    hints = _model_slug_hints(text)
+    if "kobra-s1" in hints or "kobra-s1-combo" in hints:
+        return "s1"
+    if "kobra-3" in hints or "kobra-3-combo" in hints:
+        return "k3"
+    if "kobra-max" in hints or "kobra-max-combo" in hints:
+        return "k3m"
+    return None
+
+
+def _error_code_candidates(index: WebWikiIndex, code: str) -> list[WebWikiDoc]:
     target = f"/error-codes/{code}-code"
-    candidates: list[WebWikiDoc] = []
-    # Под lock не лезем: индекс immutable после загрузки.
+    out: list[WebWikiDoc] = []
     for d in getattr(index, "_docs", []):  # type: ignore[attr-defined]
         try:
             u = (d.url or "").lower()
         except Exception:
             continue
         if target in u:
-            candidates.append(d)
+            out.append(d)
+    return out
+
+
+def _pick_error_code_doc(index: WebWikiIndex, code: str, *, context_text: str) -> WebWikiDoc | None:
+    """
+    Для кодов ошибок не используем fuzzy-поиск (он может путать коды).
+    Ищем только страницы вида /error-codes/<code>-code...
+    """
+    candidates = _error_code_candidates(index, code)
     if not candidates:
         return None
+    # Если вариантов несколько — пытаемся выбрать по модели из текста.
+    target_suffix = _error_code_target_suffix(context_text)
+    if target_suffix:
+        for d in candidates:
+            if _error_code_variant_suffix(code, d.url) == target_suffix:
+                return d
     # Предпочитаем базовую страницу кода без суффиксов (/s1, /k3, и т.п.)
     base = f"https://wiki.anycubic.com/en/error-codes/{code}-code"
     for d in candidates:
         if d.url.rstrip("/") == base:
             return d
-    return candidates[0]
+    # Если суффикса не нашли и базовой нет — неоднозначно, пусть вызывающий уточнит модель.
+    return candidates[0] if len(candidates) == 1 else None
 
 def _needs_model_clarification(text: str) -> bool:
     # Для кодов ошибок модель не спрашиваем — либо найдём страницу по коду, либо промолчим.
@@ -452,6 +502,50 @@ async def _maybe_reply_printer_design_vs_question(
     return True
 
 
+async def _try_send_error_code_clarify(
+    *,
+    msg,
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    text: str,
+    code: str,
+    candidates: list[WebWikiDoc],
+    settings,
+) -> bool:
+    """
+    Если по коду ошибки есть несколько страниц (разные модели) — просим уточнить модель.
+    """
+    if not settings.clarify_enabled or not msg.from_user:
+        return False
+    # собираем список вариантов по суффиксам URL
+    suffixes: list[str] = []
+    for d in candidates:
+        s = _error_code_variant_suffix(code, d.url)
+        if s:
+            suffixes.append(s)
+    uniq = sorted(set(suffixes))
+    if len(uniq) < 2:
+        return False
+
+    pretty = ", ".join(uniq).upper()
+    sent = await msg.reply_text(
+        f"По коду <b>{html.escape(code)}</b> есть разные статьи для разных моделей ({html.escape(pretty)}).\n"
+        "Уточни, пожалуйста, <b>модель принтера</b> (например: <b>Kobra S1</b> / <b>Kobra 3</b> / <b>Kobra 3 Max</b>).\n"
+        "Ответь на это сообщение.",
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+    )
+    pending = context.application.bot_data.setdefault("clarify_pending", {})
+    ckey = (chat_id, msg.from_user.id)
+    now2 = time.time()
+    pending[ckey] = {"original": text, "ts": now2, "prompt_message_id": sent.message_id}
+    store = _load_clarify_store()
+    store[_clarify_key(chat_id, msg.from_user.id)] = pending[ckey]
+    _save_clarify_store(store)
+    _log_bot_reply("error_code_clarify_prompt", chat_id, msg.from_user.id, message_id=sent.message_id, code=code, variants=pretty)
+    return True
+
+
 async def _reply_no_guide_for_model(
     msg,
     *,
@@ -571,7 +665,7 @@ async def _deliver_clarify_combined(
     if _is_error_code_query(original) or _is_error_code_query(combined):
         index: WebWikiIndex = context.application.bot_data["wiki_index"]
         code = _extract_error_code(combined) or _extract_error_code(original)
-        best_doc = _pick_error_code_doc(index, code) if code else None
+        best_doc = _pick_error_code_doc(index, code, context_text=combined) if code else None
         best_score = 100 if best_doc else -1
         if not best_doc:
             if settings.log_decisions:
@@ -1349,13 +1443,33 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     ):
         return
 
-    variants = expand_queries(text) if settings.ru_layer_enabled else [text]
     is_err = _is_error_code_query(text)
     code = _extract_error_code(text)
     if is_err and code:
-        best_doc = _pick_error_code_doc(index, code)
+        candidates = _error_code_candidates(index, code)
+        if not candidates:
+            if settings.log_decisions:
+                logging.info("skip chat=%s reason=error_code_not_found code=%s", chat_id, code)
+            return
+        best_doc = _pick_error_code_doc(index, code, context_text=text)
         best_score = 100 if best_doc else -1
+        if best_doc is None:
+            if await _try_send_error_code_clarify(
+                msg=msg,
+                context=context,
+                chat_id=chat_id,
+                text=text,
+                code=code,
+                candidates=candidates,
+                settings=settings,
+            ):
+                return
+            # Если не смогли выбрать и уточнение не отправили — молчим.
+            if settings.log_decisions:
+                logging.info("skip chat=%s reason=error_code_ambiguous code=%s", chat_id, code)
+            return
     else:
+        variants = expand_queries(text) if settings.ru_layer_enabled else [text]
         best_doc, best_score = _search_best_with_model_bias(
             index, variants, context_text=text, topic_for_keywords=text
         )
