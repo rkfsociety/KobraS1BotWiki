@@ -19,6 +19,7 @@ from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandl
 
 from app.config import load_settings
 from app.printer_catalog import explain_door_vs_design
+from app.error_codes_catalog import ErrorCodeInfo, ensure_error_codes_catalog, merge_manual_overrides
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex, WebWikiIndexer
 from app.ru_layer import expand_queries
 
@@ -63,6 +64,43 @@ def _log_bot_reply(kind: str, chat_id: int, user_id: int | None = None, **extra:
             continue
         parts.append(f"{key}={val}")
     logging.info(" ".join(parts))
+
+
+def _load_manual_error_codes() -> dict[str, ErrorCodeInfo]:
+    try:
+        path = Path("wiki/error-codes-manual.json")
+        if not path.exists():
+            return {}
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return {}
+        out: dict[str, ErrorCodeInfo] = {}
+        for k, v in raw.items():
+            if not isinstance(v, dict):
+                continue
+            code = str(v.get("code") or k).strip()
+            if not code.isdigit():
+                continue
+            out[code] = ErrorCodeInfo(
+                code=code,
+                title=str(v.get("title") or "").strip(),
+                cause=str(v.get("cause") or "").strip(),
+                fix=str(v.get("fix") or "").strip(),
+            )
+        return out
+    except Exception:
+        return {}
+
+
+def _format_error_code_info(info: ErrorCodeInfo) -> str:
+    parts: list[str] = [f"<b>CODE:{html.escape(info.code)}</b>"]
+    if info.title:
+        parts.append(f"<b>{html.escape(info.title)}</b>")
+    if info.cause:
+        parts.append(f"Причина: {html.escape(info.cause)}")
+    if info.fix:
+        parts.append(f"Что делать: {html.escape(info.fix)}")
+    return "\n".join(parts).strip()
 
 
 def _sync_clarify_pending_from_disk(pending: dict[tuple[int, int], dict]) -> None:
@@ -1448,6 +1486,17 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if is_err and code:
         candidates = _error_code_candidates(index, code)
         if not candidates:
+            # fallback: отдельный каталог ошибок из /en/error-codes + ручные доп. записи
+            catalog: dict[str, ErrorCodeInfo] = context.application.bot_data.get("error_codes_catalog", {})
+            info = catalog.get(code) if isinstance(catalog, dict) else None
+            if info:
+                await msg.reply_text(
+                    _format_error_code_info(info),
+                    parse_mode=ParseMode.HTML,
+                    disable_web_page_preview=True,
+                )
+                _log_bot_reply("error_code_text", chat_id, msg.from_user.id if msg.from_user else None, code=code)
+                return
             if settings.log_decisions:
                 logging.info("skip chat=%s reason=error_code_not_found code=%s", chat_id, code)
             return
@@ -1689,6 +1738,22 @@ def main() -> None:
         application.bot_data["bot_username"] = me.username
         application.bot_data["bot_id"] = me.id
         logging.info("Bot username: @%s", me.username)
+        # Каталог ошибок (fallback, если у кода нет отдельной страницы /error-codes/<code>-code)
+        try:
+            manual = _load_manual_error_codes()
+            scraped = await ensure_error_codes_catalog(
+                base_url=settings.wiki_base_url,
+                cache_path=".cache/error_codes_catalog.json",
+                refresh_hours=max(1, int(settings.wiki_refresh_hours)),
+            )
+            application.bot_data["error_codes_catalog"] = merge_manual_overrides(scraped, manual)
+            logging.info(
+                "Каталог кодов ошибок загружен: %d (manual=%d)",
+                len(application.bot_data["error_codes_catalog"]),
+                len(manual),
+            )
+        except Exception as e:
+            logging.warning("Не удалось загрузить каталог кодов ошибок: %s", e)
 
     async def _index_step(context) -> None:
         _ = context

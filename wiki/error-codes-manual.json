@@ -1,0 +1,9 @@
+{
+  "11527": {
+    "code": "11527",
+    "title": "ACE Pro is working and cannot be upgraded",
+    "cause": "ACE Pro is performing other tasks.",
+    "fix": "Upgrade ACE Pro firmware after the tasks are completed."
+  }
+}
+
