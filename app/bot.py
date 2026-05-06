@@ -103,6 +103,9 @@ def _printer_mentioned(text: str) -> bool:
 def _topic_needs_printer_model(text: str) -> bool:
     """Тема вопроса обычно специфична для модели (без модели ответ легко промахнется)."""
     t = text.lower()
+    # Коды ошибок (например 11518) почти всегда требуют уточнить модель принтера.
+    if re.search(r"\b1\d{4}\b", t):
+        return True
     ru = (
         "экструдер",
         "сопло",
@@ -625,7 +628,7 @@ async def _try_send_printer_clarify(
     hint = _clarify_model_hint_html(text)
     sent = await msg.reply_text(
         "Похоже, ответ есть в вики, но мне не хватает данных.\n"
-        f"Уточни, пожалуйста, <b>модель принтера</b> {hint} и/или <b>код ошибки</b>.\n"
+        f"Уточни, пожалуйста, <b>модель принтера</b> {hint} (например: <b>Kobra S1</b>) и/или <b>код ошибки</b>.\n"
         "Ответь на это сообщение.",
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True,

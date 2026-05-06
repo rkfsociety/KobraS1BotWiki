@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -78,6 +79,9 @@ def _make_search_blob(doc: WebWikiDoc) -> str:
 def _looks_like_question(text: str) -> bool:
     t = _normalize(text)
     if "?" in text:
+        return True
+    # Сообщения вида "Ошибка 11518" / "11518" считаем вопросом (поиск по кодам ошибок).
+    if re.search(r"\b1\d{4}\b", t) or re.search(r"\bошибк\w*\s*1\d{4}\b", t):
         return True
     # Фразы вроде "уже не помнит как ..." — это скорее комментарий, а не вопрос к боту.
     # В режиме QUESTIONS_ONLY такие сообщения лучше игнорировать, если нет явного "?",

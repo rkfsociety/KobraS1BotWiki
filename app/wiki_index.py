@@ -20,6 +20,9 @@ def _looks_like_question(text: str) -> bool:
     t = _normalize(text)
     if "?" in text:
         return True
+    # Коды ошибок (напр. 11518) считаем вопросом: пользователь ожидает расшифровку/гайд.
+    if re.search(r"\b1\d{4}\b", t) or re.search(r"\bошибк\w*\s*1\d{4}\b", t):
+        return True
     # "не помнит как ..." — обычно это комментарий, а не вопрос к боту (если нет "?").
     if re.search(r"\b(уже\s+)?не\s+помнит\s+как\b", t):
         return False
