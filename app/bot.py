@@ -23,6 +23,14 @@ from app.web_wiki_index import WebWikiDoc, WebWikiIndex, WebWikiIndexer
 from app.ru_layer import expand_queries
 
 
+_COOLDOWN_EXEMPT_USERS: frozenset[int] = frozenset(
+    {
+        # Ручной allowlist: для этого пользователя не применяем COOLDOWN_SECONDS.
+        5111236617,
+    }
+)
+
+
 _CLARIFY_STORE = Path(".cache/clarify_pending.json")
 
 
@@ -1406,7 +1414,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     now = time.time()
 
     last_reply_ts = rl["last_reply_ts_by_chat"].get(chat_id, 0.0)
-    if now - last_reply_ts < settings.cooldown_seconds:
+    uid_cd = msg.from_user.id if msg.from_user else None
+    if uid_cd not in _COOLDOWN_EXEMPT_USERS and now - last_reply_ts < settings.cooldown_seconds:
         if settings.log_decisions:
             logging.info("skip chat=%s reason=cooldown", chat_id)
         return
