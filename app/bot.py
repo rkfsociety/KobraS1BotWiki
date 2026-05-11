@@ -2287,7 +2287,7 @@ def main() -> None:
     # filters.UpdateType.* здесь не используем, чтобы не "отрезать" обычные сообщения.
     # Без & ~filters.COMMAND: на части апдейтов (пустой text/caption) комбинация ломалась на PTB 21 + Py 3.14.
     # Команды всё равно отсекаются в on_message по префиксу "/" и отдельными CommandHandler.
-    app.add_handler(MessageHandler((filters.TEXT | filters.Caption), on_message))
+    app.add_handler(MessageHandler((filters.TEXT | filters.CAPTION), on_message))
     app.add_error_handler(on_error)
 
     logging.info("Бот запущен. Wiki docs: %d", wiki_index.doc_count)
