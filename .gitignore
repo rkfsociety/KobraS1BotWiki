@@ -1,60 +1,48 @@
-```bash
-# Script backup files (if any)
-*.sh~
-
-# Temporary files
-*.tmp
-*.temp
+```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.ENV.*
+.venv/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage/
 
 # Logs
 *.log
-
-# Environment
-.env
-.env.local
-*.env.*
-
-# Dependencies
-node_modules/
-.venv/
-venv/
-__pycache__/
-*.egg-info/
-dist/
-build/
-target/
-.gradle/
-
-# Editors
-.vscode/
-.idea/
-*.swp
-*.swo
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Python
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
 
 # Build artifacts
-*.o
-*.obj
-*.exe
-*.dll
+dist/
+build/
+target/
 *.so
-*.a
+*.dylib
+*.dll
+*.exe
 *.out
+*.o
+*.a
+*.obj
 
 # Compressed files
 *.zip
@@ -79,4 +67,13 @@ htmlcov/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
+
+# Coverage
+htmlcov/
+.coverage.*
+
+# Environment
+.env
+.env.local
+.env.*
 ```
