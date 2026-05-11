@@ -1727,9 +1727,21 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"CLARIFY_CORRECTION_TTL_SECONDS: <code>{settings.clarify_correction_ttl_seconds}</code>\n"
         f"LOG_DECISIONS: <code>{str(settings.log_decisions).lower()}</code>"
     )
-    await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    reply_msg = await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     uid = msg.from_user.id if msg.from_user else None
     _log_bot_reply("cmd_status", chat_id, uid)
+    
+    # Удаляем сообщение пользователя и ответ бота через 10 секунд
+    import asyncio
+    async def delete_messages():
+        try:
+            await asyncio.sleep(10)
+            await msg.delete()
+            await reply_msg.delete()
+        except Exception:
+            pass  # Игнорируем ошибки удаления (сообщения могли быть уже удалены)
+    
+    asyncio.create_task(delete_messages())
 
 
 async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
