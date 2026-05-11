@@ -1708,6 +1708,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
 
     chat_id = update.effective_chat.id
+    message_thread_id = update.effective_message.message_thread_id if update.effective_message else None
     allowed = settings.allowed_chat_id
     is_allowed = (allowed is None) or (chat_id == allowed)
     bot_username = context.application.bot_data.get("bot_username")
@@ -1716,6 +1717,10 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         _t(lang, "bot_status") + "\n"
         f"bot: <code>@{html.escape(str(bot_username or ''))}</code>\n"
         f"chat_id: <code>{chat_id}</code>\n"
+    )
+    if message_thread_id is not None:
+        text += f"topic_id: <code>{message_thread_id}</code>\n"
+    text += (
         f"ALLOWED_CHAT_ID: <code>{'' if allowed is None else allowed}</code>\n"
         f"chat_allowed: <code>{str(is_allowed).lower()}</code>\n"
         f"wiki_docs: <code>{index.doc_count}</code>\n"
