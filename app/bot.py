@@ -1732,8 +1732,20 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     # Проверка разрешённых чатов и тем для /status (отвечает везде, но показывает статус доступа)
     allowed_chats = settings.allowed_chat_ids
     allowed_topics = settings.allowed_topic_ids
+    
+    # Специальная обработка: если allowed_topics содержит 0, это означает "только общая тема General"
+    # В этом случае actual_topic_id должен быть None (что и есть для General)
+    allow_general_only = allowed_topics is not None and 0 in allowed_topics
+    
     is_chat_allowed = (allowed_chats is None) or (chat_id in allowed_chats)
-    is_topic_allowed = (allowed_topics is None) or (actual_topic_id is not None and actual_topic_id in allowed_topics)
+    
+    if allow_general_only:
+        # Разрешаем только если message_thread_id is None (общая тема)
+        is_topic_allowed = actual_topic_id is None
+    else:
+        # Обычная логика: разрешаем если topic_id в списке или список не задан
+        is_topic_allowed = (allowed_topics is None) or (actual_topic_id is not None and actual_topic_id in allowed_topics)
+    
     is_allowed = is_chat_allowed or is_topic_allowed
     
     bot_username = context.application.bot_data.get("bot_username")
@@ -2004,8 +2016,18 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     # это может быть общая тема General, но мы всё равно считаем topic_id=None
     actual_topic_id = message_thread_id
     
+    # Специальная обработка: если allowed_topics содержит 0, это означает "только общая тема General"
+    # В этом случае actual_topic_id должен быть None (что и есть для General)
+    allow_general_only = allowed_topics is not None and 0 in allowed_topics
+    
     is_chat_allowed = (allowed_chats is None) or (chat_id in allowed_chats)
-    is_topic_allowed = (allowed_topics is None) or (actual_topic_id is not None and actual_topic_id in allowed_topics)
+    
+    if allow_general_only:
+        # Разрешаем только если message_thread_id is None (общая тема)
+        is_topic_allowed = actual_topic_id is None
+    else:
+        # Обычная логика: разрешаем если topic_id в списке или список не задан
+        is_topic_allowed = (allowed_topics is None) or (actual_topic_id is not None and actual_topic_id in allowed_topics)
     
     # Если списки заданы — проверяем, что хотя бы одно условие выполнено
     # Если ни один список не задан — бот работает везде (старое поведение)
