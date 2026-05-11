@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,7 +44,8 @@ class Settings:
     min_score: int
     top_k: int
     questions_only: bool
-    allowed_chat_id: int | None
+    allowed_chat_ids: frozenset[int] | None
+    allowed_topic_ids: frozenset[int] | None
     cooldown_seconds: int
     max_replies_per_minute: int
     duplicate_window_seconds: int
@@ -110,8 +112,26 @@ def load_settings() -> Settings:
     clarify_correction_max = _get_int("CLARIFY_CORRECTION_MAX", 2)
     clarify_correction_ttl_seconds = _get_int("CLARIFY_CORRECTION_TTL_SECONDS", 600)
 
-    allowed_chat_id_raw = (os.getenv("ALLOWED_CHAT_ID") or "").strip()
-    allowed_chat_id = int(allowed_chat_id_raw) if allowed_chat_id_raw else None
+    # Загрузка списка разрешённых chat_id и topic_id из переменных окружения
+    # ALLOWED_CHAT_IDS: список ID чатов через запятую (например, "123456789,-987654321")
+    # ALLOWED_TOPIC_IDS: список ID тем через запятую (например, "10,20,30")
+    allowed_chat_ids_raw = (os.getenv("ALLOWED_CHAT_IDS") or "").strip()
+    allowed_chat_ids: frozenset[int] | None = None
+    if allowed_chat_ids_raw:
+        try:
+            allowed_chat_ids = frozenset(int(x.strip()) for x in allowed_chat_ids_raw.split(",") if x.strip())
+        except ValueError:
+            logging.warning("Некорректный формат ALLOWED_CHAT_IDS, игнорируем")
+            allowed_chat_ids = None
+
+    allowed_topic_ids_raw = (os.getenv("ALLOWED_TOPIC_IDS") or "").strip()
+    allowed_topic_ids: frozenset[int] | None = None
+    if allowed_topic_ids_raw:
+        try:
+            allowed_topic_ids = frozenset(int(x.strip()) for x in allowed_topic_ids_raw.split(",") if x.strip())
+        except ValueError:
+            logging.warning("Некорректный формат ALLOWED_TOPIC_IDS, игнорируем")
+            allowed_topic_ids = None
 
     return Settings(
         telegram_bot_token=token,
@@ -124,7 +144,8 @@ def load_settings() -> Settings:
         min_score=min_score,
         top_k=top_k,
         questions_only=questions_only,
-        allowed_chat_id=allowed_chat_id,
+        allowed_chat_ids=allowed_chat_ids,
+        allowed_topic_ids=allowed_topic_ids,
         cooldown_seconds=cooldown_seconds,
         max_replies_per_minute=max_replies_per_minute,
         duplicate_window_seconds=duplicate_window_seconds,
