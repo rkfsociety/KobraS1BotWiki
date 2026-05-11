@@ -1710,6 +1710,13 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     chat_id = update.effective_chat.id
     message_thread_id = update.effective_message.message_thread_id if update.effective_message else None
     
+    # Дополнительная диагностика: проверяем chat.type для групп с темами
+    chat_type = update.effective_chat.type
+    is_supergroup_with_topics = (
+        chat_type == ChatType.SUPERGROUP 
+        and getattr(update.effective_chat, 'is_forum', False)
+    )
+    
     # Проверка разрешённых чатов и тем для /status (отвечает везде, но показывает статус доступа)
     allowed_chats = settings.allowed_chat_ids
     allowed_topics = settings.allowed_topic_ids
@@ -1723,9 +1730,13 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         _t(lang, "bot_status") + "\n"
         f"bot: <code>@{html.escape(str(bot_username or ''))}</code>\n"
         f"chat_id: <code>{chat_id}</code>\n"
+        f"chat_type: <code>{chat_type}</code>\n"
+        f"is_forum: <code>{str(getattr(update.effective_chat, 'is_forum', False)).lower()}</code>\n"
     )
     if message_thread_id is not None:
         text += f"topic_id: <code>{message_thread_id}</code>\n"
+    else:
+        text += "topic_id: <code>(нет, сообщение не в теме)</code>\n"
     
     # Форматируем список разрешённых чатов/тем для отображения
     allowed_chats_str = ",".join(str(x) for x in sorted(allowed_chats)) if allowed_chats else "(не заданы)"
