@@ -1717,11 +1717,23 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         and getattr(update.effective_chat, 'is_forum', False)
     )
     
+    # Альтернативный способ получить topic_id: если message_thread_id None,
+    # но мы в форуме, возможно это общая тема (General)
+    actual_topic_id = message_thread_id
+    topic_source = "message_thread_id"
+    
+    # Если message_thread_id None, но чат является форумом, это может быть общая тема
+    if message_thread_id is None and is_supergroup_with_topics:
+        # В форумах Telegram общая тема "General" обычно имеет thread_id = 1
+        # Но API может возвращать None для сообщений в General
+        actual_topic_id = None  # Остаётся None, так как это действительно "общий чат" форума
+        topic_source = "general_forum_topic"
+    
     # Проверка разрешённых чатов и тем для /status (отвечает везде, но показывает статус доступа)
     allowed_chats = settings.allowed_chat_ids
     allowed_topics = settings.allowed_topic_ids
     is_chat_allowed = (allowed_chats is None) or (chat_id in allowed_chats)
-    is_topic_allowed = (allowed_topics is None) or (message_thread_id is not None and message_thread_id in allowed_topics)
+    is_topic_allowed = (allowed_topics is None) or (actual_topic_id is not None and actual_topic_id in allowed_topics)
     is_allowed = is_chat_allowed or is_topic_allowed
     
     bot_username = context.application.bot_data.get("bot_username")
@@ -1733,8 +1745,10 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"chat_type: <code>{chat_type}</code>\n"
         f"is_forum: <code>{str(getattr(update.effective_chat, 'is_forum', False)).lower()}</code>\n"
     )
-    if message_thread_id is not None:
-        text += f"topic_id: <code>{message_thread_id}</code>\n"
+    if actual_topic_id is not None:
+        text += f"topic_id: <code>{actual_topic_id}</code> (source: {topic_source})\n"
+    elif is_supergroup_with_topics:
+        text += "topic_id: <code>(общая тема General)</code>\n"
     else:
         text += "topic_id: <code>(нет, сообщение не в теме)</code>\n"
     
@@ -1986,8 +2000,12 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     allowed_chats = settings.allowed_chat_ids
     allowed_topics = settings.allowed_topic_ids
     
+    # Для on_message используем тот же подход: если message_thread_id=None в форуме,
+    # это может быть общая тема General, но мы всё равно считаем topic_id=None
+    actual_topic_id = message_thread_id
+    
     is_chat_allowed = (allowed_chats is None) or (chat_id in allowed_chats)
-    is_topic_allowed = (allowed_topics is None) or (message_thread_id is not None and message_thread_id in allowed_topics)
+    is_topic_allowed = (allowed_topics is None) or (actual_topic_id is not None and actual_topic_id in allowed_topics)
     
     # Если списки заданы — проверяем, что хотя бы одно условие выполнено
     # Если ни один список не задан — бот работает везде (старое поведение)
