@@ -10,6 +10,8 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup
 
+PARSER_VERSION = 2
+
 
 @dataclass(frozen=True)
 class ErrorCodeInfo:
@@ -116,7 +118,8 @@ def parse_error_codes_page(html: str) -> dict[str, ErrorCodeInfo]:
     # <h3 ...> CODE:11527 Title...</h3> <p>Cause of error: ...</p> <p>...upgrade...</p>
     if not out:
         for m in re.finditer(
-            r"<h3[^>]*>.*?CODE\s*:\s*(\d{4,7})\s+([^<]+)</h3>\s*(.*?)(?=<h3[^>]*>.*?CODE\s*:|\Z)",
+            # На сайте встречается склейка «CODE:11510The color…» без пробела после номера.
+            r"<h3[^>]*>.*?CODE\s*:\s*(\d{4,7})\s*([^<]+)</h3>\s*(.*?)(?=<h3[^>]*>.*?CODE\s*:|\Z)",
             html,
             flags=re.IGNORECASE | re.DOTALL,
         ):
@@ -160,9 +163,16 @@ async def ensure_error_codes_catalog(
     if cached and isinstance(cached, dict):
         ts = float(cached.get("ts", 0.0))
         cached_count = int(cached.get("count", 0) or 0)
+        cached_parser_version = int(cached.get("parser_version", 0) or 0)
         # Если в кэше 0 записей — считаем кэш невалидным и перекачиваем сразу
         # (обычно это результат старого парсера или временной проблемы загрузки страницы).
-        if cached_count > 0 and ts and (_now() - ts) < float(refresh_hours) * 3600.0:
+        # Также перекачиваем, если обновилась версия парсера.
+        if (
+            cached_parser_version == PARSER_VERSION
+            and cached_count > 0
+            and ts
+            and (_now() - ts) < float(refresh_hours) * 3600.0
+        ):
             data = cached.get("codes", {})
             if isinstance(data, dict):
                 return {k: ErrorCodeInfo(**v) for k, v in data.items() if isinstance(v, dict)}
@@ -183,6 +193,7 @@ async def ensure_error_codes_catalog(
                 {
                     "ts": _now(),
                     "source": url,
+                    "parser_version": PARSER_VERSION,
                     "count": len(codes),
                     "codes": {k: v.__dict__ for k, v in codes.items()},
                 },

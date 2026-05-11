@@ -22,6 +22,7 @@ from app.printer_catalog import explain_door_vs_design
 from app.error_codes_catalog import ErrorCodeInfo, ensure_error_codes_catalog, merge_manual_overrides
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex, WebWikiIndexer
 from app.ru_layer import expand_queries
+from app.translate_ru import Translator
 
 
 _COOLDOWN_EXEMPT_USERS: frozenset[int] = frozenset(
@@ -59,6 +60,128 @@ def _save_clarify_store(data: dict[str, dict]) -> None:
 
 def _norm_text(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").lower()).strip()
+
+
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
+
+
+def _detect_user_lang(*, text: str, user_lang_code: str | None) -> str:
+    """
+    Возвращает "ru" или "en" для языка ответа.
+    Приоритет:
+    - если в сообщении есть кириллица => ru
+    - иначе по language_code Telegram (ru/uk/be/kk/... считаем русскоязычными)
+    - иначе en
+    """
+    t = (text or "").strip()
+    if _CYRILLIC_RE.search(t):
+        return "ru"
+    lc = (user_lang_code or "").strip().lower()
+    if lc.startswith(("ru", "uk", "be", "kk", "ky", "uz", "tg", "hy", "ka")):
+        return "ru"
+    return "en"
+
+
+def _t(lang: str, key: str) -> str:
+    ru = {
+        "generic_help": (
+            "Могу помочь, но нужно чуть больше данных.\n"
+            "Напиши, пожалуйста: модель принтера (например Kobra S1/Kobra 3) и что именно случилось "
+            "(ошибка с кодом, что не работает, что хотите сделать)."
+        ),
+        "no_guide_for_model": (
+            "Извини, в вики не нашёл отдельной статьи по этому вопросу именно для твоей модели. "
+            "Похоже, такого гайда там ещё нет или он под другим названием — честно, подсказать ссылкой не могу."
+        ),
+        "found_in_wiki": "Нашёл в вики:",
+        "thanks_found_in_wiki": "Спасибо за уточнение, нашёл в вики:",
+        "still_uncertain": "Спасибо! Всё ещё не могу уверенно найти статью. Попробуй добавить модель и/или код ошибки.",
+        "error_code_clarify": (
+            "По коду <b>{code}</b> есть разные статьи для разных моделей ({variants}).\n"
+            "Уточни, пожалуйста, <b>модель принтера</b> (например: <b>Kobra S1</b> / <b>Kobra 3</b> / <b>Kobra 3 Max</b>).\n"
+            "Ответь на это сообщение."
+        ),
+        "clarify_prompt": (
+            "Похоже, ответ есть в вики, но мне не хватает данных.\n"
+            "Уточни, пожалуйста, <b>модель принтера</b> {hint} (например: <b>Kobra S1</b>) и/или <b>код ошибки</b>.\n"
+            "Ответь на это сообщение."
+        ),
+        "err_header": "Ошибка {code}",
+        "err_cause": "Причина: {text}",
+        "err_fix": "Что делать: {text}",
+        "match": "совпадение: {score}%",
+        "already_in_wiki": "Похоже, это уже описано в вики:",
+        "cmd_id": "ID этого чата:",
+        "cmd_type": "Тип",
+        "wiki_usage": "Использование: /wiki <вопрос или ключевые слова>",
+        "wiki_nothing_found": "Ничего не нашёл в вики.",
+        "wiki_low_conf": "Нашёл что-то похожее, но уверенность низкая. Попробуй уточнить запрос.",
+        "ping": "OK. Я на связи.",
+        "bot_status": "Статус бота:",
+        "error_usage": "Использование: ответь на сообщение бота командой /error",
+        "fix_usage_reply": "Использование: ответь на сообщение бота командой /fix <ссылка>",
+        "fix_usage": "Использование: /fix <ссылка>",
+        "unknown_reply_ctx": "Не понимаю, к какому запросу относится тот ответ. Попробуй повторить вопрос.",
+        "error_no_better": "Понял. Попробовал поискать ещё раз — лучше не нашёл. Похоже, ответа нет.",
+        "error_retry": "Попробовал ещё раз, вот что нашёл:",
+        "fix_confirm": "Ок, вот правильная ссылка:",
+    }
+    en = {
+        "generic_help": (
+            "I can help, but I need a bit more info.\n"
+            "Please send: your printer model (e.g. Kobra S1 / Kobra 3) and what exactly happened "
+            "(an error code, what is not working, what you’re trying to do)."
+        ),
+        "no_guide_for_model": (
+            "Sorry, I couldn’t find a dedicated wiki article for your exact printer model. "
+            "It looks like the guide doesn’t exist yet or it’s under a different name — I can’t link a reliable page."
+        ),
+        "found_in_wiki": "Found in the wiki:",
+        "thanks_found_in_wiki": "Thanks! Found in the wiki:",
+        "still_uncertain": "Thanks! I still can’t confidently find the right article. Try adding your model and/or an error code.",
+        "error_code_clarify": (
+            "For code <b>{code}</b> there are different articles for different models ({variants}).\n"
+            "Please specify your <b>printer model</b> (e.g. <b>Kobra S1</b> / <b>Kobra 3</b> / <b>Kobra 3 Max</b>).\n"
+            "Reply to this message."
+        ),
+        "clarify_prompt": (
+            "It looks like the answer is in the wiki, but I’m missing some details.\n"
+            "Please specify your <b>printer model</b> {hint} (e.g. <b>Kobra S1</b>) and/or the <b>error code</b>.\n"
+            "Reply to this message."
+        ),
+        "err_header": "Error {code}",
+        "err_cause": "Cause: {text}",
+        "err_fix": "What to do: {text}",
+        "match": "match: {score}%",
+        "already_in_wiki": "This seems to be already covered in the wiki:",
+        "cmd_id": "Chat ID:",
+        "cmd_type": "Type",
+        "wiki_usage": "Usage: /wiki <question or keywords>",
+        "wiki_nothing_found": "I couldn’t find anything in the wiki.",
+        "wiki_low_conf": "I found something similar, but confidence is low. Try refining your query.",
+        "ping": "OK. I’m online.",
+        "bot_status": "Bot status:",
+        "error_usage": "Usage: reply to the bot message with /error",
+        "fix_usage_reply": "Usage: reply to the bot message with /fix <link>",
+        "fix_usage": "Usage: /fix <link>",
+        "unknown_reply_ctx": "I can’t tell which query that reply belongs to. Please ask again.",
+        "error_no_better": "Got it. I tried searching again, but couldn’t find a better result. Looks like there’s no answer.",
+        "error_retry": "I tried again. Here’s what I found:",
+        "fix_confirm": "OK, here is the correct link:",
+    }
+    table = ru if lang == "ru" else en
+    return table.get(key, key)
+
+
+def _lang_from_message(*, context: ContextTypes.DEFAULT_TYPE, msg, text: str) -> str:
+    user_lang_code = (
+        msg.from_user.language_code
+        if (msg and msg.from_user and getattr(msg.from_user, "language_code", None))
+        else None
+    )
+    lang = _detect_user_lang(text=text, user_lang_code=user_lang_code)
+    context.application.bot_data["last_user_lang"] = lang
+    return lang
 
 
 def _load_answer_ctx_store() -> dict[str, dict]:
@@ -298,11 +421,13 @@ def _load_manual_error_codes() -> dict[str, ErrorCodeInfo]:
         return {}
 
 
-def _format_error_code_info(info: ErrorCodeInfo) -> str:
+def _format_error_code_info(info: ErrorCodeInfo, *, lang: str) -> str:
     def tr(s: str) -> str:
         s2 = (s or "").strip()
         if not s2:
             return ""
+        if lang != "ru":
+            return s2
         # Точечные переводы для часто встречающихся ошибок ACE Pro.
         # Если строка не распознана — оставляем EN, но с русскими подписью/контекстом ниже.
         mapping = {
@@ -319,14 +444,35 @@ def _format_error_code_info(info: ErrorCodeInfo) -> str:
     cause = tr(info.cause)
     fix = tr(info.fix)
 
-    parts: list[str] = [f"<b>Ошибка {code}</b>"]
+    parts: list[str] = [f"<b>{html.escape(_t(lang, 'err_header').format(code=code))}</b>"]
     if title:
         parts.append(f"<b>{html.escape(title)}</b>")
     if cause:
-        parts.append(f"Причина: {html.escape(cause)}")
+        parts.append(html.escape(_t(lang, "err_cause").format(text=cause)))
     if fix:
-        parts.append(f"Что делать: {html.escape(fix)}")
+        parts.append(html.escape(_t(lang, "err_fix").format(text=fix)))
     return "\n".join(parts).strip()
+
+
+async def _format_error_code_info_ru(*, context: ContextTypes.DEFAULT_TYPE, info: ErrorCodeInfo) -> str:
+    """
+    Переводим title/cause/fix на русский (лениво) и кэшируем.
+    Делается только для ответа из каталога, чтобы не блочить основной поиск/индексацию.
+    """
+    tr = context.application.bot_data.get("ru_translator")
+    if not isinstance(tr, Translator):
+        tr = Translator(cache_path=Path(".cache/ru_translations.json"))
+        context.application.bot_data["ru_translator"] = tr
+
+    # Язык выбираем по последнему сообщению пользователя (проставляем в on_message).
+    lang = context.application.bot_data.get("last_user_lang") or "ru"
+    if lang != "ru":
+        return _format_error_code_info(info, lang="en")
+
+    title = await tr.translate_en_ru(info.title)
+    cause = await tr.translate_en_ru(info.cause)
+    fix = await tr.translate_en_ru(info.fix)
+    return _format_error_code_info(ErrorCodeInfo(code=info.code, title=title, cause=cause, fix=fix), lang="ru")
 
 
 def _sync_clarify_pending_from_disk(pending: dict[tuple[int, int], dict]) -> None:
@@ -754,10 +900,8 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
 
 def _no_guide_for_model_message() -> str:
-    return (
-        "Извини, в вики не нашёл отдельной статьи по этому вопросу именно для твоей модели. "
-        "Похоже, такого гайда там ещё нет или он под другим названием — честно, подсказать ссылкой не могу."
-    )
+    # legacy helper; prefer _t(lang, "no_guide_for_model")
+    return _t("ru", "no_guide_for_model")
 
 
 async def _maybe_reply_printer_design_vs_question(
@@ -810,10 +954,9 @@ async def _try_send_error_code_clarify(
         return False
 
     pretty = ", ".join(uniq).upper()
+    lang = context.application.bot_data.get("last_user_lang") or "ru"
     sent = await msg.reply_text(
-        f"По коду <b>{html.escape(code)}</b> есть разные статьи для разных моделей ({html.escape(pretty)}).\n"
-        "Уточни, пожалуйста, <b>модель принтера</b> (например: <b>Kobra S1</b> / <b>Kobra 3</b> / <b>Kobra 3 Max</b>).\n"
-        "Ответь на это сообщение.",
+        _t(lang, "error_code_clarify").format(code=html.escape(code), variants=html.escape(pretty)),
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True,
     )
@@ -837,7 +980,8 @@ async def _reply_no_guide_for_model(
     best_url: str,
     hints: frozenset[str],
 ) -> None:
-    await msg.reply_text(_no_guide_for_model_message(), disable_web_page_preview=True)
+    lang = context.application.bot_data.get("last_user_lang") or "ru"
+    await msg.reply_text(_t(lang, "no_guide_for_model"), disable_web_page_preview=True)
     if settings.log_decisions:
         logging.info(
             "skip chat=%s reason=no_guide_for_model url=%s hints=%s",
@@ -945,6 +1089,7 @@ async def _deliver_clarify_combined(
     # Защита: для кодов ошибок не уточняем и не отвечаем "общими" страницами.
     # Либо находим точную страницу /error-codes/<code>-code..., либо молчим.
     if _is_error_code_query(original) or _is_error_code_query(combined):
+        lang = context.application.bot_data.get("last_user_lang") or "ru"
         index: WebWikiIndex = context.application.bot_data["wiki_index"]
         code = _extract_error_code(combined) or _extract_error_code(original)
         best_doc = _pick_error_code_doc(index, code, context_text=combined) if code else None
@@ -961,10 +1106,10 @@ async def _deliver_clarify_combined(
         url = best_doc.url
         title = html.escape(best_doc.title)
         reply = (
-            "Нашёл в вики:\n"
+            _t(lang, "found_in_wiki") + "\n"
             f"• <b>{title}</b>\n"
             f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
-            f"<i>совпадение: {best_score}%</i>"
+            f"<i>{html.escape(_t(lang, 'match').format(score=best_score))}</i>"
         )
         sent = await msg.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False)
         # Подстрахуемся: даже если кто-то ответит reply, мы не хотим продолжать цепочку по кодам ошибок.
@@ -1003,7 +1148,7 @@ async def _deliver_clarify_combined(
 
     if not best_doc or best_score < settings.min_score:
         sent = await msg.reply_text(
-            "Спасибо! Всё ещё не могу уверенно найти статью. Попробуй добавить модель и/или код ошибки.",
+            _t(context.application.bot_data.get("last_user_lang") or "ru", "still_uncertain"),
             disable_web_page_preview=True,
         )
         _log_bot_reply(
@@ -1032,11 +1177,12 @@ async def _deliver_clarify_combined(
 
     url = best_doc.url
     title = html.escape(best_doc.title)
+    lang = context.application.bot_data.get("last_user_lang") or "ru"
     reply = (
-        "Спасибо за уточнение, нашёл в вики:\n"
+        _t(lang, "thanks_found_in_wiki") + "\n"
         f"• <b>{title}</b>\n"
         f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
-        f"<i>совпадение: {best_score}%</i>"
+        f"<i>{html.escape(_t(lang, 'match').format(score=best_score))}</i>"
     )
     sent = await msg.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False)
     hints = _model_slug_hints(combined)
@@ -1218,10 +1364,9 @@ async def _try_send_printer_clarify(
     pending = context.application.bot_data.setdefault("clarify_pending", {})
     cooldown[ckey] = now2
     hint = _clarify_model_hint_html(text)
+    lang = context.application.bot_data.get("last_user_lang") or "ru"
     sent = await msg.reply_text(
-        "Похоже, ответ есть в вики, но мне не хватает данных.\n"
-        f"Уточни, пожалуйста, <b>модель принтера</b> {hint} (например: <b>Kobra S1</b>) и/или <b>код ошибки</b>.\n"
-        "Ответь на это сообщение.",
+        _t(lang, "clarify_prompt").format(hint=hint),
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True,
     )
@@ -1445,11 +1590,12 @@ async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     chat = update.effective_chat
     msg = update.effective_message
+    lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
 
     text = (
-        "ID этого чата:\n"
+        _t(lang, "cmd_id") + "\n"
         f"<code>{chat.id}</code>\n"
-        f"Тип: <code>{html.escape(chat.type)}</code>"
+        f"{html.escape(_t(lang, 'cmd_type'))}: <code>{html.escape(chat.type)}</code>"
     )
     await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     uid = msg.from_user.id if msg.from_user else None
@@ -1462,12 +1608,13 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings = context.application.bot_data["settings"]
     index: WebWikiIndex = context.application.bot_data["wiki_index"]
     msg = update.effective_message
+    lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
 
     query = " ".join(context.args or []).strip()
     uid = msg.from_user.id if msg.from_user else None
     chat_id = update.effective_chat.id
     if not query:
-        await msg.reply_text("Использование: /wiki <вопрос или ключевые слова>", disable_web_page_preview=True)
+        await msg.reply_text(_t(lang, "wiki_usage"), disable_web_page_preview=True)
         _log_bot_reply("cmd_wiki_usage", chat_id, uid)
         return
 
@@ -1486,12 +1633,12 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     if not best_doc:
-        await msg.reply_text("Ничего не нашёл в вики.", disable_web_page_preview=True)
+        await msg.reply_text(_t(lang, "wiki_nothing_found"), disable_web_page_preview=True)
         _log_bot_reply("cmd_wiki_not_found", chat_id, uid, query=query[:80])
         return
 
     if best_score < settings.min_score:
-        await msg.reply_text("Нашёл что-то похожее, но уверенность низкая. Попробуй уточнить запрос.", disable_web_page_preview=True)
+        await msg.reply_text(_t(lang, "wiki_low_conf"), disable_web_page_preview=True)
         _log_bot_reply("cmd_wiki_low_score", chat_id, uid, score=best_score, min_score=settings.min_score, url=best_doc.url)
         return
 
@@ -1523,10 +1670,10 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     title = html.escape(best_doc.title)
     reply = (
-        "Нашёл в вики:\n"
+        _t(lang, "found_in_wiki") + "\n"
         f"• <b>{title}</b>\n"
         f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
-        f"<i>совпадение: {best_score}%</i>"
+        f"<i>{html.escape(_t(lang, 'match').format(score=best_score))}</i>"
     )
     await msg.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False)
     _log_bot_reply("cmd_wiki", chat_id, uid, score=best_score, url=url)
@@ -1538,9 +1685,10 @@ async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings = context.application.bot_data["settings"]
     index: WebWikiIndex = context.application.bot_data["wiki_index"]
     msg = update.effective_message
+    lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
 
     text = (
-        "OK. Я на связи.\n"
+        _t(lang, "ping") + "\n"
         f"chat_id: <code>{update.effective_chat.id}</code>\n"
         f"wiki_docs: <code>{index.doc_count}</code>\n"
         f"QUESTIONS_ONLY: <code>{settings.questions_only}</code>\n"
@@ -1557,6 +1705,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     settings = context.application.bot_data["settings"]
     index: WebWikiIndex = context.application.bot_data["wiki_index"]
     msg = update.effective_message
+    lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
 
     chat_id = update.effective_chat.id
     allowed = settings.allowed_chat_id
@@ -1564,7 +1713,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     bot_username = context.application.bot_data.get("bot_username")
 
     text = (
-        "Статус бота:\n"
+        _t(lang, "bot_status") + "\n"
         f"bot: <code>@{html.escape(str(bot_username or ''))}</code>\n"
         f"chat_id: <code>{chat_id}</code>\n"
         f"ALLOWED_CHAT_ID: <code>{'' if allowed is None else allowed}</code>\n"
@@ -1593,13 +1742,14 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_chat or not update.effective_message:
         return
     msg = update.effective_message
+    lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
     chat_id = update.effective_chat.id
     uid = msg.from_user.id if msg.from_user else None
     settings = context.application.bot_data["settings"]
 
     bot_id = context.application.bot_data.get("bot_id")
     if not msg.reply_to_message or not msg.reply_to_message.from_user or bot_id is None or msg.reply_to_message.from_user.id != bot_id:
-        await msg.reply_text("Использование: ответь на сообщение бота командой /error", disable_web_page_preview=True)
+        await msg.reply_text(_t(lang, "error_usage"), disable_web_page_preview=True)
         _log_bot_reply("cmd_error_usage", chat_id, uid)
         return
 
@@ -1607,7 +1757,7 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     store = context.application.bot_data.setdefault("answer_ctx_store", _load_answer_ctx_store())
     item = store.get(_answer_ctx_key(chat_id, bad_mid)) if isinstance(store, dict) else None
     if not isinstance(item, dict) or not item.get("q"):
-        await msg.reply_text("Не понимаю, к какому запросу относится тот ответ. Попробуй повторить вопрос.", disable_web_page_preview=True)
+        await msg.reply_text(_t(lang, "unknown_reply_ctx"), disable_web_page_preview=True)
         _log_bot_reply("cmd_error_no_ctx", chat_id, uid, bad_mid=bad_mid)
         return
 
@@ -1635,17 +1785,17 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     if not best_doc or best_score < settings.min_score or not _response_wiki_url_acceptable(query, best_doc.url):
-        await msg.reply_text("Понял. Попробовал поискать ещё раз — лучше не нашёл. Похоже, ответа нет.", disable_web_page_preview=True)
+        await msg.reply_text(_t(lang, "error_no_better"), disable_web_page_preview=True)
         _log_bot_reply("cmd_error_no_better", chat_id, uid, score=(best_score if best_doc else None), url=(best_doc.url if best_doc else None))
         return
 
     title = html.escape(best_doc.title)
     url = best_doc.url
     sent = await msg.reply_text(
-        "Попробовал ещё раз, вот что нашёл:\n"
+        _t(lang, "error_retry") + "\n"
         f"• <b>{title}</b>\n"
         f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
-        f"<i>совпадение: {best_score}%</i>",
+        f"<i>{html.escape(_t(lang, 'match').format(score=best_score))}</i>",
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=False,
     )
@@ -1671,18 +1821,19 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_chat or not update.effective_message:
         return
     msg = update.effective_message
+    lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
     chat_id = update.effective_chat.id
     uid = msg.from_user.id if msg.from_user else None
 
     bot_id = context.application.bot_data.get("bot_id")
     if not msg.reply_to_message or not msg.reply_to_message.from_user or bot_id is None or msg.reply_to_message.from_user.id != bot_id:
-        await msg.reply_text("Использование: ответь на сообщение бота командой /fix <ссылка>", disable_web_page_preview=True)
+        await msg.reply_text(_t(lang, "fix_usage_reply"), disable_web_page_preview=True)
         _log_bot_reply("cmd_fix_usage", chat_id, uid)
         return
 
     good_url = _extract_url_arg(list(context.args or []))
     if not good_url:
-        await msg.reply_text("Использование: /fix <ссылка>", disable_web_page_preview=True)
+        await msg.reply_text(_t(lang, "fix_usage"), disable_web_page_preview=True)
         _log_bot_reply("cmd_fix_usage", chat_id, uid)
         return
 
@@ -1690,7 +1841,7 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     store = context.application.bot_data.setdefault("answer_ctx_store", _load_answer_ctx_store())
     item = store.get(_answer_ctx_key(chat_id, bad_mid)) if isinstance(store, dict) else None
     if not isinstance(item, dict) or not item.get("q"):
-        await msg.reply_text("Не понимаю, к какому запросу относится тот ответ. Попробуй повторить вопрос.", disable_web_page_preview=True)
+        await msg.reply_text(_t(lang, "unknown_reply_ctx"), disable_web_page_preview=True)
         _log_bot_reply("cmd_fix_no_ctx", chat_id, uid, bad_mid=bad_mid)
         return
 
@@ -1707,7 +1858,7 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         pass
 
     sent = await msg.reply_text(
-        "Ок, вот правильная ссылка:\n"
+        _t(lang, "fix_confirm") + "\n"
         f"<a href=\"{html.escape(good_url)}\">{html.escape(good_url)}</a>",
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=False,
@@ -1804,6 +1955,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not text:
         return
 
+    # Язык ответа: определяем по языку сообщения/пользователя.
+    user_lang_code = msg.from_user.language_code if (msg.from_user and getattr(msg.from_user, "language_code", None)) else None
+    lang = _detect_user_lang(text=text, user_lang_code=user_lang_code)
+    context.application.bot_data["last_user_lang"] = lang
+
     # Базовая диагностика: если включено LOG_DECISIONS — логируем факт получения сообщения.
     if settings.log_decisions:
         uid = msg.from_user.id if msg.from_user else "?"
@@ -1852,9 +2008,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     # Короткий "help" без контекста — просим уточнить, вместо бессмысленного поиска.
     if _is_generic_help_without_context(text):
         await msg.reply_text(
-            "Могу помочь, но нужно чуть больше данных.\n"
-            "Напиши, пожалуйста: модель принтера (например Kobra S1/Kobra 3) и что именно случилось "
-            "(ошибка с кодом, что не работает, что хотите сделать).",
+            _t(lang, "generic_help"),
             disable_web_page_preview=True,
         )
         _log_bot_reply("generic_help_clarify", chat_id, msg.from_user.id if msg.from_user else None)
@@ -1878,8 +2032,9 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             catalog: dict[str, ErrorCodeInfo] = context.application.bot_data.get("error_codes_catalog", {})
             info = catalog.get(code) if isinstance(catalog, dict) else None
             if info:
+                formatted = await _format_error_code_info_ru(context=context, info=info)
                 sent = await msg.reply_text(
-                    _format_error_code_info(info),
+                    formatted,
                     parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True,
                 )
@@ -2020,10 +2175,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     score = best_score
 
     reply = (
-        "Похоже, это уже описано в вики:\n"
+        _t(context.application.bot_data.get("last_user_lang") or "ru", "already_in_wiki") + "\n"
         f"• <b>{title}</b>\n"
         f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
-        f"<i>совпадение: {score}%</i>"
+        f"<i>{html.escape(_t(context.application.bot_data.get('last_user_lang') or 'ru', 'match').format(score=score))}</i>"
     )
 
     sent = await msg.reply_text(
