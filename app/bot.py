@@ -1709,8 +1709,14 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     chat_id = update.effective_chat.id
     message_thread_id = update.effective_message.message_thread_id if update.effective_message else None
-    allowed = settings.allowed_chat_id
-    is_allowed = (allowed is None) or (chat_id == allowed)
+    
+    # Проверка разрешённых чатов и тем для /status (отвечает везде, но показывает статус доступа)
+    allowed_chats = settings.allowed_chat_ids
+    allowed_topics = settings.allowed_topic_ids
+    is_chat_allowed = (allowed_chats is None) or (chat_id in allowed_chats)
+    is_topic_allowed = (allowed_topics is None) or (message_thread_id is not None and message_thread_id in allowed_topics)
+    is_allowed = is_chat_allowed or is_topic_allowed
+    
     bot_username = context.application.bot_data.get("bot_username")
 
     text = (
@@ -1720,9 +1726,17 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
     if message_thread_id is not None:
         text += f"topic_id: <code>{message_thread_id}</code>\n"
+    
+    # Форматируем список разрешённых чатов/тем для отображения
+    allowed_chats_str = ",".join(str(x) for x in sorted(allowed_chats)) if allowed_chats else "(не заданы)"
+    allowed_topics_str = ",".join(str(x) for x in sorted(allowed_topics)) if allowed_topics else "(не заданы)"
+    
     text += (
-        f"ALLOWED_CHAT_ID: <code>{'' if allowed is None else allowed}</code>\n"
-        f"chat_allowed: <code>{str(is_allowed).lower()}</code>\n"
+        f"ALLOWED_CHAT_IDS: <code>{allowed_chats_str}</code>\n"
+        f"ALLOWED_TOPIC_IDS: <code>{allowed_topics_str}</code>\n"
+        f"chat_allowed: <code>{str(is_chat_allowed).lower()}</code>\n"
+        f"topic_allowed: <code>{str(is_topic_allowed).lower()}</code>\n"
+        f"is_allowed: <code>{str(is_allowed).lower()}</code>\n"
         f"wiki_docs: <code>{index.doc_count}</code>\n"
         f"QUESTIONS_ONLY: <code>{str(settings.questions_only).lower()}</code>\n"
         f"REQUIRE_TRIGGER: <code>{str(settings.require_trigger).lower()}</code>\n"
@@ -1954,11 +1968,28 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
 
     chat_id = update.effective_chat.id
-    if settings.allowed_chat_id is not None and chat_id != settings.allowed_chat_id:
-        if settings.log_decisions:
-            logging.info("skip chat=%s reason=not_allowed_chat", chat_id)
-        return
-
+    message_thread_id = update.effective_message.message_thread_id if update.effective_message else None
+    
+    # Проверка разрешённых чатов и тем
+    # Бот отвечает только если чат или тема в списке разрешённых (или списки не заданы)
+    allowed_chats = settings.allowed_chat_ids
+    allowed_topics = settings.allowed_topic_ids
+    
+    is_chat_allowed = (allowed_chats is None) or (chat_id in allowed_chats)
+    is_topic_allowed = (allowed_topics is None) or (message_thread_id is not None and message_thread_id in allowed_topics)
+    
+    # Если списки заданы — проверяем, что хотя бы одно условие выполнено
+    # Если ни один список не задан — бот работает везде (старое поведение)
+    if allowed_chats is not None or allowed_topics is not None:
+        if not (is_chat_allowed or is_topic_allowed):
+            if settings.log_decisions:
+                logging.info(
+                    "skip chat=%s topic=%s reason=not_in_allowed_lists",
+                    chat_id,
+                    message_thread_id
+                )
+            return
+    
     msg = update.effective_message
     if not msg:
         return
