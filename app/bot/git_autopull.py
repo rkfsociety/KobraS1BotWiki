@@ -24,6 +24,8 @@ from pathlib import Path
 
 from telegram.ext import Application
 
+from app.bot.ops_notify import notify_ops
+
 
 def project_repo_root() -> Path:
     """Корень репозитория (родитель каталога app/)."""
@@ -109,9 +111,11 @@ async def schedule_restart_after_pull(
     """После успешного pull: subprocess (GIT_RESTART_COMMAND) или os.execv при следующем выходе из polling."""
     repo = project_repo_root()
     cmd = (restart_command or "").strip()
+    mode_desc = "exec python -m app.bot"
     if cmd and sys.platform != "win32":
         git_pull_restart_state["action"] = "subprocess"
         git_pull_restart_state["cmd"] = cmd
+        mode_desc = f"subprocess: sleep 4 && {cmd[:800]}"
         try:
             subprocess.Popen(
                 ["/bin/bash", "-lc", f"sleep 4 && {cmd}"],
@@ -124,11 +128,18 @@ async def schedule_restart_after_pull(
         except Exception as e:
             logging.error("%s: не удалось запустить GIT_RESTART_COMMAND: %s", log_tag, e)
             git_pull_restart_state["action"] = "none"
+            await notify_ops(
+                application,
+                f"Перезапуск ({log_tag}): не удалось запустить GIT_RESTART_COMMAND\n{type(e).__name__}: {e}",
+            )
             return
     else:
         if cmd and sys.platform == "win32":
             logging.warning("%s: GIT_RESTART_COMMAND на Windows не поддерживается, используется os.execv", log_tag)
         git_pull_restart_state["action"] = "exec"
+
+    await notify_ops(application, f"Перезапуск ({log_tag})\n{mode_desc}")
+
     try:
         await application.stop()
     except Exception as e:

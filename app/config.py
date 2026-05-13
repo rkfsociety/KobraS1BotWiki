@@ -7,6 +7,7 @@ from pathlib import Path
 
 from app.default_developers import DEFAULT_DEVELOPER_USER_IDS
 from app.default_ephemeral_exempt import DEFAULT_EPHEMERAL_EXEMPT_CHAT_IDS
+from app.default_ops_chat import DEFAULT_OPS_NOTIFY_CHAT_ID
 
 
 def _get_bool(name: str, default: bool) -> bool:
@@ -88,6 +89,8 @@ class Settings:
     developer_user_ids: frozenset[int]
     #: Не автоудалять пару «команда+ответ» в этих чатах (личка не удаляется всегда; см. EPHEMERAL_EXEMPT_CHAT_IDS)
     ephemeral_exempt_chat_ids: frozenset[int]
+    #: Служебный чат: ошибки, перезапуски, старт бота (0/off в .env — выкл.; см. OPS_NOTIFY_CHAT_ID)
+    ops_notify_chat_id: int | None
 
 
 def load_settings() -> Settings:
@@ -167,6 +170,18 @@ def load_settings() -> Settings:
             ephemeral_extra = set()
     ephemeral_exempt_chat_ids = frozenset(DEFAULT_EPHEMERAL_EXEMPT_CHAT_IDS | ephemeral_extra)
 
+    raw_ops = (os.getenv("OPS_NOTIFY_CHAT_ID") or "").strip()
+    if raw_ops.lower() in ("0", "off", "false", "no", "disable", "-"):
+        ops_notify_chat_id = None
+    elif raw_ops:
+        try:
+            ops_notify_chat_id = int(raw_ops)
+        except ValueError:
+            logging.warning("Некорректный OPS_NOTIFY_CHAT_ID, используем дефолт %s", DEFAULT_OPS_NOTIFY_CHAT_ID)
+            ops_notify_chat_id = DEFAULT_OPS_NOTIFY_CHAT_ID
+    else:
+        ops_notify_chat_id = DEFAULT_OPS_NOTIFY_CHAT_ID
+
     # Загрузка списка разрешённых chat_id и topic_id из переменных окружения
     # ALLOWED_CHAT_IDS: список ID чатов через запятую (например, "123456789,-987654321")
     # ALLOWED_TOPIC_IDS: список ID тем через запятую (например, "10,20,30")
@@ -231,4 +246,5 @@ def load_settings() -> Settings:
         manual_qa_git_push=manual_qa_git_push,
         developer_user_ids=developer_user_ids,
         ephemeral_exempt_chat_ids=ephemeral_exempt_chat_ids,
+        ops_notify_chat_id=ops_notify_chat_id,
     )

@@ -7,6 +7,7 @@ import html
 import logging
 import re
 import time
+import traceback
 from collections import deque
 
 from telegram import Update
@@ -38,6 +39,7 @@ from app.bot.manual_qa import (
     find_manual_qa_answer,
     try_git_push_manual_qa,
 )
+from app.bot.ops_notify import notify_ops
 from app.bot.i18n import _detect_user_lang, _lang_from_message, _t
 from app.bot.reply_logging import _log_bot_reply
 from app.bot.stores import (
@@ -998,6 +1000,7 @@ async def cmd_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 outgoing_text=body,
             )
             _log_bot_reply("cmd_update_exc", chat_id, uid)
+            await notify_ops(context.application, f"/update: исключение при git\n{type(e).__name__}: {e}")
             return
         if not updated:
             if gmsg == "уже актуально":
@@ -1013,6 +1016,8 @@ async def cmd_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 outgoing_text=body,
             )
             _log_bot_reply("cmd_update_noop", chat_id, uid, detail=(gmsg or "")[:160])
+            if gmsg != "уже актуально":
+                await notify_ops(context.application, f"/update: не обновлено\n{gmsg}")
             return
         ok_body = _t(lang, "update_ok").format(detail=html.escape(gmsg))
         sent = await msg.reply_text(ok_body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
@@ -1034,6 +1039,24 @@ async def cmd_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logging.exception("Unhandled error while processing update: %s", context.error)
+    try:
+        app = context.application
+        lines = ["Ошибка в обработчике (unhandled)"]
+        if isinstance(update, Update):
+            try:
+                if update.effective_chat:
+                    lines.append(f"chat_id={update.effective_chat.id}")
+                if update.effective_user:
+                    lines.append(f"user_id={update.effective_user.id}")
+            except Exception:
+                pass
+        err = context.error
+        if err is not None:
+            lines.append(f"{type(err).__name__}: {err}")
+            lines.append(traceback.format_exc())
+        await notify_ops(app, "\n".join(lines))
+    except Exception as e:
+        logging.warning("ops_notify from on_error: %s", e)
 
 
 async def on_any_update(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:

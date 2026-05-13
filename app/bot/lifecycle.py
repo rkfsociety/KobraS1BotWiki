@@ -40,6 +40,7 @@ from app.bot.handlers import (
     on_message,
 )
 from app.bot.manual_qa import load_manual_qa_store
+from app.bot.ops_notify import notify_ops
 from app.bot.stores import _load_clarify_store, _load_fix_store
 from app.config import Settings, load_settings
 from app.error_codes_catalog import ensure_error_codes_catalog, merge_manual_overrides
@@ -180,6 +181,15 @@ def main() -> None:
             logging.info("Fix-store загружен: %d", len(application.bot_data["fix_store"]))
         except Exception as e:
             logging.warning("Не удалось загрузить fix-store: %s", e)
+        try:
+            wix = application.bot_data.get("wiki_index")
+            nd = wix.doc_count if wix is not None else "?"
+            await notify_ops(
+                application,
+                f"Старт бота\n@{me.username}\nwiki_docs={nd}\npid={os.getpid()}",
+            )
+        except Exception as e:
+            logging.warning("ops_notify при старте: %s", e)
 
     async def _index_step(context) -> None:
         _ = context
@@ -305,6 +315,7 @@ def main() -> None:
                 )
             except Exception as e:
                 logging.warning("git autopull: %s", e)
+                await notify_ops(application, f"git autopull: исключение при git\n{type(e).__name__}: {e}")
                 return
             if not updated:
                 if st.log_decisions and msg and msg != "уже актуально":
