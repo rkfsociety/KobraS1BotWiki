@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import subprocess
 import sys
 import time
 from logging.handlers import RotatingFileHandler
@@ -22,19 +21,24 @@ from telegram.ext import (
 )
 
 from app.bot.error_display import _load_manual_error_codes
-from app.bot.git_autopull import git_sync_from_remote, project_repo_root
+from app.bot.git_autopull import git_sync_from_remote, project_repo_root, schedule_restart_after_pull
 from app.bot.handlers import (
     cmd_error,
     cmd_fix,
     cmd_help,
     cmd_id,
     cmd_ping,
+    cmd_qaadd,
+    cmd_qadel,
+    cmd_qalist,
     cmd_status,
+    cmd_update,
     cmd_wiki,
     on_any_update,
     on_error,
     on_message,
 )
+from app.bot.manual_qa import load_manual_qa_store
 from app.bot.stores import _load_clarify_store, _load_fix_store
 from app.config import Settings, load_settings
 from app.error_codes_catalog import ensure_error_codes_catalog, merge_manual_overrides
@@ -106,6 +110,7 @@ def main() -> None:
     app.bot_data["wiki_indexer"] = indexer
     git_pull_restart_state: dict[str, str] = {"action": "none", "cmd": ""}
     app.bot_data["git_pull_restart_state"] = git_pull_restart_state
+    app.bot_data["git_update_lock"] = asyncio.Lock()
     # восстанавливаем ожидаемые уточнения после перезапуска
     try:
         store = _load_clarify_store()
@@ -119,6 +124,11 @@ def main() -> None:
         app.bot_data["clarify_pending"] = pending2
     except Exception:
         app.bot_data["clarify_pending"] = {}
+    try:
+        app.bot_data["manual_qa_entries"] = load_manual_qa_store()
+    except Exception:
+        app.bot_data["manual_qa_entries"] = []
+    logging.info("Manual QA: %d записей", len(app.bot_data["manual_qa_entries"]))
 
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("id", cmd_id))
@@ -127,6 +137,10 @@ def main() -> None:
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("error", cmd_error))
     app.add_handler(CommandHandler("fix", cmd_fix))
+    app.add_handler(CommandHandler("qaadd", cmd_qaadd))
+    app.add_handler(CommandHandler("qalist", cmd_qalist))
+    app.add_handler(CommandHandler("qadel", cmd_qadel))
+    app.add_handler(CommandHandler("update", cmd_update))
     # Диагностика: первым делом логируем любой update
     app.add_handler(TypeHandler(Update, on_any_update), group=-1)
     # filters.UpdateType.* здесь не используем, чтобы не "отрезать" обычные сообщения.
@@ -274,7 +288,7 @@ def main() -> None:
         st: Settings = application.bot_data["settings"]
         if not st.git_autopull_enabled:
             return
-        lock = application.bot_data.get("git_autopull_lock")
+        lock = application.bot_data.get("git_update_lock")
         if lock is None:
             return
         async with lock:
@@ -295,35 +309,14 @@ def main() -> None:
                     logging.debug("git autopull: %s", msg)
                 return
             logging.info("git autopull: %s — перезапуск", msg)
-            state = application.bot_data["git_pull_restart_state"]
-            cmd = (st.git_restart_command or "").strip()
-            if cmd and sys.platform != "win32":
-                state["action"] = "subprocess"
-                state["cmd"] = cmd
-                try:
-                    subprocess.Popen(
-                        ["/bin/bash", "-lc", f"sleep 4 && {cmd}"],
-                        cwd=str(repo),
-                        start_new_session=True,
-                        stdin=subprocess.DEVNULL,
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                    )
-                except Exception as e:
-                    logging.error("git autopull: не удалось запустить GIT_RESTART_COMMAND: %s", e)
-                    state["action"] = "none"
-                    return
-            else:
-                if cmd and sys.platform == "win32":
-                    logging.warning("GIT_RESTART_COMMAND на Windows не поддерживается, используется os.execv")
-                state["action"] = "exec"
-            try:
-                await application.stop()
-            except Exception as e:
-                logging.warning("git autopull: application.stop(): %s", e)
+            await schedule_restart_after_pull(
+                application=application,
+                git_pull_restart_state=application.bot_data["git_pull_restart_state"],
+                restart_command=st.git_restart_command,
+                log_tag="git autopull",
+            )
 
     if settings.git_autopull_enabled:
-        app.bot_data["git_autopull_lock"] = asyncio.Lock()
         app.bot_data["git_autopull_job"] = app.job_queue.run_repeating(
             _git_autopull_job,
             interval=settings.git_autopull_interval_seconds,

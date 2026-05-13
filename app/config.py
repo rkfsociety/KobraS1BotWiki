@@ -70,7 +70,7 @@ class Settings:
     clarify_correction_ttl_seconds: int
     #: 0 = не ограничивать. Linux/macOS: RLIMIT_AS (виртуальная память процесса), см. app/resource_limits.py
     memory_limit_mb: int
-    #: Периодически git fetch + синхронизация с remote и перезапуск (см. GIT_AUTOPULL_*)
+    #: Фоновый git fetch (по умолчанию выкл.; ручное обновление — команда /update)
     git_autopull_enabled: bool
     #: True: git reset --hard на remote/ветку (приоритет файлов с GitHub). False: только ff-only merge
     git_autopull_hard_reset: bool
@@ -79,6 +79,8 @@ class Settings:
     git_autopull_branch: str
     #: Shell-команда перезапуска после pull (Linux). Пусто = os.execv на тот же -m app.bot
     git_restart_command: str | None
+    #: После /qaadd и /qadel — git commit + push ``data/manual_qa.json`` (по умолчанию вкл.; выкл.: MANUAL_QA_GIT_PUSH=0)
+    manual_qa_git_push: bool
 
 
 def load_settings() -> Settings:
@@ -124,7 +126,8 @@ def load_settings() -> Settings:
     clarify_correction_ttl_seconds = _get_int("CLARIFY_CORRECTION_TTL_SECONDS", 600)
     memory_limit_mb = _get_int("MEMORY_LIMIT_MB", 0)
 
-    git_autopull_enabled = _get_bool("GIT_AUTOPULL_ENABLED", True)
+    # GIT_AUTOPULL_ENABLED=1 — фоновая проверка (по умолчанию выкл.); обновление вручную: /update
+    git_autopull_enabled = _get_bool("GIT_AUTOPULL_ENABLED", False)
     git_autopull_hard_reset = _get_bool("GIT_AUTOPULL_HARD_RESET", True)
     # Публичный GitHub + remote https:// — fetch без токена; приватный репо — настройте SSH/credentials
     git_autopull_interval_seconds = max(60, _get_int("GIT_AUTOPULL_INTERVAL_SECONDS", 300))
@@ -132,6 +135,8 @@ def load_settings() -> Settings:
     git_autopull_branch = (os.getenv("GIT_AUTOPULL_BRANCH") or "master").strip() or "master"
     git_restart_raw = (os.getenv("GIT_RESTART_COMMAND") or "").strip()
     git_restart_command = git_restart_raw if git_restart_raw else None
+
+    manual_qa_git_push = _get_bool("MANUAL_QA_GIT_PUSH", True)
 
     # Загрузка списка разрешённых chat_id и topic_id из переменных окружения
     # ALLOWED_CHAT_IDS: список ID чатов через запятую (например, "123456789,-987654321")
@@ -194,4 +199,5 @@ def load_settings() -> Settings:
         git_autopull_remote=git_autopull_remote,
         git_autopull_branch=git_autopull_branch,
         git_restart_command=git_restart_command,
+        manual_qa_git_push=manual_qa_git_push,
     )

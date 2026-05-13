@@ -1,7 +1,10 @@
-"""Автообновление кода из git и перезапуск процесса бота.
+"""Обновление кода из git и перезапуск процесса бота.
+
+- Ручная команда **/update** (только админы): ``git fetch`` + синхронизация с remote и перезапуск.
+- Опциональный фоновый режим: ``GIT_AUTOPULL_ENABLED=1`` (по умолчанию выключен).
 
 Переменные окружения (см. app/config.py):
-- GIT_AUTOPULL_ENABLED — по умолчанию включено; выключить: 0 / false
+- GIT_AUTOPULL_ENABLED — фоновая проверка (по умолчанию выкл.); включить: 1 / true
 - GIT_AUTOPULL_HARD_RESET — по умолчанию 1: после fetch выполняется ``git reset --hard`` на
   ветку remote (рабочая копия совпадает с GitHub, локальные правки в отслеживаемых файлах сбрасываются).
   Выключить (0): только ``git merge --ff-only`` — без сброса локальных изменений при том же коммите.
@@ -16,7 +19,10 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import sys
 from pathlib import Path
+
+from telegram.ext import Application
 
 
 def project_repo_root() -> Path:
@@ -79,7 +85,7 @@ def git_sync_from_remote(
         if rs.returncode != 0:
             return False, f"git reset --hard: {rs.stderr.strip() or rs.stdout.strip()}"
         short = remote_head[:8]
-        logging.info("git autopull: reset --hard -> %s", short)
+        logging.info("git: reset --hard -> %s", short)
         return True, f"reset --hard -> {short}"
 
     if before == remote_head:
@@ -89,6 +95,41 @@ def git_sync_from_remote(
     if mg.returncode != 0:
         return False, f"git merge --ff-only: {mg.stderr.strip() or mg.stdout.strip()}"
 
-    short_before, short_after = before[:8], remote_head[:8]
-    logging.info("git autopull: fast-forward %s -> %s", short_before, short_after)
+    logging.info("git: %s -> %s", short_before, short_after)
     return True, f"fast-forward {short_before} -> {short_after}"
+
+
+async def schedule_restart_after_pull(
+    *,
+    application: Application,
+    git_pull_restart_state: dict[str, str],
+    restart_command: str | None,
+    log_tag: str = "git",
+) -> None:
+    """После успешного pull: subprocess (GIT_RESTART_COMMAND) или os.execv при следующем выходе из polling."""
+    repo = project_repo_root()
+    cmd = (restart_command or "").strip()
+    if cmd and sys.platform != "win32":
+        git_pull_restart_state["action"] = "subprocess"
+        git_pull_restart_state["cmd"] = cmd
+        try:
+            subprocess.Popen(
+                ["/bin/bash", "-lc", f"sleep 4 && {cmd}"],
+                cwd=str(repo),
+                start_new_session=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception as e:
+            logging.error("%s: не удалось запустить GIT_RESTART_COMMAND: %s", log_tag, e)
+            git_pull_restart_state["action"] = "none"
+            return
+    else:
+        if cmd and sys.platform == "win32":
+            logging.warning("%s: GIT_RESTART_COMMAND на Windows не поддерживается, используется os.execv", log_tag)
+        git_pull_restart_state["action"] = "exec"
+    try:
+        await application.stop()
+    except Exception as e:
+        logging.warning("%s: application.stop(): %s", log_tag, e)

@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import html
 import logging
+import re
 import time
 from collections import deque
 
@@ -22,9 +24,15 @@ from app.bot.clarify import (
 )
 from app.bot.design_replies import _maybe_reply_printer_design_vs_question
 from app.bot.ephemeral import schedule_delete_slash_command_and_reply
+from app.bot.git_autopull import git_sync_from_remote, project_repo_root, schedule_restart_after_pull
 from app.bot.error_codes_wiki import _error_code_candidates, _pick_error_code_doc
 from app.bot.error_display import _format_error_code_info_ru
-from app.bot.help_text import format_help_message
+from app.bot.manual_qa import (
+    add_manual_qa_entry,
+    delete_manual_qa_by_index,
+    find_manual_qa_answer,
+    try_git_push_manual_qa,
+)
 from app.bot.i18n import _detect_user_lang, _lang_from_message, _t
 from app.bot.reply_logging import _log_bot_reply
 from app.bot.stores import (
@@ -92,6 +100,83 @@ def _is_triggered_message(update: Update, *, bot_username: str | None, bot_id: i
     return False
 
 
+def _manual_qa_answer_to_html(answer: str) -> str:
+    return "<br>".join(html.escape(line) for line in (answer or "").splitlines())
+
+
+async def _try_reply_manual_qa(
+    update: Update,
+    msg,
+    *,
+    context: ContextTypes.DEFAULT_TYPE,
+    query_text: str,
+    chat_id: int,
+    uid: int | None,
+    lang: str,
+    settings,
+    log_kind: str,
+    rl: dict,
+    apply_rate_limit: bool,
+    ephemeral_slash_user_msg,
+) -> bool:
+    entries = context.application.bot_data.get("manual_qa_entries")
+    if not isinstance(entries, list):
+        return False
+    hit = find_manual_qa_answer(entries, query_text)
+    if not hit:
+        return False
+    ans, _ttl = hit
+    now = time.time()
+    spam_exempt = await user_exempt_from_wiki_reply_spam_limits(update, context)
+    syn_url = f"manual:{hashlib.md5(ans.encode('utf-8', errors='ignore')).hexdigest()}"
+    if apply_rate_limit:
+        last_reply_ts = rl["last_reply_ts_by_chat"].get(chat_id, 0.0)
+        if not spam_exempt and now - last_reply_ts < settings.cooldown_seconds:
+            if settings.log_decisions:
+                logging.info("skip chat=%s reason=cooldown manual_qa", chat_id)
+            return True
+        q: deque[float] = rl["reply_ts_by_chat"].setdefault(chat_id, deque())
+        cutoff = now - 60.0
+        while q and q[0] < cutoff:
+            q.popleft()
+        if not spam_exempt and len(q) >= settings.max_replies_per_minute:
+            if settings.log_decisions:
+                logging.info("skip chat=%s reason=rate_limit manual_qa", chat_id)
+            return True
+        last_url = rl["last_url_ts_by_chat"].setdefault(chat_id, {})
+        last_url_ts = float(last_url.get(syn_url, 0.0))
+        if not spam_exempt and now - last_url_ts < settings.duplicate_window_seconds:
+            if settings.log_decisions:
+                logging.info("skip chat=%s reason=duplicate manual_qa", chat_id)
+            return True
+
+    body = f"{_t(lang, 'manual_qa_header')}\n\n{_manual_qa_answer_to_html(ans)}"
+    sent = await msg.reply_text(body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    _record_bot_answer_context(
+        context=context,
+        chat_id=chat_id,
+        bot_message_id=sent.message_id,
+        query=query_text,
+        url=None,
+    )
+    _log_bot_reply(log_kind, chat_id, uid)
+    if apply_rate_limit:
+        q = rl["reply_ts_by_chat"].setdefault(chat_id, deque())
+        last_url = rl["last_url_ts_by_chat"].setdefault(chat_id, {})
+        rl["last_reply_ts_by_chat"][chat_id] = now
+        q.append(now)
+        last_url[syn_url] = now
+    if ephemeral_slash_user_msg is not None:
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=ephemeral_slash_user_msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=body,
+        )
+    return True
+
+
 async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_message or not update.effective_chat:
         return
@@ -150,7 +235,8 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.effective_message
     lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
 
-    query = " ".join(context.args or []).strip()
+    raw_cmd = (msg.text or msg.caption or "").replace("\r\n", "\n")
+    query = re.sub(r"^/wiki(?:@[\w]+)?\s*", "", raw_cmd, count=1, flags=re.I).strip()
     uid = msg.from_user.id if msg.from_user else None
     chat_id = update.effective_chat.id
     if not query:
@@ -164,6 +250,30 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             outgoing_text=ut,
         )
         _log_bot_reply("cmd_wiki_usage", chat_id, uid)
+        return
+
+    rl = context.application.bot_data.setdefault(
+        "rate_limit",
+        {
+            "last_reply_ts_by_chat": {},
+            "reply_ts_by_chat": {},
+            "last_url_ts_by_chat": {},
+        },
+    )
+    if await _try_reply_manual_qa(
+        update,
+        msg,
+        context=context,
+        query_text=query,
+        chat_id=chat_id,
+        uid=uid,
+        lang=lang,
+        settings=settings,
+        log_kind="manual_qa_cmd_wiki",
+        rl=rl,
+        apply_rate_limit=False,
+        ephemeral_slash_user_msg=msg,
+    ):
         return
 
     sent_pd = await _maybe_reply_printer_design_vs_question(
@@ -596,6 +706,273 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _record_bot_answer_context(context=context, chat_id=chat_id, bot_message_id=sent.message_id, query=query, url=good_url)
     _log_bot_reply("cmd_fix", chat_id, uid, url=good_url)
 
+
+async def cmd_qaadd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.effective_message or not update.effective_chat:
+        return
+    if await _deny_unless_admin_command_access(update, context, command="qaadd"):
+        return
+    msg = update.effective_message
+    settings = context.application.bot_data["settings"]
+    lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
+    uid = msg.from_user.id if msg.from_user else None
+    chat_id = update.effective_chat.id
+    norm = (msg.text or msg.caption or "").replace("\r\n", "\n")
+    body = re.sub(r"^/qaadd(?:@[\w]+)?\s*", "", norm, count=1, flags=re.I).strip()
+    parts = body.split("\n---\n", 1)
+    if len(parts) < 2:
+        parts = re.split(r"\s*---\s*", body, maxsplit=1)
+    if len(parts) < 2:
+        usage = _t(lang, "qaadd_usage")
+        sent = await msg.reply_text(usage, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=usage,
+        )
+        _log_bot_reply("cmd_qaadd_usage", chat_id, uid)
+        return
+    q_block, a_block = parts[0].strip(), parts[1].strip()
+    key_parts = [p.strip() for p in q_block.split("|||") if p.strip()]
+    if not key_parts or not a_block:
+        usage = _t(lang, "qaadd_usage")
+        sent = await msg.reply_text(usage, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=usage,
+        )
+        _log_bot_reply("cmd_qaadd_usage", chat_id, uid)
+        return
+    entries = context.application.bot_data.setdefault("manual_qa_entries", [])
+    if not isinstance(entries, list):
+        entries = []
+        context.application.bot_data["manual_qa_entries"] = entries
+    ok, detail = add_manual_qa_entry(
+        entries=entries,
+        raw_keys=key_parts,
+        answer=a_block,
+        title=key_parts[0],
+    )
+    if ok:
+        detail_full = detail
+        if settings.manual_qa_git_push:
+            pok, pmsg = await asyncio.to_thread(try_git_push_manual_qa)
+            detail_full = f"{detail}; GitHub: {pmsg}"
+            if not pok:
+                logging.warning("manual_qa git push: %s", pmsg)
+        ok_body = _t(lang, "qaadd_ok").format(detail=html.escape(detail_full))
+        sent = await msg.reply_text(ok_body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=ok_body,
+        )
+        _log_bot_reply("cmd_qaadd", chat_id, uid, keys=len(key_parts))
+    else:
+        fail = _t(lang, "qaadd_fail").format(reason=html.escape(detail))
+        sent = await msg.reply_text(fail, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=fail,
+        )
+        _log_bot_reply("cmd_qaadd_fail", chat_id, uid, reason=detail[:120])
+
+
+async def cmd_qalist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.effective_message or not update.effective_chat:
+        return
+    if await _deny_unless_admin_command_access(update, context, command="qalist"):
+        return
+    msg = update.effective_message
+    settings = context.application.bot_data["settings"]
+    lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
+    uid = msg.from_user.id if msg.from_user else None
+    chat_id = update.effective_chat.id
+    entries = context.application.bot_data.get("manual_qa_entries")
+    if not isinstance(entries, list) or not entries:
+        sent = await msg.reply_text(_t(lang, "qalist_empty"), disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=_t(lang, "qalist_empty"),
+        )
+        _log_bot_reply("cmd_qalist_empty", chat_id, uid)
+        return
+    lines = [_t(lang, "qalist_header")]
+    for i, e in enumerate(entries[:40], start=1):
+        if not isinstance(e, dict):
+            continue
+        ks = e.get("keys")
+        if not isinstance(ks, list):
+            continue
+        keys_h = html.escape(", ".join(str(k) for k in ks[:8])[:220])
+        tl = html.escape(str(e.get("title", ""))[:100])
+        lines.append(f"{i}. <b>{tl}</b> — <code>{keys_h}</code>")
+    body = "\n".join(lines)
+    sent = await msg.reply_text(body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    schedule_delete_slash_command_and_reply(
+        context=context,
+        user_msg=msg,
+        bot_msg=sent,
+        wiki_base_url=settings.wiki_base_url,
+        outgoing_text=body,
+    )
+    _log_bot_reply("cmd_qalist", chat_id, uid, n=len(entries))
+
+
+async def cmd_qadel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.effective_message or not update.effective_chat:
+        return
+    if await _deny_unless_admin_command_access(update, context, command="qadel"):
+        return
+    msg = update.effective_message
+    settings = context.application.bot_data["settings"]
+    lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
+    uid = msg.from_user.id if msg.from_user else None
+    chat_id = update.effective_chat.id
+    args = list(context.args or [])
+    if not args:
+        usage = _t(lang, "qadel_usage")
+        sent = await msg.reply_text(usage, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=usage,
+        )
+        _log_bot_reply("cmd_qadel_usage", chat_id, uid)
+        return
+    try:
+        n = int(str(args[0]).strip())
+    except ValueError:
+        usage = _t(lang, "qadel_usage")
+        sent = await msg.reply_text(usage, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=usage,
+        )
+        _log_bot_reply("cmd_qadel_usage", chat_id, uid)
+        return
+    entries = context.application.bot_data.setdefault("manual_qa_entries", [])
+    if not isinstance(entries, list):
+        entries = []
+        context.application.bot_data["manual_qa_entries"] = entries
+    ok, reason = delete_manual_qa_by_index(entries=entries, one_based=n)
+    if ok:
+        detail_extra = ""
+        if settings.manual_qa_git_push:
+            pok, pmsg = await asyncio.to_thread(try_git_push_manual_qa)
+            detail_extra = f"; GitHub: {pmsg}"
+            if not pok:
+                logging.warning("manual_qa git push: %s", pmsg)
+        body = _t(lang, "qadel_ok").format(n=n) + html.escape(detail_extra)
+        sent = await msg.reply_text(body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=body,
+        )
+        _log_bot_reply("cmd_qadel", chat_id, uid, n=n)
+    else:
+        body = _t(lang, "qadel_fail").format(reason=html.escape(reason))
+        sent = await msg.reply_text(body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=body,
+        )
+        _log_bot_reply("cmd_qadel_fail", chat_id, uid, n=n)
+
+
+async def cmd_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.effective_message or not update.effective_chat:
+        return
+    if await _deny_unless_admin_command_access(update, context, command="update"):
+        return
+    msg = update.effective_message
+    settings = context.application.bot_data["settings"]
+    lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
+    uid = msg.from_user.id if msg.from_user else None
+    chat_id = update.effective_chat.id
+    lock = context.application.bot_data.get("git_update_lock")
+    if lock is None:
+        lock = asyncio.Lock()
+        context.application.bot_data["git_update_lock"] = lock
+    async with lock:
+        repo = project_repo_root()
+        try:
+            updated, gmsg = await asyncio.to_thread(
+                git_sync_from_remote,
+                repo=repo,
+                remote=settings.git_autopull_remote,
+                branch=settings.git_autopull_branch,
+                hard_reset=settings.git_autopull_hard_reset,
+            )
+        except Exception as e:
+            body = _t(lang, "update_fail").format(reason=html.escape(str(e)))
+            sent = await msg.reply_text(body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+            schedule_delete_slash_command_and_reply(
+                context=context,
+                user_msg=msg,
+                bot_msg=sent,
+                wiki_base_url=settings.wiki_base_url,
+                outgoing_text=body,
+            )
+            _log_bot_reply("cmd_update_exc", chat_id, uid)
+            return
+        if not updated:
+            if gmsg == "уже актуально":
+                body = _t(lang, "update_uptodate")
+            else:
+                body = _t(lang, "update_fail").format(reason=html.escape(gmsg))
+            sent = await msg.reply_text(body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+            schedule_delete_slash_command_and_reply(
+                context=context,
+                user_msg=msg,
+                bot_msg=sent,
+                wiki_base_url=settings.wiki_base_url,
+                outgoing_text=body,
+            )
+            _log_bot_reply("cmd_update_noop", chat_id, uid, detail=(gmsg or "")[:160])
+            return
+        ok_body = _t(lang, "update_ok").format(detail=html.escape(gmsg))
+        sent = await msg.reply_text(ok_body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=ok_body,
+        )
+        _log_bot_reply("cmd_update_pull", chat_id, uid, detail=gmsg)
+        await schedule_restart_after_pull(
+            application=context.application,
+            git_pull_restart_state=context.application.bot_data["git_pull_restart_state"],
+            restart_command=settings.git_restart_command,
+            log_tag="cmd_update",
+        )
+
+
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logging.exception("Unhandled error while processing update: %s", context.error)
 
@@ -778,6 +1155,22 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         chat_id=chat_id,
         settings=settings,
         user_id=msg.from_user.id if msg.from_user else None,
+    ):
+        return
+
+    if await _try_reply_manual_qa(
+        update,
+        msg,
+        context=context,
+        query_text=text,
+        chat_id=chat_id,
+        uid=msg.from_user.id if msg.from_user else None,
+        lang=lang,
+        settings=settings,
+        log_kind="manual_qa_message",
+        rl=rl,
+        apply_rate_limit=True,
+        ephemeral_slash_user_msg=None,
     ):
         return
 
