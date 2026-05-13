@@ -35,6 +35,7 @@ from app.bot.handlers import (
 from app.bot.stores import _load_clarify_store, _load_fix_store
 from app.config import load_settings
 from app.error_codes_catalog import ensure_error_codes_catalog, merge_manual_overrides
+from app.resource_limits import apply_posix_virtual_memory_limit_mb
 from app.web_wiki_index import WebWikiIndex, WebWikiIndexer
 
 def main() -> None:
@@ -63,6 +64,9 @@ def main() -> None:
     load_dotenv(override=False)
 
     settings = load_settings()
+
+    # До загрузки тяжёлого кэша индекса — лимит виртуальной памяти (POSIX), см. MEMORY_LIMIT_MB.
+    apply_posix_virtual_memory_limit_mb(settings.memory_limit_mb)
 
     # Простейший лок-файл, чтобы не запустить 2 экземпляра polling одновременно.
     # Храним рядом с кэшем, чтобы путь был "рядом с ботом", а не где-то в системных папках.

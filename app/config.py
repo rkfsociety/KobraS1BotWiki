@@ -68,6 +68,8 @@ class Settings:
     clarify_correction_max: int
     #: Окно (сек), в течение которого принимаются такие поправки (обновляется при каждой попытке)
     clarify_correction_ttl_seconds: int
+    #: 0 = не ограничивать. Linux/macOS: RLIMIT_AS (виртуальная память процесса), см. app/resource_limits.py
+    memory_limit_mb: int
 
 
 def load_settings() -> Settings:
@@ -111,6 +113,7 @@ def load_settings() -> Settings:
     clarify_cooldown_seconds = _get_int("CLARIFY_COOLDOWN_SECONDS", 300)
     clarify_correction_max = _get_int("CLARIFY_CORRECTION_MAX", 2)
     clarify_correction_ttl_seconds = _get_int("CLARIFY_CORRECTION_TTL_SECONDS", 600)
+    memory_limit_mb = _get_int("MEMORY_LIMIT_MB", 0)
 
     # Загрузка списка разрешённых chat_id и topic_id из переменных окружения
     # ALLOWED_CHAT_IDS: список ID чатов через запятую (например, "123456789,-987654321")
@@ -166,4 +169,5 @@ def load_settings() -> Settings:
         clarify_cooldown_seconds=clarify_cooldown_seconds,
         clarify_correction_max=clarify_correction_max,
         clarify_correction_ttl_seconds=clarify_correction_ttl_seconds,
+        memory_limit_mb=memory_limit_mb,
     )
