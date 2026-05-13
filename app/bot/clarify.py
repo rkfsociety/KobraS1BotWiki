@@ -5,11 +5,12 @@ import html
 import logging
 import time
 
-from telegram import Update
+from telegram import Message, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from app.bot.design_replies import _maybe_reply_printer_design_vs_question
+from app.bot.ephemeral import schedule_delete_slash_command_and_reply
 from app.bot.error_codes_wiki import (
     _error_code_variant_suffix,
     _pick_error_code_doc,
@@ -108,9 +109,9 @@ async def _reply_no_guide_for_model(
     user_id: int | None,
     best_url: str,
     hints: frozenset[str],
-) -> None:
+) -> Message:
     lang = context.application.bot_data.get('last_user_lang') or 'ru'
-    await msg.reply_text(_t(lang, 'no_guide_for_model'), disable_web_page_preview=True)
+    sent = await msg.reply_text(_t(lang, 'no_guide_for_model'), disable_web_page_preview=True)
     if settings.log_decisions:
         logging.info(
             "skip chat=%s reason=no_guide_for_model url=%s hints=%s",
@@ -125,6 +126,8 @@ async def _reply_no_guide_for_model(
         url=best_url,
         hints=" ".join(sorted(hints)),
     )
+    return sent
+
 
 def _arm_clarify_correction_window(
     context: ContextTypes.DEFAULT_TYPE,
@@ -394,6 +397,7 @@ async def _try_send_printer_clarify(
     settings,
     require_score_floor: bool,
     score_floor: int,
+    slash_command_ephemeral: bool = False,
 ) -> str | None:
     """
     Если нужна модель и она не указана — отправляем уточнение (или блокируем ответ).
@@ -451,7 +455,18 @@ async def _try_send_printer_clarify(
         score=best_score,
         url=best_doc.url,
     )
+    if slash_command_ephemeral:
+        out = _t(lang, "clarify_prompt").format(hint=hint)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=out,
+        )
     return "sent"
+
+
 async def _maybe_handle_clarification_followup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
     """
     Если пользователь ответил reply на уточняющий вопрос бота — пробуем повторный поиск.

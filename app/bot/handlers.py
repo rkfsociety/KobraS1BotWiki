@@ -21,6 +21,7 @@ from app.bot.clarify import (
     _try_send_printer_clarify,
 )
 from app.bot.design_replies import _maybe_reply_printer_design_vs_question
+from app.bot.ephemeral import schedule_delete_slash_command_and_reply
 from app.bot.error_codes_wiki import _error_code_candidates, _pick_error_code_doc
 from app.bot.error_display import _format_error_code_info_ru
 from app.bot.help_text import format_help_message
@@ -95,11 +96,19 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_message or not update.effective_chat:
         return
     msg = update.effective_message
+    settings = context.application.bot_data["settings"]
     lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
     is_admin = await user_has_admin_command_access(update, context)
     raw_u = context.application.bot_data.get("bot_username") or ""
     body = format_help_message(lang=lang, is_admin=is_admin, bot_username=str(raw_u))
-    await msg.reply_text(body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    sent = await msg.reply_text(body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    schedule_delete_slash_command_and_reply(
+        context=context,
+        user_msg=msg,
+        bot_msg=sent,
+        wiki_base_url=settings.wiki_base_url,
+        outgoing_text=body,
+    )
     uid = msg.from_user.id if msg.from_user else None
     _log_bot_reply("cmd_help", update.effective_chat.id, uid, admin=str(is_admin).lower())
 
@@ -118,7 +127,15 @@ async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"<code>{chat.id}</code>\n"
         f"{html.escape(_t(lang, 'cmd_type'))}: <code>{html.escape(chat.type)}</code>"
     )
-    await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    sent = await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    settings = context.application.bot_data["settings"]
+    schedule_delete_slash_command_and_reply(
+        context=context,
+        user_msg=msg,
+        bot_msg=sent,
+        wiki_base_url=settings.wiki_base_url,
+        outgoing_text=text,
+    )
     uid = msg.from_user.id if msg.from_user else None
     _log_bot_reply("cmd_id", update.effective_chat.id, uid)
 
@@ -137,17 +154,33 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = msg.from_user.id if msg.from_user else None
     chat_id = update.effective_chat.id
     if not query:
-        await msg.reply_text(_t(lang, "wiki_usage"), disable_web_page_preview=True)
+        ut = _t(lang, "wiki_usage")
+        sent = await msg.reply_text(ut, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=ut,
+        )
         _log_bot_reply("cmd_wiki_usage", chat_id, uid)
         return
 
-    if await _maybe_reply_printer_design_vs_question(
+    sent_pd = await _maybe_reply_printer_design_vs_question(
         msg,
         question=query,
         chat_id=chat_id,
         settings=settings,
         user_id=uid,
-    ):
+    )
+    if sent_pd is not None:
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent_pd,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=sent_pd.text or "",
+        )
         return
 
     variants = expand_queries(query) if settings.ru_layer_enabled else [query]
@@ -156,12 +189,28 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     if not best_doc:
-        await msg.reply_text(_t(lang, "wiki_nothing_found"), disable_web_page_preview=True)
+        nf = _t(lang, "wiki_nothing_found")
+        sent = await msg.reply_text(nf, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=nf,
+        )
         _log_bot_reply("cmd_wiki_not_found", chat_id, uid, query=query[:80])
         return
 
     if best_score < settings.min_score:
-        await msg.reply_text(_t(lang, "wiki_low_conf"), disable_web_page_preview=True)
+        lc = _t(lang, "wiki_low_conf")
+        sent = await msg.reply_text(lc, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=lc,
+        )
         _log_bot_reply("cmd_wiki_low_score", chat_id, uid, score=best_score, min_score=settings.min_score, url=best_doc.url)
         return
 
@@ -175,13 +224,14 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         settings=settings,
         require_score_floor=False,
         score_floor=0,
+        slash_command_ephemeral=True,
     )
     if clarify_cmd in ("sent", "blocked"):
         return
 
     url = best_doc.url
     if not _response_wiki_url_acceptable(query, url):
-        await _reply_no_guide_for_model(
+        sent_ng = await _reply_no_guide_for_model(
             msg,
             context=context,
             chat_id=chat_id,
@@ -189,6 +239,13 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             user_id=uid,
             best_url=url,
             hints=_model_slug_hints(query),
+        )
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent_ng,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=sent_ng.text or "",
         )
         return
 
@@ -220,7 +277,14 @@ async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f"QUESTIONS_ONLY: <code>{settings.questions_only}</code>\n"
         f"REQUIRE_TRIGGER: <code>{settings.require_trigger}</code>"
     )
-    await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    sent = await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    schedule_delete_slash_command_and_reply(
+        context=context,
+        user_msg=msg,
+        bot_msg=sent,
+        wiki_base_url=settings.wiki_base_url,
+        outgoing_text=text,
+    )
     uid = msg.from_user.id if msg.from_user else None
     _log_bot_reply("cmd_ping", update.effective_chat.id, uid)
 
@@ -314,18 +378,14 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     reply_msg = await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     uid = msg.from_user.id if msg.from_user else None
     _log_bot_reply("cmd_status", chat_id, uid)
-    
-    # Удаляем сообщение пользователя и ответ бота через 10 секунд
-    import asyncio
-    async def delete_messages():
-        try:
-            await asyncio.sleep(10)
-            await msg.delete()
-            await reply_msg.delete()
-        except Exception:
-            pass  # Игнорируем ошибки удаления (сообщения могли быть уже удалены)
-    
-    asyncio.create_task(delete_messages())
+
+    schedule_delete_slash_command_and_reply(
+        context=context,
+        user_msg=msg,
+        bot_msg=reply_msg,
+        wiki_base_url=settings.wiki_base_url,
+        outgoing_text=text,
+    )
 
 
 async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -347,7 +407,15 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     bot_id = context.application.bot_data.get("bot_id")
     if not msg.reply_to_message or not msg.reply_to_message.from_user or bot_id is None or msg.reply_to_message.from_user.id != bot_id:
-        await msg.reply_text(_t(lang, "error_usage"), disable_web_page_preview=True)
+        eu = _t(lang, "error_usage")
+        sent = await msg.reply_text(eu, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=eu,
+        )
         _log_bot_reply("cmd_error_usage", chat_id, uid)
         return
 
@@ -355,7 +423,15 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     store = context.application.bot_data.setdefault("answer_ctx_store", _load_answer_ctx_store())
     item = store.get(_answer_ctx_key(chat_id, bad_mid)) if isinstance(store, dict) else None
     if not isinstance(item, dict) or not item.get("q"):
-        await msg.reply_text(_t(lang, "unknown_reply_ctx"), disable_web_page_preview=True)
+        ur = _t(lang, "unknown_reply_ctx")
+        sent = await msg.reply_text(ur, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=ur,
+        )
         _log_bot_reply("cmd_error_no_ctx", chat_id, uid, bad_mid=bad_mid)
         return
 
@@ -384,19 +460,37 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     if not best_doc or best_score < settings.min_score or not _response_wiki_url_acceptable(query, best_doc.url):
-        await msg.reply_text(_t(lang, "error_no_better"), disable_web_page_preview=True)
+        nb = _t(lang, "error_no_better")
+        sent = await msg.reply_text(nb, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=nb,
+        )
         _log_bot_reply("cmd_error_no_better", chat_id, uid, score=(best_score if best_doc else None), url=(best_doc.url if best_doc else None))
         return
 
     title = html.escape(best_doc.title)
     url = best_doc.url
-    sent = await msg.reply_text(
+    retry_body = (
         _t(lang, "error_retry") + "\n"
         f"• <b>{title}</b>\n"
         f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
-        f"<i>{html.escape(_t(lang, 'match').format(score=best_score))}</i>",
+        f"<i>{html.escape(_t(lang, 'match').format(score=best_score))}</i>"
+    )
+    sent = await msg.reply_text(
+        retry_body,
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=False,
+    )
+    schedule_delete_slash_command_and_reply(
+        context=context,
+        user_msg=msg,
+        bot_msg=sent,
+        wiki_base_url=settings.wiki_base_url,
+        outgoing_text=retry_body,
     )
     _record_bot_answer_context(context=context, chat_id=chat_id, bot_message_id=sent.message_id, query=query, url=url)
     _log_bot_reply("cmd_error_retry", chat_id, uid, score=best_score, url=url)
@@ -425,16 +519,33 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
     chat_id = update.effective_chat.id
     uid = msg.from_user.id if msg.from_user else None
+    settings = context.application.bot_data["settings"]
 
     bot_id = context.application.bot_data.get("bot_id")
     if not msg.reply_to_message or not msg.reply_to_message.from_user or bot_id is None or msg.reply_to_message.from_user.id != bot_id:
-        await msg.reply_text(_t(lang, "fix_usage_reply"), disable_web_page_preview=True)
+        fur = _t(lang, "fix_usage_reply")
+        sent = await msg.reply_text(fur, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=fur,
+        )
         _log_bot_reply("cmd_fix_usage", chat_id, uid)
         return
 
     good_url = _extract_url_arg(list(context.args or []))
     if not good_url:
-        await msg.reply_text(_t(lang, "fix_usage"), disable_web_page_preview=True)
+        fu = _t(lang, "fix_usage")
+        sent = await msg.reply_text(fu, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=fu,
+        )
         _log_bot_reply("cmd_fix_usage", chat_id, uid)
         return
 
@@ -442,7 +553,15 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     store = context.application.bot_data.setdefault("answer_ctx_store", _load_answer_ctx_store())
     item = store.get(_answer_ctx_key(chat_id, bad_mid)) if isinstance(store, dict) else None
     if not isinstance(item, dict) or not item.get("q"):
-        await msg.reply_text(_t(lang, "unknown_reply_ctx"), disable_web_page_preview=True)
+        ur = _t(lang, "unknown_reply_ctx")
+        sent = await msg.reply_text(ur, disable_web_page_preview=True)
+        schedule_delete_slash_command_and_reply(
+            context=context,
+            user_msg=msg,
+            bot_msg=sent,
+            wiki_base_url=settings.wiki_base_url,
+            outgoing_text=ur,
+        )
         _log_bot_reply("cmd_fix_no_ctx", chat_id, uid, bad_mid=bad_mid)
         return
 
@@ -458,11 +577,21 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception:
         pass
 
-    sent = await msg.reply_text(
+    fix_body = (
         _t(lang, "fix_confirm") + "\n"
-        f"<a href=\"{html.escape(good_url)}\">{html.escape(good_url)}</a>",
+        f"<a href=\"{html.escape(good_url)}\">{html.escape(good_url)}</a>"
+    )
+    sent = await msg.reply_text(
+        fix_body,
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=False,
+    )
+    schedule_delete_slash_command_and_reply(
+        context=context,
+        user_msg=msg,
+        bot_msg=sent,
+        wiki_base_url=settings.wiki_base_url,
+        outgoing_text=fix_body,
     )
     _record_bot_answer_context(context=context, chat_id=chat_id, bot_message_id=sent.message_id, query=query, url=good_url)
     _log_bot_reply("cmd_fix", chat_id, uid, url=good_url)
