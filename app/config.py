@@ -70,6 +70,15 @@ class Settings:
     clarify_correction_ttl_seconds: int
     #: 0 = не ограничивать. Linux/macOS: RLIMIT_AS (виртуальная память процесса), см. app/resource_limits.py
     memory_limit_mb: int
+    #: Периодически git fetch + синхронизация с remote и перезапуск (см. GIT_AUTOPULL_*)
+    git_autopull_enabled: bool
+    #: True: git reset --hard на remote/ветку (приоритет файлов с GitHub). False: только ff-only merge
+    git_autopull_hard_reset: bool
+    git_autopull_interval_seconds: int
+    git_autopull_remote: str
+    git_autopull_branch: str
+    #: Shell-команда перезапуска после pull (Linux). Пусто = os.execv на тот же -m app.bot
+    git_restart_command: str | None
 
 
 def load_settings() -> Settings:
@@ -114,6 +123,15 @@ def load_settings() -> Settings:
     clarify_correction_max = _get_int("CLARIFY_CORRECTION_MAX", 2)
     clarify_correction_ttl_seconds = _get_int("CLARIFY_CORRECTION_TTL_SECONDS", 600)
     memory_limit_mb = _get_int("MEMORY_LIMIT_MB", 0)
+
+    git_autopull_enabled = _get_bool("GIT_AUTOPULL_ENABLED", True)
+    git_autopull_hard_reset = _get_bool("GIT_AUTOPULL_HARD_RESET", True)
+    # Публичный GitHub + remote https:// — fetch без токена; приватный репо — настройте SSH/credentials
+    git_autopull_interval_seconds = max(60, _get_int("GIT_AUTOPULL_INTERVAL_SECONDS", 300))
+    git_autopull_remote = (os.getenv("GIT_AUTOPULL_REMOTE") or "origin").strip() or "origin"
+    git_autopull_branch = (os.getenv("GIT_AUTOPULL_BRANCH") or "master").strip() or "master"
+    git_restart_raw = (os.getenv("GIT_RESTART_COMMAND") or "").strip()
+    git_restart_command = git_restart_raw if git_restart_raw else None
 
     # Загрузка списка разрешённых chat_id и topic_id из переменных окружения
     # ALLOWED_CHAT_IDS: список ID чатов через запятую (например, "123456789,-987654321")
@@ -170,4 +188,10 @@ def load_settings() -> Settings:
         clarify_correction_max=clarify_correction_max,
         clarify_correction_ttl_seconds=clarify_correction_ttl_seconds,
         memory_limit_mb=memory_limit_mb,
+        git_autopull_enabled=git_autopull_enabled,
+        git_autopull_hard_reset=git_autopull_hard_reset,
+        git_autopull_interval_seconds=git_autopull_interval_seconds,
+        git_autopull_remote=git_autopull_remote,
+        git_autopull_branch=git_autopull_branch,
+        git_restart_command=git_restart_command,
     )

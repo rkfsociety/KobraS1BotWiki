@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import subprocess
+import sys
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -20,6 +22,7 @@ from telegram.ext import (
 )
 
 from app.bot.error_display import _load_manual_error_codes
+from app.bot.git_autopull import git_sync_from_remote, project_repo_root
 from app.bot.handlers import (
     cmd_error,
     cmd_fix,
@@ -33,7 +36,7 @@ from app.bot.handlers import (
     on_message,
 )
 from app.bot.stores import _load_clarify_store, _load_fix_store
-from app.config import load_settings
+from app.config import Settings, load_settings
 from app.error_codes_catalog import ensure_error_codes_catalog, merge_manual_overrides
 from app.resource_limits import apply_posix_virtual_memory_limit_mb
 from app.web_wiki_index import WebWikiIndex, WebWikiIndexer
@@ -101,6 +104,8 @@ def main() -> None:
     app.bot_data["settings"] = settings
     app.bot_data["wiki_index"] = wiki_index
     app.bot_data["wiki_indexer"] = indexer
+    git_pull_restart_state: dict[str, str] = {"action": "none", "cmd": ""}
+    app.bot_data["git_pull_restart_state"] = git_pull_restart_state
     # восстанавливаем ожидаемые уточнения после перезапуска
     try:
         store = _load_clarify_store()
@@ -263,8 +268,88 @@ def main() -> None:
         first=1,
         name="index_step",
     )
+
+    async def _git_autopull_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+        application = context.application
+        st: Settings = application.bot_data["settings"]
+        if not st.git_autopull_enabled:
+            return
+        lock = application.bot_data.get("git_autopull_lock")
+        if lock is None:
+            return
+        async with lock:
+            repo = project_repo_root()
+            try:
+                updated, msg = await asyncio.to_thread(
+                    git_sync_from_remote,
+                    repo=repo,
+                    remote=st.git_autopull_remote,
+                    branch=st.git_autopull_branch,
+                    hard_reset=st.git_autopull_hard_reset,
+                )
+            except Exception as e:
+                logging.warning("git autopull: %s", e)
+                return
+            if not updated:
+                if st.log_decisions and msg and msg != "уже актуально":
+                    logging.debug("git autopull: %s", msg)
+                return
+            logging.info("git autopull: %s — перезапуск", msg)
+            state = application.bot_data["git_pull_restart_state"]
+            cmd = (st.git_restart_command or "").strip()
+            if cmd and sys.platform != "win32":
+                state["action"] = "subprocess"
+                state["cmd"] = cmd
+                try:
+                    subprocess.Popen(
+                        ["/bin/bash", "-lc", f"sleep 4 && {cmd}"],
+                        cwd=str(repo),
+                        start_new_session=True,
+                        stdin=subprocess.DEVNULL,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                except Exception as e:
+                    logging.error("git autopull: не удалось запустить GIT_RESTART_COMMAND: %s", e)
+                    state["action"] = "none"
+                    return
+            else:
+                if cmd and sys.platform == "win32":
+                    logging.warning("GIT_RESTART_COMMAND на Windows не поддерживается, используется os.execv")
+                state["action"] = "exec"
+            try:
+                await application.stop()
+            except Exception as e:
+                logging.warning("git autopull: application.stop(): %s", e)
+
+    if settings.git_autopull_enabled:
+        app.bot_data["git_autopull_lock"] = asyncio.Lock()
+        app.bot_data["git_autopull_job"] = app.job_queue.run_repeating(
+            _git_autopull_job,
+            interval=settings.git_autopull_interval_seconds,
+            first=min(120, settings.git_autopull_interval_seconds),
+            name="git_autopull",
+        )
+        logging.info(
+            "Автообновление из git: каждые %s с, %s/%s, режим=%s",
+            settings.git_autopull_interval_seconds,
+            settings.git_autopull_remote,
+            settings.git_autopull_branch,
+            "reset --hard (как на GitHub)" if settings.git_autopull_hard_reset else "ff-only",
+        )
+
     app.post_init = _post_init  # type: ignore[attr-defined]
     # Важно: после перезапуска не "догоняем" накопившиеся сообщения.
     # Telegram отдаёт накопленные updates при polling — drop_pending_updates их сбрасывает.
     app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
 
+    if git_pull_restart_state.get("action") == "exec":
+        try:
+            lock_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        repo = project_repo_root()
+        os.chdir(str(repo))
+        os.execv(sys.executable, [sys.executable, "-m", "app.bot"])
+    if git_pull_restart_state.get("action") == "subprocess":
+        sys.exit(0)
