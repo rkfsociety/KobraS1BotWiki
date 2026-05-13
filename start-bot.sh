@@ -42,6 +42,7 @@ fi
 if screen -list 2>/dev/null | grep -qE "[0-9]+\.${SCREEN_NAME}[[:space:]]"; then
     echo "[ERROR] Сессия screen '$SCREEN_NAME' уже существует."
     echo "Подключиться к логам: screen -r $SCREEN_NAME"
+    echo "Если вы root, а бот от другого пользователя (systemd User=): sudo -u <пользователь> screen -r $SCREEN_NAME"
     echo "Остановить бота: ./stop-bot.sh"
     exit 1
 fi
@@ -59,6 +60,7 @@ echo "screen:${SCREEN_NAME}" > ".cache/bot.lock"
 
 echo "Started (detached). Сессия: $SCREEN_NAME"
 echo "Подключиться к выводу в терминале: screen -r $SCREEN_NAME"
+echo "Если вы root, а screen у другого пользователя: sudo -u <пользователь> screen -r $SCREEN_NAME"
 echo "Отключиться от screen без остановки бота: Ctrl+A, затем D"
 echo "Остановить бота: ./stop-bot.sh"
 echo "Проверка «жив ли» и автозапуск: ./ensure-bot.sh (удобно в cron)"

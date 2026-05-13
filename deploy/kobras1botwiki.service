@@ -13,6 +13,10 @@
 # Логи:
 #   journalctl -u kobras1botwiki.service -n 50 --no-pager
 #
+# Консоль бота в screen принадлежит пользователю из User= (не root). Под root:
+#   sudo -u anycubicwikibot screen -r kobras1botwiki
+#   sudo -u anycubicwikibot screen -ls
+#
 # Без root (альтернатива): crontab -e
 #   @reboot sleep 30 && cd /ПУТЬ/KobraS1BotWiki && ./ensure-bot.sh >>.cache/ensure.log 2>&1
 #   (sleep даёт сети подняться; при необходимости увеличьте)
