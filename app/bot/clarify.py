@@ -9,6 +9,7 @@ from telegram import Message, Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+from app.bot.admin_access import user_id_is_developer
 from app.bot.design_replies import _maybe_reply_printer_design_vs_question
 from app.bot.ephemeral import schedule_delete_slash_command_and_reply
 from app.bot.error_codes_wiki import (
@@ -141,7 +142,7 @@ def _arm_clarify_correction_window(
         return
     key = (chat_id, user_id)
     cd = context.application.bot_data.setdefault("clarify_correction_cooldown_until", {})
-    if time.time() < float(cd.get(key, 0.0)):
+    if not user_id_is_developer(user_id, settings) and time.time() < float(cd.get(key, 0.0)):
         return
     st = context.application.bot_data.setdefault("clarify_correction_state", {})
     st[key] = {
@@ -417,7 +418,8 @@ async def _try_send_printer_clarify(
     ckey = (chat_id, msg.from_user.id)
     last = float(cooldown.get(ckey, 0.0))
     now2 = time.time()
-    if now2 - last < settings.clarify_cooldown_seconds:
+    dev = user_id_is_developer(msg.from_user.id, settings)
+    if not dev and now2 - last < settings.clarify_cooldown_seconds:
         if settings.log_decisions:
             logging.info(
                 "skip chat=%s reason=need_printer_model_cooldown score=%d url=%s",
@@ -628,15 +630,16 @@ async def _maybe_handle_clarify_correction_followup(update: Update, context: Con
     rem = int(item.get("remaining", 0)) - 1
     if rem <= 0:
         st.pop(key, None)
-        cd = context.application.bot_data.setdefault("clarify_correction_cooldown_until", {})
-        cd[key] = now + float(settings.clarify_cooldown_seconds)
-        if settings.log_decisions:
-            logging.info(
-                "clarify_correction_exhausted chat=%s user=%s cooldown_s=%s",
-                chat_id,
-                from_user,
-                settings.clarify_cooldown_seconds,
-            )
+        if not user_id_is_developer(from_user, settings):
+            cd = context.application.bot_data.setdefault("clarify_correction_cooldown_until", {})
+            cd[key] = now + float(settings.clarify_cooldown_seconds)
+            if settings.log_decisions:
+                logging.info(
+                    "clarify_correction_exhausted chat=%s user=%s cooldown_s=%s",
+                    chat_id,
+                    from_user,
+                    settings.clarify_cooldown_seconds,
+                )
     else:
         item["remaining"] = rem
         st[key] = item

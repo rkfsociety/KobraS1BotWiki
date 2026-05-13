@@ -7,7 +7,12 @@ from telegram import Update
 from telegram.constants import ChatMemberStatus, ChatType
 from telegram.ext import ContextTypes
 
-from app.bot.constants import COOLDOWN_EXEMPT_USERS
+
+def user_id_is_developer(user_id: int | None, settings) -> bool:
+    """True если user_id в списке разработчиков (дефолт + DEVELOPER_USER_IDS)."""
+    if user_id is None:
+        return False
+    return user_id in settings.developer_user_ids
 
 
 async def user_has_admin_command_access(
@@ -17,6 +22,7 @@ async def user_has_admin_command_access(
     """
     True — пользователь может вызывать /id, /wiki, /ping, /status, /error, /fix, /qaadd, /qalist, /qadel, /update.
 
+    Разработчики (developer_user_ids) — в любых чатах, как админ служебных команд.
     В личке с ботом доступ открыт (владелец бота тестирует в DM).
     В группе/супергруппе — только создатель или администратор чата по данным Telegram.
     """
@@ -24,6 +30,9 @@ async def user_has_admin_command_access(
     user = update.effective_user
     if not chat or not user:
         return False
+    settings = context.application.bot_data.get("settings")
+    if settings is not None and user_id_is_developer(user.id, settings):
+        return True
     if chat.type == ChatType.PRIVATE:
         return True
     if chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
@@ -43,9 +52,6 @@ async def user_exempt_from_wiki_reply_spam_limits(
     """
     Не применять к ответу бота антиспам по чату (COOLDOWN_SECONDS, лимит в минуту, DUPLICATE_WINDOW).
 
-    Исключения: ручной allowlist user id; администратор чата (как для /wiki); личка с ботом.
+    Совпадает с правами «служебных» команд: разработчики, админы группы, личка.
     """
-    user = update.effective_user
-    if user and user.id in COOLDOWN_EXEMPT_USERS:
-        return True
     return await user_has_admin_command_access(update, context)

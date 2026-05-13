@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from telegram.constants import ChatType
 from telegram.ext import ContextTypes
 
 EPHEMERAL_SLASH_PAIR_SECONDS = 20
@@ -28,8 +29,12 @@ def schedule_delete_slash_command_and_reply(
     """
     Через EPHEMERAL_SLASH_PAIR_SECONDS удаляет сообщение пользователя (команда) и ответ бота,
     если в ответе нет ссылки на вики (см. WIKI_BASE_URL).
+    В личке с ботом пары не удаляем.
     """
     if _outgoing_has_wiki_link(outgoing_text, wiki_base_url):
+        return
+    ch = getattr(user_msg, "chat", None)
+    if ch is not None and ch.type == ChatType.PRIVATE:
         return
 
     async def _cleanup() -> None:

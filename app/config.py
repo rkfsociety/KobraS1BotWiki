@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.default_developers import DEFAULT_DEVELOPER_USER_IDS
+
 
 def _get_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
@@ -81,6 +83,8 @@ class Settings:
     git_restart_command: str | None
     #: После /qaadd и /qadel — git commit + push ``data/manual_qa.json`` (по умолчанию вкл.; выкл.: MANUAL_QA_GIT_PUSH=0)
     manual_qa_git_push: bool
+    #: Разработчики: служебные команды в группах как у админа; без антиспама и без кулдаунов clarify (см. DEVELOPER_USER_IDS)
+    developer_user_ids: frozenset[int]
 
 
 def load_settings() -> Settings:
@@ -137,6 +141,18 @@ def load_settings() -> Settings:
     git_restart_command = git_restart_raw if git_restart_raw else None
 
     manual_qa_git_push = _get_bool("MANUAL_QA_GIT_PUSH", True)
+
+    # DEVELOPER_USER_IDS: дополнительные user_id через запятую. Всегда включён дефолтный список (см. DEFAULT_DEVELOPER_USER_IDS).
+    developer_raw = (os.getenv("DEVELOPER_USER_IDS") or "").strip()
+    developer_extra: set[int] = set()
+    if developer_raw:
+        try:
+            developer_extra = {int(x.strip()) for x in developer_raw.split(",") if x.strip()}
+        except ValueError:
+            logging.warning("Некорректный формат DEVELOPER_USER_IDS, игнорируем доп. id")
+            developer_extra = set()
+
+    developer_user_ids = frozenset(DEFAULT_DEVELOPER_USER_IDS | developer_extra)
 
     # Загрузка списка разрешённых chat_id и topic_id из переменных окружения
     # ALLOWED_CHAT_IDS: список ID чатов через запятую (например, "123456789,-987654321")
@@ -200,4 +216,5 @@ def load_settings() -> Settings:
         git_autopull_branch=git_autopull_branch,
         git_restart_command=git_restart_command,
         manual_qa_git_push=manual_qa_git_push,
+        developer_user_ids=developer_user_ids,
     )

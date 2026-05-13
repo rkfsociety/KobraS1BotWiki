@@ -11,6 +11,7 @@ from collections import deque
 
 from telegram import Update
 from telegram.constants import ChatType, MessageEntityType, ParseMode
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from app.bot.admin_access import user_exempt_from_wiki_reply_spam_limits, user_has_admin_command_access
@@ -186,7 +187,14 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     is_admin = await user_has_admin_command_access(update, context)
     raw_u = context.application.bot_data.get("bot_username") or ""
     body = format_help_message(lang=lang, is_admin=is_admin, bot_username=str(raw_u))
-    sent = await msg.reply_text(body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    try:
+        sent = await msg.reply_text(body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    except TelegramError as e:
+        logging.warning("cmd_help: HTML reply failed chat=%s: %s", msg.chat_id, e)
+        plain = html.unescape(re.sub(r"<[^>]+>", "", body)).strip()
+        if not plain:
+            plain = "Справка: /ping — проверка связи. Команды для админов чата — только в группе с правами админа или в личке."
+        sent = await msg.reply_text(plain[:4096], disable_web_page_preview=True)
     schedule_delete_slash_command_and_reply(
         context=context,
         user_msg=msg,
