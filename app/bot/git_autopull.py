@@ -97,8 +97,60 @@ def git_sync_from_remote(
     if mg.returncode != 0:
         return False, f"git merge --ff-only: {mg.stderr.strip() or mg.stdout.strip()}"
 
+    short_before = before[:8]
+    short_after = remote_head[:8]
     logging.info("git: %s -> %s", short_before, short_after)
     return True, f"fast-forward {short_before} -> {short_after}"
+
+
+def git_ping_compare_with_remote(
+    *,
+    repo: Path,
+    remote: str,
+    branch: str,
+    fetch_timeout: float = 25.0,
+) -> tuple[str | None, str | None, bool | None, str | None]:
+    """
+    Для /ping: текущий HEAD и сравнение с remote/ветка после ``git fetch`` (без изменения рабочей копии).
+
+    Возвращает (local_full_hash, remote_full_or_none, update_available, error_message).
+    ``update_available`` True если после успешного fetch ``HEAD != remote/branch``; False если равны; None если сравнить не удалось.
+    """
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+
+    def run(args: list[str], timeout: float) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            args,
+            cwd=str(repo),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+
+    if not (repo / ".git").exists():
+        return None, None, None, "no .git"
+
+    h = run(["git", "rev-parse", "HEAD"], 12.0)
+    if h.returncode != 0:
+        err = (h.stderr or h.stdout or "").strip() or "rev-parse HEAD failed"
+        return None, None, None, err
+    local = h.stdout.strip()
+
+    fe = run(["git", "fetch", remote, branch], fetch_timeout)
+    if fe.returncode != 0:
+        err = (fe.stderr or fe.stdout or "").strip() or "git fetch failed"
+        return local, None, None, err
+
+    rh = run(["git", "rev-parse", f"{remote}/{branch}"], 12.0)
+    if rh.returncode != 0:
+        err = (rh.stderr or rh.stdout or "").strip() or f"no {remote}/{branch} after fetch"
+        return local, None, None, err
+
+    remote_h = rh.stdout.strip()
+    return local, remote_h, local != remote_h, None
 
 
 async def schedule_restart_after_pull(

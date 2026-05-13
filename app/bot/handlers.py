@@ -29,7 +29,7 @@ from app.bot.clarify import (
 )
 from app.bot.design_replies import _maybe_reply_printer_design_vs_question
 from app.bot.ephemeral import schedule_delete_slash_command_and_reply
-from app.bot.git_autopull import git_sync_from_remote, project_repo_root, schedule_restart_after_pull
+from app.bot.git_autopull import git_ping_compare_with_remote, git_sync_from_remote, project_repo_root, schedule_restart_after_pull
 from app.bot.help_text import format_help_message
 from app.bot.error_codes_wiki import _error_code_candidates, _pick_error_code_doc
 from app.bot.error_display import _format_error_code_info_ru
@@ -445,12 +445,58 @@ async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.effective_message
     lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
 
+    repo = project_repo_root()
+    remote = settings.git_autopull_remote
+    branch = settings.git_autopull_branch
+    cache_key = f"{remote}/{branch}"
+    ping_git_cache: dict = context.application.bot_data.setdefault("ping_git_cache", {})
+    now = time.time()
+    ttl = 60.0
+    ent = ping_git_cache.get(cache_key)
+    if isinstance(ent, dict) and now - float(ent.get("ts", 0)) < ttl:
+        local_f = ent.get("local")
+        remote_f = ent.get("remote")
+        upd = ent.get("upd")
+        gerr = ent.get("err")
+    else:
+        local_f, remote_f, upd, gerr = await asyncio.to_thread(
+            git_ping_compare_with_remote,
+            repo=repo,
+            remote=remote,
+            branch=branch,
+        )
+        ping_git_cache[cache_key] = {"ts": now, "local": local_f, "remote": remote_f, "upd": upd, "err": gerr}
+
+    git_lines: list[str] = []
+    if local_f:
+        git_lines.append(
+            f"{html.escape(_t(lang, 'ping_commit_running'))}: <code>{html.escape(local_f)}</code>"
+        )
+    if gerr:
+        git_lines.append(html.escape(_t(lang, "ping_git_fail").format(detail=gerr[:400])))
+    elif remote_f is not None and upd is not None:
+        git_lines.append(
+            html.escape(_t(lang, "ping_commit_upstream").format(remote=remote, branch=branch))
+            + ": <code>"
+            + html.escape(remote_f)
+            + "</code>"
+        )
+        if upd:
+            git_lines.append(html.escape(_t(lang, "ping_update_suggest")))
+        else:
+            git_lines.append(
+                html.escape(_t(lang, "ping_git_ok").format(remote=remote, branch=branch))
+            )
+
+    git_block = ("\n" + "\n".join(git_lines)) if git_lines else ""
+
     text = (
         _t(lang, "ping") + "\n"
         f"chat_id: <code>{update.effective_chat.id}</code>\n"
         f"wiki_docs: <code>{index.doc_count}</code>\n"
         f"QUESTIONS_ONLY: <code>{settings.questions_only}</code>\n"
         f"REQUIRE_TRIGGER: <code>{settings.require_trigger}</code>"
+        + git_block
     )
     sent = await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     schedule_delete_slash_command_and_reply(
