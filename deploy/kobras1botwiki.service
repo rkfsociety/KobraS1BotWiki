@@ -1,0 +1,36 @@
+# KobraS1BotWiki — автозапуск после перезагрузки сервера (systemd)
+#
+# Перед включением отредактируйте User, Group, WorkingDirectory и ExecStart
+# под свой Unix-пользователь и путь к клону репозитория (где лежат .env и .venv).
+#
+# Установка:
+#   sudo cp deploy/kobras1botwiki.service /etc/systemd/system/
+#   sudo nano /etc/systemd/system/kobras1botwiki.service   # проверьте пути
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable kobras1botwiki.service
+#   sudo systemctl start kobras1botwiki.service
+#
+# Логи:
+#   journalctl -u kobras1botwiki.service -n 50 --no-pager
+#
+# Без root (альтернатива): crontab -e
+#   @reboot sleep 30 && cd /ПУТЬ/KobraS1BotWiki && ./ensure-bot.sh >>.cache/ensure.log 2>&1
+#   (sleep даёт сети подняться; при необходимости увеличьте)
+
+[Unit]
+Description=KobraS1BotWiki Telegram bot (ensure-bot + screen)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=anycubicwikibot
+Group=anycubicwikibot
+WorkingDirectory=/home/anycubicwikibot/KobraS1BotWiki
+ExecStart=/home/anycubicwikibot/KobraS1BotWiki/ensure-bot.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
