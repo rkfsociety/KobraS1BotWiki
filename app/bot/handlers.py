@@ -25,6 +25,7 @@ from app.bot.clarify import (
 from app.bot.design_replies import _maybe_reply_printer_design_vs_question
 from app.bot.ephemeral import schedule_delete_slash_command_and_reply
 from app.bot.git_autopull import git_sync_from_remote, project_repo_root, schedule_restart_after_pull
+from app.bot.help_text import format_help_message
 from app.bot.error_codes_wiki import _error_code_candidates, _pick_error_code_doc
 from app.bot.error_display import _format_error_code_info_ru
 from app.bot.manual_qa import (
