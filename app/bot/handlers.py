@@ -13,7 +13,11 @@ from telegram import Update
 from telegram.constants import ChatType, MessageEntityType, ParseMode
 from telegram.ext import ContextTypes
 
-from app.bot.admin_access import user_exempt_from_wiki_reply_spam_limits, user_has_admin_command_access
+from app.bot.admin_access import (
+    user_exempt_from_wiki_reply_spam_limits,
+    user_has_admin_command_access,
+    user_id_is_developer,
+)
 from app.bot.clarify import (
     _reply_no_guide_for_model,
     _maybe_handle_clarification_followup,
@@ -231,6 +235,53 @@ async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     uid = msg.from_user.id if msg.from_user else None
     _log_bot_reply("cmd_id", update.effective_chat.id, uid)
+
+
+async def cmd_admincheck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Диагностика: как Telegram видит роль пользователя в чате и как бот трактует доступ к служебным командам."""
+    if not update.effective_chat or not update.effective_message or not update.effective_user:
+        return
+    if await _deny_unless_admin_command_access(update, context, command="admincheck"):
+        return
+    chat = update.effective_chat
+    msg = update.effective_message
+    user = update.effective_user
+    settings = context.application.bot_data["settings"]
+    lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
+
+    lines = [_t(lang, "admincheck_header"), ""]
+    if chat.type == ChatType.PRIVATE:
+        lines.append(_t(lang, "admincheck_private"))
+    else:
+        lines.append(_t(lang, "admincheck_chat").format(chat_id=chat.id, chat_type=str(chat.type)))
+        try:
+            member = await context.bot.get_chat_member(chat.id, user.id)
+            status = getattr(member.status, "value", None) or str(member.status)
+        except Exception as e:
+            status = _t(lang, "admincheck_member_fail").format(reason=str(e)[:200])
+        lines.append(_t(lang, "admincheck_telegram").format(status=status))
+
+    uname = f" @{user.username}" if user.username else ""
+    lines.append("")
+    lines.append(_t(lang, "admincheck_user").format(user_id=user.id, username=uname))
+    yn_dev = _t(lang, "word_yes") if user_id_is_developer(user.id, settings) else _t(lang, "word_no")
+    lines.append(_t(lang, "admincheck_developer").format(yesno=yn_dev))
+    has_cmd = await user_has_admin_command_access(update, context)
+    yn_cmd = _t(lang, "word_yes") if has_cmd else _t(lang, "word_no")
+    lines.append(_t(lang, "admincheck_bot_access").format(yesno=yn_cmd))
+    lines.append("")
+    lines.append(_t(lang, "admincheck_footer"))
+
+    body = "\n".join(lines)
+    sent = await msg.reply_text(body, disable_web_page_preview=True)
+    schedule_delete_slash_command_and_reply(
+        context=context,
+        user_msg=msg,
+        bot_msg=sent,
+        wiki_base_url=settings.wiki_base_url,
+        outgoing_text=body,
+    )
+    _log_bot_reply("cmd_admincheck", chat.id, user.id)
 
 
 async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

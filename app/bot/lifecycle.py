@@ -23,6 +23,7 @@ from telegram.ext import (
 from app.bot.error_display import _load_manual_error_codes
 from app.bot.git_autopull import git_sync_from_remote, project_repo_root, schedule_restart_after_pull
 from app.bot.handlers import (
+    cmd_admincheck,
     cmd_error,
     cmd_fix,
     cmd_help,
@@ -132,6 +133,7 @@ def main() -> None:
 
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("id", cmd_id))
+    app.add_handler(CommandHandler("admincheck", cmd_admincheck))
     app.add_handler(CommandHandler("wiki", cmd_wiki))
     app.add_handler(CommandHandler("ping", cmd_ping))
     app.add_handler(CommandHandler("status", cmd_status))

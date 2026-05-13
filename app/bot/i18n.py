@@ -89,6 +89,17 @@ def _t(lang: str, key: str) -> str:
         "update_uptodate": "Код уже совпадает с GitHub, перезапуск не нужен.",
         "update_fail": "Не удалось обновить с GitHub: {reason}",
         "update_ok": "Обновлено: {detail}. Перезапускаю бота…",
+        "word_yes": "да",
+        "word_no": "нет",
+        "admincheck_header": "Проверка прав для служебных команд",
+        "admincheck_private": "Чат: личка с ботом — доступ к служебным командам открыт (как при настройке).",
+        "admincheck_chat": "Чат: id {chat_id}, тип: {chat_type}",
+        "admincheck_telegram": "Роль в Telegram (get_chat_member): {status}",
+        "admincheck_member_fail": "Не удалось запросить роль у Telegram: {reason}",
+        "admincheck_user": "Вы: id {user_id}{username}",
+        "admincheck_developer": "В списке разработчиков бота: {yesno}",
+        "admincheck_bot_access": "Бот считает, что служебные команды вам доступны: {yesno}",
+        "admincheck_footer": "Если вы видите этот ответ — бот уже распознал у вас доступ к этой команде в этом чате.",
     }
     en = {
         "generic_help": (
@@ -150,6 +161,17 @@ def _t(lang: str, key: str) -> str:
         "update_uptodate": "Already up to date with GitHub. No restart.",
         "update_fail": "Could not update from GitHub: {reason}",
         "update_ok": "Updated: {detail}. Restarting the bot…",
+        "word_yes": "yes",
+        "word_no": "no",
+        "admincheck_header": "Admin command access check",
+        "admincheck_private": "Chat: private with the bot — maintenance commands are allowed (for setup/testing).",
+        "admincheck_chat": "Chat: id {chat_id}, type: {chat_type}",
+        "admincheck_telegram": "Telegram role (get_chat_member): {status}",
+        "admincheck_member_fail": "Could not fetch role from Telegram: {reason}",
+        "admincheck_user": "You: id {user_id}{username}",
+        "admincheck_developer": "In the bot developer list: {yesno}",
+        "admincheck_bot_access": "Bot considers maintenance commands allowed for you: {yesno}",
+        "admincheck_footer": "If you see this reply, the bot already treated you as allowed to run this command in this chat.",
     }
     table = ru if lang == "ru" else en
     return table.get(key, key)

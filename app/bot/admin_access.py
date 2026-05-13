@@ -20,7 +20,7 @@ async def user_has_admin_command_access(
     context: ContextTypes.DEFAULT_TYPE,
 ) -> bool:
     """
-    True — пользователь может вызывать /id, /wiki, /ping, /status, /error, /fix, /qaadd, /qalist, /qadel, /update.
+    True — пользователь может вызывать /id, /admincheck, /wiki, /ping, /status, /error, /fix, /qaadd, /qalist, /qadel, /update.
 
     Разработчики (developer_user_ids) — в любых чатах, как админ служебных команд.
     В личке с ботом доступ открыт (владелец бота тестирует в DM).
