@@ -29,12 +29,15 @@ def schedule_delete_slash_command_and_reply(
     """
     Через EPHEMERAL_SLASH_PAIR_SECONDS удаляет сообщение пользователя (команда) и ответ бота,
     если в ответе нет ссылки на вики (см. WIKI_BASE_URL).
-    В личке с ботом пары не удаляем.
+    В личке с ботом пары не удаляем. В чатах из ``Settings.ephemeral_exempt_chat_ids`` — тоже не удаляем.
     """
     if _outgoing_has_wiki_link(outgoing_text, wiki_base_url):
         return
     ch = getattr(user_msg, "chat", None)
     if ch is not None and ch.type == ChatType.PRIVATE:
+        return
+    settings = context.application.bot_data.get("settings")
+    if settings is not None and user_msg.chat_id in settings.ephemeral_exempt_chat_ids:
         return
 
     async def _cleanup() -> None:

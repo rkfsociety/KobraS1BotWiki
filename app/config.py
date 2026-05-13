@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.default_developers import DEFAULT_DEVELOPER_USER_IDS
+from app.default_ephemeral_exempt import DEFAULT_EPHEMERAL_EXEMPT_CHAT_IDS
 
 
 def _get_bool(name: str, default: bool) -> bool:
@@ -85,6 +86,8 @@ class Settings:
     manual_qa_git_push: bool
     #: Разработчики: служебные команды в группах как у админа; без антиспама и без кулдаунов clarify (см. DEVELOPER_USER_IDS)
     developer_user_ids: frozenset[int]
+    #: Не автоудалять пару «команда+ответ» в этих чатах (личка не удаляется всегда; см. EPHEMERAL_EXEMPT_CHAT_IDS)
+    ephemeral_exempt_chat_ids: frozenset[int]
 
 
 def load_settings() -> Settings:
@@ -154,6 +157,16 @@ def load_settings() -> Settings:
 
     developer_user_ids = frozenset(DEFAULT_DEVELOPER_USER_IDS | developer_extra)
 
+    ephemeral_raw = (os.getenv("EPHEMERAL_EXEMPT_CHAT_IDS") or "").strip()
+    ephemeral_extra: set[int] = set()
+    if ephemeral_raw:
+        try:
+            ephemeral_extra = {int(x.strip()) for x in ephemeral_raw.split(",") if x.strip()}
+        except ValueError:
+            logging.warning("Некорректный формат EPHEMERAL_EXEMPT_CHAT_IDS, игнорируем доп. id")
+            ephemeral_extra = set()
+    ephemeral_exempt_chat_ids = frozenset(DEFAULT_EPHEMERAL_EXEMPT_CHAT_IDS | ephemeral_extra)
+
     # Загрузка списка разрешённых chat_id и topic_id из переменных окружения
     # ALLOWED_CHAT_IDS: список ID чатов через запятую (например, "123456789,-987654321")
     # ALLOWED_TOPIC_IDS: список ID тем через запятую (например, "10,20,30")
@@ -217,4 +230,5 @@ def load_settings() -> Settings:
         git_restart_command=git_restart_command,
         manual_qa_git_push=manual_qa_git_push,
         developer_user_ids=developer_user_ids,
+        ephemeral_exempt_chat_ids=ephemeral_exempt_chat_ids,
     )
