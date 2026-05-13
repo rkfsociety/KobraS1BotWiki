@@ -221,11 +221,15 @@ async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = update.effective_message
     lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
 
-    text = (
+    tid = getattr(msg, "message_thread_id", None)
+    parts = [
         _t(lang, "cmd_id") + "\n"
         f"<code>{chat.id}</code>\n"
-        f"{html.escape(_t(lang, 'cmd_type'))}: <code>{html.escape(chat.type)}</code>"
-    )
+        f"{html.escape(_t(lang, 'cmd_type'))}: <code>{html.escape(str(chat.type))}</code>",
+    ]
+    if tid is not None:
+        parts.append(f"{html.escape(_t(lang, 'cmd_topic_id'))}: <code>{tid}</code>")
+    text = "\n".join(parts)
     sent = await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     settings = context.application.bot_data["settings"]
     schedule_delete_slash_command_and_reply(
