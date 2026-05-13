@@ -11,6 +11,7 @@ from telegram import Update
 from telegram.constants import ChatType, MessageEntityType, ParseMode
 from telegram.ext import ContextTypes
 
+from app.bot.admin_access import user_exempt_from_wiki_reply_spam_limits, user_has_admin_command_access
 from app.bot.clarify import (
     _reply_no_guide_for_model,
     _maybe_handle_clarification_followup,
@@ -19,10 +20,10 @@ from app.bot.clarify import (
     _try_send_error_code_clarify,
     _try_send_printer_clarify,
 )
-from app.bot.constants import COOLDOWN_EXEMPT_USERS
 from app.bot.design_replies import _maybe_reply_printer_design_vs_question
 from app.bot.error_codes_wiki import _error_code_candidates, _pick_error_code_doc
 from app.bot.error_display import _format_error_code_info_ru
+from app.bot.help_text import format_help_message
 from app.bot.i18n import _detect_user_lang, _lang_from_message, _t
 from app.bot.reply_logging import _log_bot_reply
 from app.bot.stores import (
@@ -48,6 +49,27 @@ from app.error_codes_catalog import ErrorCodeInfo
 from app.ru_layer import expand_queries
 from app.web_wiki_index import WebWikiIndex
 
+
+async def _deny_unless_admin_command_access(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    command: str,
+) -> bool:
+    """
+    Если пользователь не администратор чата (и не личка с ботом) — молча игнорируем команду.
+    True = остановить обработку без какого-либо ответа в чат.
+    """
+    if await user_has_admin_command_access(update, context):
+        return False
+    settings = context.application.bot_data.get("settings")
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    uid = update.effective_user.id if update.effective_user else None
+    if settings is not None and getattr(settings, "log_decisions", False):
+        logging.info("skip chat=%s user=%s reason=non_admin_command cmd=/%s", chat_id, uid, command)
+    return True
+
+
 def _is_triggered_message(update: Update, *, bot_username: str | None, bot_id: int | None) -> bool:
     msg = update.effective_message
     if not msg:
@@ -69,8 +91,23 @@ def _is_triggered_message(update: Update, *, bot_username: str | None, bot_id: i
     return False
 
 
+async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not update.effective_message or not update.effective_chat:
+        return
+    msg = update.effective_message
+    lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
+    is_admin = await user_has_admin_command_access(update, context)
+    raw_u = context.application.bot_data.get("bot_username") or ""
+    body = format_help_message(lang=lang, is_admin=is_admin, bot_username=str(raw_u))
+    await msg.reply_text(body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    uid = msg.from_user.id if msg.from_user else None
+    _log_bot_reply("cmd_help", update.effective_chat.id, uid, admin=str(is_admin).lower())
+
+
 async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_chat or not update.effective_message:
+        return
+    if await _deny_unless_admin_command_access(update, context, command="id"):
         return
     chat = update.effective_chat
     msg = update.effective_message
@@ -88,6 +125,8 @@ async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_message or not update.effective_chat:
+        return
+    if await _deny_unless_admin_command_access(update, context, command="wiki"):
         return
     settings = context.application.bot_data["settings"]
     index: WebWikiIndex = context.application.bot_data["wiki_index"]
@@ -167,6 +206,8 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_message or not update.effective_chat:
         return
+    if await _deny_unless_admin_command_access(update, context, command="ping"):
+        return
     settings = context.application.bot_data["settings"]
     index: WebWikiIndex = context.application.bot_data["wiki_index"]
     msg = update.effective_message
@@ -186,6 +227,8 @@ async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.effective_message or not update.effective_chat:
+        return
+    if await _deny_unless_admin_command_access(update, context, command="status"):
         return
     settings = context.application.bot_data["settings"]
     index: WebWikiIndex = context.application.bot_data["wiki_index"]
@@ -294,6 +337,8 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     if not update.effective_chat or not update.effective_message:
         return
+    if await _deny_unless_admin_command_access(update, context, command="error"):
+        return
     msg = update.effective_message
     lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
     chat_id = update.effective_chat.id
@@ -373,6 +418,8 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     - запоминает: старый URL плохой, новый — предпочтительный для этого запроса
     """
     if not update.effective_chat or not update.effective_message:
+        return
+    if await _deny_unless_admin_command_access(update, context, command="fix"):
         return
     msg = update.effective_message
     lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
@@ -728,12 +775,13 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
         return
 
-    # ---- антиспам (на чат) ----
+    # ---- антиспам (на чат); админы чата и allowlist — без ограничений ----
     now = time.time()
 
+    spam_exempt = await user_exempt_from_wiki_reply_spam_limits(update, context)
+
     last_reply_ts = rl["last_reply_ts_by_chat"].get(chat_id, 0.0)
-    uid_cd = msg.from_user.id if msg.from_user else None
-    if uid_cd not in COOLDOWN_EXEMPT_USERS and now - last_reply_ts < settings.cooldown_seconds:
+    if not spam_exempt and now - last_reply_ts < settings.cooldown_seconds:
         if settings.log_decisions:
             logging.info("skip chat=%s reason=cooldown", chat_id)
         return
@@ -742,14 +790,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     cutoff = now - 60.0
     while q and q[0] < cutoff:
         q.popleft()
-    if len(q) >= settings.max_replies_per_minute:
+    if not spam_exempt and len(q) >= settings.max_replies_per_minute:
         if settings.log_decisions:
             logging.info("skip chat=%s reason=rate_limit", chat_id)
         return
 
     last_url = rl["last_url_ts_by_chat"].setdefault(chat_id, {})
     last_url_ts = float(last_url.get(url, 0.0))
-    if now - last_url_ts < settings.duplicate_window_seconds:
+    if not spam_exempt and now - last_url_ts < settings.duplicate_window_seconds:
         if settings.log_decisions:
             logging.info("skip chat=%s reason=duplicate url=%s", chat_id, url)
         return

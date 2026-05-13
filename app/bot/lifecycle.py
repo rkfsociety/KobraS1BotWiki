@@ -23,6 +23,7 @@ from app.bot.error_display import _load_manual_error_codes
 from app.bot.handlers import (
     cmd_error,
     cmd_fix,
+    cmd_help,
     cmd_id,
     cmd_ping,
     cmd_status,
@@ -110,6 +111,7 @@ def main() -> None:
     except Exception:
         app.bot_data["clarify_pending"] = {}
 
+    app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("id", cmd_id))
     app.add_handler(CommandHandler("wiki", cmd_wiki))
     app.add_handler(CommandHandler("ping", cmd_ping))
