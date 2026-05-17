@@ -3,4 +3,5 @@
 from __future__ import annotations
 
 # Не импортируйте из app.bot — цикл с app.config.
-DEFAULT_OPS_NOTIFY_CHAT_ID: int = -1003881305021
+# AnycubicWikiBotLog (канал, приватная ссылка t.me/+RwrdGsjeLJgxYzIy)
+DEFAULT_OPS_NOTIFY_CHAT_ID: int = -1003826125815
