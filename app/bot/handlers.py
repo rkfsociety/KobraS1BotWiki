@@ -1296,11 +1296,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if settings.log_all_messages:
         logging.info("Входящее сообщение chat=%s user=%s: %s", chat_id, msg.from_user.id if msg.from_user else "?", text[:200])
 
-    # В группах отвечаем только если к нам обратились (упоминание) или это ожидаемый reply на уточнение.
+    # В группах: на вопросы отвечаем без @; @ или reply нужны для прочих сообщений (если REQUIRE_TRIGGER).
     if settings.require_trigger:
         bot_username = context.application.bot_data.get("bot_username")
         bot_id = context.application.bot_data.get("bot_id")
-        if not _is_triggered_message(update, bot_username=bot_username, bot_id=bot_id) and not _reply_is_expected_by_bot(update, context):
+        triggered = _is_triggered_message(update, bot_username=bot_username, bot_id=bot_id) or _reply_is_expected_by_bot(
+            update, context
+        )
+        if not triggered and not index.looks_like_question(text):
             if settings.log_decisions:
                 logging.info("skip chat=%s reason=not_triggered", chat_id)
             return

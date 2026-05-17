@@ -29,12 +29,13 @@ def format_help_message(*, lang: str, is_admin: bool, bot_username: str) -> str:
                 "• /update — подтянуть код с GitHub и перезапустить бота (как GIT_AUTOPULL)\n\n"
                 "Обычные участники в своём /help видят только, как задавать вопросы; "
                 "служебные команды им недоступны (бот не отвечает). "
-                f"Обычно вопрос задают, упоминая бота: {m}"
+                "На вопросы в группе бот отвечает сам; @ можно для уточнений или если фраза не похожа на вопрос."
             )
         return (
             "Справка\n\n"
-            "Вы можете получать ссылки на статьи вики, если задаёте вопрос в группе "
-            f"и упоминаете бота {m} (или отвечаете боту там, где это разрешено).\n\n"
+            "Вы можете получать ссылки на статьи вики, если задаёте вопрос в группе — "
+            "бот сам распознаёт вопрос (?, «как», «не работает» и т.п.). "
+            f"Упоминание {m} не обязательно; оно нужно для уточнений или если фраза не похожа на вопрос.\n\n"
             "Команды поиска и диагностики (/wiki, /id, /status и др.) доступны только "
             "администраторам чата; без прав бот не отвечает.\n\n"
             "• /help — эта справка"
@@ -58,12 +59,12 @@ def format_help_message(*, lang: str, is_admin: bool, bot_username: str) -> str:
             "• /update — pull latest code from GitHub and restart the bot (same as GIT_AUTOPULL)\n\n"
             "Regular members only see how to ask questions in their /help; "
             "maintenance commands are ignored (no reply). "
-            f"Usually you mention the bot: {m}"
+            "The bot answers questions in the group without @; mention the bot for follow-ups or non-question text."
         )
     return (
         "Help\n\n"
-        "You can get wiki links by asking a question in the group and mentioning the bot "
-        f"{m} (or replying to the bot where your group settings allow it).\n\n"
+        "You can get wiki links by asking a question in the group — the bot detects questions "
+        f"automatically. Mentioning {m} is optional; use it for follow-ups or non-question messages.\n\n"
         "Search and diagnostic commands (/wiki, /id, /status, etc.) work only for chat "
         "administrators; without rights the bot does not respond.\n\n"
         "• /help — this help"

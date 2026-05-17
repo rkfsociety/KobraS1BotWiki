@@ -34,7 +34,7 @@ _APSCHEDULER_SKIP_RE = re.compile(
 )
 
 _REASON_RU: dict[str, str] = {
-    "not_triggered": "нет @бота и не ответ на бота",
+    "not_triggered": "не вопрос и нет @бота / ответа на бота",
     "not_a_question": "не похоже на вопрос",
     "non_admin_command": "служебная команда не от админа",
     "cooldown": "кулдаун между ответами",
