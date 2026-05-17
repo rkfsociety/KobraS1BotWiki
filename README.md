@@ -141,13 +141,15 @@ restart-bot.cmd
 
 ## Служебный чат (ошибки, перезапуски, старт)
 
-В Telegram-канал **AnycubicWikiBotLog** с id **`-1003826125815`** (по умолчанию, см. `app/default_ops_chat.py`) бот шлёт краткие сообщения:
+В Telegram-канал **AnycubicWikiBotLog** с id **`-1003826125815`** (по умолчанию, см. `app/default_ops_chat.py`) бот шлёт:
 
+- **зеркало консоли** — всё, что пишется в лог (INFO и выше), пачками каждые ~2 с (`OPS_LOG_MIRROR_ENABLED`, по умолчанию вкл. если задан `OPS_NOTIFY_CHAT_ID`);
 - **старт** после `post_init` (username, число документов в индексе, pid);
 - **необработанные исключения** в обработчиках (`on_error`);
-- **перезапуск** перед остановкой polling после `/update` или фонового git autopull (и ошибка, если не удалось запустить `GIT_RESTART_COMMAND`);
-- **сбой `/update`** (исключение при git или сообщение git, если обновление не прошло, кроме «уже актуально»);
-- **исключение** в фоновом `git autopull`.
+- **перезапуск** перед остановкой polling после `/update` или фонового git autopull;
+- **сбой `/update`** и **исключение** в фоновом `git autopull`.
+
+Выключить зеркало консоли: `OPS_LOG_MIRROR_ENABLED=0`. Уровень: `OPS_LOG_MIRROR_LEVEL=DEBUG`. Интервал слива: `OPS_LOG_MIRROR_INTERVAL_SECONDS=2`.
 
 Отключить или сменить чат: в `.env` переменная **`OPS_NOTIFY_CHAT_ID`** (`0` / `off` — выключить; иначе числовой `chat_id`).
 

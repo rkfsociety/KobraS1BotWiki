@@ -42,6 +42,7 @@ from app.bot.handlers import (
 )
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.ops_notify import notify_ops
+from app.bot.telegram_log_mirror import attach_telegram_log_mirror, flush_telegram_log_mirror
 from app.bot.stores import _load_clarify_store, _load_fix_store
 from app.config import Settings, load_settings
 from app.error_codes_catalog import ensure_error_codes_catalog, merge_manual_overrides
@@ -74,6 +75,15 @@ def main() -> None:
     load_dotenv(override=False)
 
     settings = load_settings()
+
+    log_mirror_handler = attach_telegram_log_mirror(root=root, formatter=fmt, settings=settings)
+    if log_mirror_handler is not None:
+        logging.info(
+            "Зеркало лога в Telegram: chat_id=%s, уровень=%s, интервал=%ss",
+            settings.ops_notify_chat_id,
+            logging.getLevelName(settings.ops_log_mirror_level),
+            settings.ops_log_mirror_interval_seconds,
+        )
 
     # До загрузки тяжёлого кэша индекса — лимит виртуальной памяти (POSIX), см. MEMORY_LIMIT_MB.
     apply_posix_virtual_memory_limit_mb(settings.memory_limit_mb)
@@ -109,6 +119,8 @@ def main() -> None:
 
     app = Application.builder().token(settings.telegram_bot_token).build()
     app.bot_data["settings"] = settings
+    if log_mirror_handler is not None:
+        app.bot_data["log_mirror_handler"] = log_mirror_handler
     app.bot_data["wiki_index"] = wiki_index
     app.bot_data["wiki_indexer"] = indexer
     git_pull_restart_state: dict[str, str] = {"action": "none", "cmd": ""}
@@ -193,6 +205,14 @@ def main() -> None:
             )
         except Exception as e:
             logging.warning("ops_notify при старте: %s", e)
+        if application.bot_data.get("log_mirror_handler") is not None:
+            interval = max(1, int(settings.ops_log_mirror_interval_seconds))
+            application.bot_data["log_mirror_job"] = application.job_queue.run_repeating(
+                flush_telegram_log_mirror,
+                interval=interval,
+                first=1,
+                name="log_mirror",
+            )
 
     async def _index_step(context) -> None:
         _ = context

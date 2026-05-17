@@ -91,6 +91,12 @@ class Settings:
     ephemeral_exempt_chat_ids: frozenset[int]
     #: Служебный чат: ошибки, перезапуски, старт бота (0/off в .env — выкл.; см. OPS_NOTIFY_CHAT_ID)
     ops_notify_chat_id: int | None
+    #: Дублировать в OPS_NOTIFY_CHAT_ID всё, что пишется в консоль (logging INFO+)
+    ops_log_mirror_enabled: bool
+    #: Уровень зеркала: DEBUG, INFO, WARNING, …
+    ops_log_mirror_level: int
+    #: Как часто сливать буфер лога в Telegram (сек)
+    ops_log_mirror_interval_seconds: int
 
 
 def load_settings() -> Settings:
@@ -182,6 +188,14 @@ def load_settings() -> Settings:
     else:
         ops_notify_chat_id = DEFAULT_OPS_NOTIFY_CHAT_ID
 
+    ops_log_mirror_enabled = _get_bool(
+        "OPS_LOG_MIRROR_ENABLED",
+        ops_notify_chat_id is not None,
+    )
+    ops_log_mirror_level_name = (os.getenv("OPS_LOG_MIRROR_LEVEL") or "INFO").strip().upper()
+    ops_log_mirror_level = getattr(logging, ops_log_mirror_level_name, logging.INFO)
+    ops_log_mirror_interval_seconds = max(1, _get_int("OPS_LOG_MIRROR_INTERVAL_SECONDS", 2))
+
     # Загрузка списка разрешённых chat_id и topic_id из переменных окружения
     # ALLOWED_CHAT_IDS: список ID чатов через запятую (например, "123456789,-987654321")
     # ALLOWED_TOPIC_IDS: список ID тем через запятую (например, "10,20,30")
@@ -247,4 +261,7 @@ def load_settings() -> Settings:
         developer_user_ids=developer_user_ids,
         ephemeral_exempt_chat_ids=ephemeral_exempt_chat_ids,
         ops_notify_chat_id=ops_notify_chat_id,
+        ops_log_mirror_enabled=ops_log_mirror_enabled,
+        ops_log_mirror_level=ops_log_mirror_level,
+        ops_log_mirror_interval_seconds=ops_log_mirror_interval_seconds,
     )
