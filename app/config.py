@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -150,7 +152,17 @@ def load_settings() -> Settings:
     git_autopull_remote = (os.getenv("GIT_AUTOPULL_REMOTE") or "origin").strip() or "origin"
     git_autopull_branch = (os.getenv("GIT_AUTOPULL_BRANCH") or "master").strip() or "master"
     git_restart_raw = (os.getenv("GIT_RESTART_COMMAND") or "").strip()
-    git_restart_command = git_restart_raw if git_restart_raw else None
+    if git_restart_raw:
+        git_restart_command = git_restart_raw
+    elif sys.platform != "win32":
+        repo = _project_root()
+        log_rel = ".cache/restart.log"
+        git_restart_command = (
+            f"cd {shlex.quote(str(repo))} && ./restart-bot.sh >> {log_rel} 2>&1 "
+            f"|| ./ensure-bot.sh >> {log_rel} 2>&1"
+        )
+    else:
+        git_restart_command = None
 
     manual_qa_git_push = _get_bool("MANUAL_QA_GIT_PUSH", True)
 

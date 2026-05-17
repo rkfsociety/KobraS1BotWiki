@@ -1,19 +1,67 @@
 #!/bin/bash
+# Полный перезапуск бота в screen (после /update или вручную).
+set -euo pipefail
 
-set -e
-
-# Переходим в директорию скрипта
 cd "$(dirname "$0")"
+mkdir -p .cache
+LOG=".cache/restart.log"
 
-echo "Restarting bot..."
+log() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"
+}
 
-# Останавливаем бота
-./stop-bot.sh
+# BOT_SCREEN_NAME из .env (напр. 511.bot)
+if [[ -f .env ]]; then
+    line=$(grep -E '^BOT_SCREEN_NAME=' .env 2>/dev/null | tail -1 || true)
+    if [[ -n "$line" ]]; then
+        export "$line"
+    fi
+fi
 
-# Небольшая пауза
+SCREEN_NAME="${BOT_SCREEN_NAME:-kobras1botwiki}"
+
+log "=== restart-bot: screen=$SCREEN_NAME pwd=$(pwd) ==="
+
+# Завершить все процессы бота (если lock указывал не на ту screen)
+if pgrep -f '[p]ython.*-m app\.bot' >/dev/null 2>&1; then
+    log "pkill python -m app.bot"
+    pkill -f '[p]ython.*-m app\.bot' 2>/dev/null || true
+    sleep 2
+fi
+
+# Закрыть screen по lock и по имени сессии
+if [[ -f .cache/bot.lock ]]; then
+    ./stop-bot.sh 2>&1 | tee -a "$LOG" || true
+else
+    log "lock не найден, пробуем закрыть screen $SCREEN_NAME"
+fi
+
+if command -v screen >/dev/null 2>&1; then
+    for _ in 1 2 3 4 5; do
+        if ! screen -list 2>/dev/null | grep -qE "[0-9]+\.${SCREEN_NAME}[[:space:]]"; then
+            break
+        fi
+        log "screen -S $SCREEN_NAME -X quit (ожидание освобождения)"
+        screen -S "$SCREEN_NAME" -X quit 2>/dev/null || true
+        sleep 1
+    done
+fi
+
+rm -f .cache/bot.lock
+
 sleep 1
 
-# Запускаем бота
-./start-bot.sh
+if ! ./start-bot.sh 2>&1 | tee -a "$LOG"; then
+    log "[ERROR] start-bot.sh failed, пробуем ensure-bot.sh"
+    ./ensure-bot.sh 2>&1 | tee -a "$LOG" || exit 1
+fi
 
-echo "Done."
+sleep 2
+
+if pgrep -f '[p]ython.*-m app\.bot' >/dev/null 2>&1; then
+    log "OK: процесс python -m app.bot запущен"
+    exit 0
+fi
+
+log "[ERROR] после перезапуска процесс бота не найден — смотрите $LOG и screen -ls"
+exit 1

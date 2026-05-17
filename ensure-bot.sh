@@ -9,6 +9,13 @@
 set -e
 cd "$(dirname "$0")"
 
+if [[ -f .env ]]; then
+    line=$(grep -E '^BOT_SCREEN_NAME=' .env 2>/dev/null | tail -1 || true)
+    if [[ -n "$line" ]]; then
+        export "$line"
+    fi
+fi
+
 mkdir -p .cache
 exec 9>>.cache/bot.ensure.lock
 if ! flock -n 9; then

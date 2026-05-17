@@ -5,7 +5,13 @@ set -e
 # Переходим в директорию скрипта
 cd "$(dirname "$0")"
 
-# Имя сессии screen (можно переопределить: BOT_SCREEN_NAME=mybot ./start-bot.sh)
+# BOT_SCREEN_NAME из .env (напр. 511.bot) или из окружения
+if [[ -f .env ]]; then
+    line=$(grep -E '^BOT_SCREEN_NAME=' .env 2>/dev/null | tail -1 || true)
+    if [[ -n "$line" ]]; then
+        export "$line"
+    fi
+fi
 SCREEN_NAME="${BOT_SCREEN_NAME:-kobras1botwiki}"
 
 # Проверка наличия .env файла

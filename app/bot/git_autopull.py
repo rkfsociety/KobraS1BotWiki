@@ -160,17 +160,25 @@ async def schedule_restart_after_pull(
     restart_command: str | None,
     log_tag: str = "git",
 ) -> None:
-    """После успешного pull: subprocess (GIT_RESTART_COMMAND) или os.execv при следующем выходе из polling."""
+    """
+    После успешного pull: на Linux — отложенный ./restart-bot.sh (screen stop+start).
+    На Windows без GIT_RESTART_COMMAND — os.execv.
+    """
     repo = project_repo_root()
     cmd = (restart_command or "").strip()
-    mode_desc = "exec python -m app.bot"
+    log_file = repo / ".cache" / "restart.log"
+
     if cmd and sys.platform != "win32":
         git_pull_restart_state["action"] = "subprocess"
         git_pull_restart_state["cmd"] = cmd
-        mode_desc = f"subprocess: sleep 4 && {cmd[:800]}"
+        mode_desc = f"через 3 с: restart-bot.sh (лог: {log_file.name})"
+        shell_cmd = f"sleep 3 && {cmd}"
         try:
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            with log_file.open("a", encoding="utf-8") as lf:
+                lf.write(f"\n--- schedule_restart ({log_tag}) ---\n")
             subprocess.Popen(
-                ["/bin/bash", "-lc", f"sleep 4 && {cmd}"],
+                ["/bin/bash", "-lc", shell_cmd],
                 cwd=str(repo),
                 start_new_session=True,
                 stdin=subprocess.DEVNULL,
@@ -182,13 +190,14 @@ async def schedule_restart_after_pull(
             git_pull_restart_state["action"] = "none"
             await notify_ops(
                 application,
-                f"Перезапуск ({log_tag}): не удалось запустить GIT_RESTART_COMMAND\n{type(e).__name__}: {e}",
+                f"Перезапуск ({log_tag}): не удалось запустить перезапуск\n{type(e).__name__}: {e}",
             )
             return
     else:
         if cmd and sys.platform == "win32":
             logging.warning("%s: GIT_RESTART_COMMAND на Windows не поддерживается, используется os.execv", log_tag)
         git_pull_restart_state["action"] = "exec"
+        mode_desc = "exec python -m app.bot (только Windows / fallback)"
 
     await notify_ops(application, f"Перезапуск ({log_tag})\n{mode_desc}")
 
