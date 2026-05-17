@@ -13,8 +13,13 @@ def _truncate(s: str, *, max_len: int = 4000) -> str:
     return s[: max_len - 3] + "..."
 
 
-async def notify_ops(application: Application, body: str) -> None:
-    """Отправить текст в ``Settings.ops_notify_chat_id`` (если задан). Без parse_mode — меньше сбоев."""
+async def notify_ops(
+    application: Application,
+    body: str,
+    *,
+    parse_mode: str | None = None,
+) -> None:
+    """Отправить текст в ``Settings.ops_notify_chat_id`` (если задан)."""
     settings = application.bot_data.get("settings")
     if settings is None:
         return
@@ -25,10 +30,9 @@ async def notify_ops(application: Application, body: str) -> None:
     if not text:
         return
     try:
-        await application.bot.send_message(
-            chat_id=int(cid),
-            text=text,
-            disable_web_page_preview=True,
-        )
+        kwargs: dict = {"chat_id": int(cid), "text": text, "disable_web_page_preview": True}
+        if parse_mode:
+            kwargs["parse_mode"] = parse_mode
+        await application.bot.send_message(**kwargs)
     except Exception as e:
         logging.warning("ops_notify: не удалось отправить в chat_id=%s: %s", cid, e)

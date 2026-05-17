@@ -76,7 +76,7 @@ def main() -> None:
 
     settings = load_settings()
 
-    log_mirror_handler = attach_telegram_log_mirror(root=root, formatter=fmt, settings=settings)
+    log_mirror_handler = attach_telegram_log_mirror(root=root, settings=settings)
     if log_mirror_handler is not None:
         logging.info(
             "Зеркало лога в Telegram: chat_id=%s, уровень=%s, интервал=%ss",
