@@ -1307,6 +1307,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     # Не отвечаем на команды и свои же/сервисные сообщения.
     if text.startswith("/"):
+        if settings.log_decisions:
+            logging.info("skip chat=%s reason=slash_command", chat_id)
         return
 
     if settings.questions_only and not index.looks_like_question(text):

@@ -33,14 +33,6 @@ _APSCHEDULER_SKIP_RE = re.compile(
     re.I,
 )
 
-_SKIP_REASONS_QUIET = frozenset(
-    {
-        "not_triggered",
-        "not_a_question",
-        "non_admin_command",
-    }
-)
-
 _REASON_RU: dict[str, str] = {
     "not_triggered": "нет @бота и не ответ на бота",
     "not_a_question": "не похоже на вопрос",
@@ -55,6 +47,20 @@ _REASON_RU: dict[str, str] = {
     "error_code_not_found": "код ошибки не найден в вики",
     "error_code_ambiguous": "код ошибки — несколько вариантов модели",
     "no_guide_for_model": "гайд не для этой модели",
+    "slash_command": "сообщение — команда (обрабатывается отдельно)",
+    "model_required": "нужно уточнить модель принтера",
+}
+
+_KIND_RU: dict[str, str] = {
+    "wiki": "отправлена ссылка на вики",
+    "clarify_prompt": "запрошено уточнение модели",
+    "manual_qa_message": "ручной ответ (manual_qa)",
+    "manual_qa_cmd_wiki": "ручной ответ (/wiki)",
+    "generic_help_clarify": "просьба уточнить вопрос",
+    "error_code_text": "отправлена карточка кода ошибки",
+    "no_matching_guide": "ответ: нет гайда для этой модели",
+    "printer_design_fact": "справка по конструкции принтера",
+    "error_code_clarify_prompt": "уточнение модели для кода ошибки",
 }
 
 _LEVEL_ICON = {
@@ -65,13 +71,6 @@ _LEVEL_ICON = {
     "CRITICAL": "🛑",
 }
 
-_RE_SKIP = re.compile(
-    r"^skip chat=(?P<chat>-?\d+)(?: user=(?P<user>\d+))? reason=(?P<reason>\w+)"
-)
-_RE_SKIP_SCORE = re.compile(
-    r"^skip chat=(?P<chat>-?\d+) reason=(?P<reason>\w+) score=(?P<score>\d+) min=(?P<min>\d+)"
-    r"(?: url=(?P<url>\S+))?$"
-)
 _RE_SEEN = re.compile(
     r"^seen chat=(?P<chat>-?\d+) user=(?P<user>\S+) has_reply=(?P<reply>\w+)"
     r"(?: reply_mid=(?P<rmid>\S+))? reply_from=(?P<rfrom>\S+) text=(?P<text>.*)$"
@@ -101,6 +100,66 @@ def _user_line(user: str) -> str:
 
 def _reason_ru(code: str) -> str:
     return _REASON_RU.get(code, code.replace("_", " "))
+
+
+def _format_skip(msg: str) -> str | None:
+    if not msg.startswith("skip chat="):
+        return None
+    chat_m = re.search(r"chat=(-?\d+)", msg)
+    reason_m = re.search(r"reason=(\w+)", msg)
+    if not chat_m or not reason_m:
+        return None
+    reason = reason_m.group(1)
+    lines = [
+        "⏭ <b>Решение: пропуск</b>",
+        _chat_line(chat_m.group(1)),
+        f"Причина: {_esc(_reason_ru(reason))}",
+    ]
+    user_m = re.search(r"user=(\d+)", msg)
+    if user_m:
+        lines.insert(2, _user_line(user_m.group(1)))
+    topic_m = re.search(r"topic=(\S+)", msg)
+    if topic_m and topic_m.group(1) != "None":
+        lines.append(f"Тема форума: <code>{_esc(topic_m.group(1))}</code>")
+    if m := re.search(r"\bcode=(\d+)\b", msg):
+        lines.append(f"Код ошибки: <code>{m.group(1)}</code>")
+    if m := re.search(r"score=(\d+)", msg):
+        lines.append(f"Оценка поиска: {m.group(1)}")
+    if m := re.search(r"min=(\d+)", msg):
+        lines.append(f"Порог MIN_SCORE: {m.group(1)}")
+    if m := re.search(r"docs=(\d+)", msg):
+        lines.append(f"Страниц в индексе: {m.group(1)}")
+    if m := re.search(r"url=(\S+)", msg):
+        lines.append(f"Черновик URL: {_esc(m.group(1))}")
+    if m := re.search(r"hints=(.+)$", msg):
+        lines.append(f"Модель в запросе: {_esc(m.group(1))}")
+    if cmd_m := re.search(r"cmd=/(\w+)", msg):
+        lines.append(f"Команда: /{cmd_m.group(1)}")
+    return "\n".join(lines)
+
+
+def _format_bot_reply(msg: str) -> str | None:
+    m = _RE_BOT_REPLY.match(msg)
+    if not m:
+        return None
+    kind = m.group("kind")
+    kind_ru = _KIND_RU.get(kind, kind.replace("_", " "))
+    lines = [
+        "✅ <b>Решение: ответ в чат</b>",
+        f"Действие: {_esc(kind_ru)}",
+        _chat_line(m.group("chat")),
+    ]
+    if m.group("user"):
+        lines.append(_user_line(m.group("user")))
+    if sm := re.search(r"score=(\d+)", msg):
+        lines.append(f"Оценка вики: {sm.group(1)}")
+    if um := re.search(r"url=(\S+)", msg):
+        lines.append(f"Ссылка: {_esc(um.group(1))}")
+    if cm := re.search(r"\bcode=(\d+)\b", msg):
+        lines.append(f"Код ошибки: <code>{cm.group(1)}</code>")
+    if hm := re.search(r"hints=(\S+)", msg):
+        lines.append(f"Модель: {_esc(hm.group(1))}")
+    return "\n".join(lines)
 
 
 def format_log_for_telegram(record: logging.LogRecord, *, redact: str | None = None) -> str | None:
@@ -156,45 +215,13 @@ def _format_body(msg: str, record: logging.LogRecord) -> str | None:
             f"За шаг: +{m.group('batch')} стр., в памяти: {m.group('mem')}"
         )
 
-    m = _RE_SKIP.match(msg)
-    if m:
-        reason = m.group("reason")
-        if reason in _SKIP_REASONS_QUIET:
-            return None
-        lines = ["⏭ <b>Пропуск</b>", _chat_line(m.group("chat")), f"Причина: {_esc(_reason_ru(reason))}"]
-        if m.group("user"):
-            lines.insert(2, _user_line(m.group("user")))
-        return "\n".join(lines)
+    skip = _format_skip(msg)
+    if skip:
+        return skip
 
-    m = _RE_SKIP_SCORE.match(msg)
-    if m:
-        reason = m.group("reason")
-        if reason in _SKIP_REASONS_QUIET:
-            return None
-        lines = [
-            "⏭ <b>Пропуск</b>",
-            _chat_line(m.group("chat")),
-            f"Причина: {_esc(_reason_ru(reason))}",
-            f"Оценка: {m.group('score')} (порог {m.group('min')})",
-        ]
-        if m.group("url"):
-            lines.append(f"URL: {_esc(m.group('url'))}")
-        return "\n".join(lines)
-
-    if msg.startswith("skip chat="):
-        chat_m = re.search(r"chat=(-?\d+)", msg)
-        reason_m = re.search(r"reason=(\w+)", msg)
-        if chat_m and reason_m:
-            reason = reason_m.group(1)
-            if reason in _SKIP_REASONS_QUIET:
-                return None
-            return "\n".join(
-                [
-                    "⏭ <b>Пропуск</b>",
-                    _chat_line(chat_m.group(1)),
-                    f"Причина: {_esc(_reason_ru(reason))}",
-                ]
-            )
+    reply = _format_bot_reply(msg)
+    if reply:
+        return reply
 
     m = _RE_SEEN.match(msg)
     if m:
@@ -205,17 +232,6 @@ def _format_body(msg: str, record: logging.LogRecord) -> str | None:
         if m.group("reply") == "true":
             lines.append("Ответ (reply) на другое сообщение")
         lines.append(f"Текст: {_esc(text[:500])}")
-        return "\n".join(lines)
-
-    m = _RE_BOT_REPLY.match(msg)
-    if m:
-        lines = ["✅ <b>Ответ бота</b>", f"Тип: <code>{_esc(m.group('kind'))}</code>", _chat_line(m.group("chat"))]
-        sm = re.search(r"score=(\d+)", msg)
-        if sm:
-            lines.append(f"Оценка вики: {sm.group(1)}")
-        um = re.search(r"url=(\S+)", msg)
-        if um:
-            lines.append(f"Ссылка: {_esc(um.group(1))}")
         return "\n".join(lines)
 
     if msg.startswith("Входящее сообщение chat="):
@@ -234,9 +250,11 @@ def _format_body(msg: str, record: logging.LogRecord) -> str | None:
     if m:
         return "\n".join(
             [
-                "❓ <b>Уточнение модели</b>",
+                "❓ <b>Решение: уточнение модели</b>",
                 _chat_line(m.group("chat")),
                 f"Причина: {_esc(_reason_ru(m.group('reason')))}",
+                f"Оценка: {m.group('score')}",
+                f"Черновик URL: {_esc(m.group('url'))}",
             ]
         )
 
