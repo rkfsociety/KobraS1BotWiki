@@ -89,6 +89,10 @@ def _looks_like_question(text: str) -> bool:
     # иначе бот будет "влезать" в разговор.
     if "не помнит как" in t or "уже не помнит как" in t:
         return False
+    if re.search(r"\b(кинь|скинь|дай|подкинь|киньте|скиньте|дайте)\w*\b.{0,20}\bссыл", t):
+        return True
+    if "ссыл" in t and any(w in t for w in ("вики", "wiki", "настрой", "калибр", "уровн", "стол", "куб")):
+        return True
     return any(
         w in t
         for w in (

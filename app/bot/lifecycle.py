@@ -36,6 +36,7 @@ from app.bot.handlers import (
     cmd_update,
     cmd_wiki,
     on_any_update,
+    on_channel_command,
     on_error,
     on_message,
 )
@@ -144,6 +145,8 @@ def main() -> None:
     app.add_handler(CommandHandler("qalist", cmd_qalist))
     app.add_handler(CommandHandler("qadel", cmd_qadel))
     app.add_handler(CommandHandler("update", cmd_update))
+    # В канале (паблик) команды приходят как channel_post — CommandHandler их не видит (PTB).
+    app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POSTS & filters.COMMAND, on_channel_command))
     # Диагностика: первым делом логируем любой update
     app.add_handler(TypeHandler(Update, on_any_update), group=-1)
     # filters.UpdateType.* здесь не используем, чтобы не "отрезать" обычные сообщения.

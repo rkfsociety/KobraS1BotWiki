@@ -16,6 +16,11 @@ _MAP: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bнагревател(ь|я)\b", re.I), "heater cartridge"),
     (re.compile(r"\bстол\b|\bплатформ(а|ы)\b", re.I), "bed build plate"),
     (re.compile(r"\bкалибр(овк)?а\b|\bуровн(ять|ень)\b|\bлевел(инг)?\b", re.I), "leveling calibration"),
+    (
+        re.compile(r"\bкуб(ов|а|ы)?\b.*\b(стол|настрой|калибр|уровн)|\b(стол|настрой|калибр|уровн).*\bкуб(ов|а|ы)?\b", re.I),
+        "nozzle scraping hot bed calibration flatness",
+    ),
+    (re.compile(r"\bцарапа(ет|ют|ет)?\b.*\bстол|\bстол.*\bцарапа", re.I), "nozzle scraping hot bed"),
     (re.compile(r"\bпрошивк(а|у)\b|\bфирмвар(е)?\b", re.I), "firmware update"),
     (re.compile(r"\bошибк(а|у)\b|\berr\b", re.I), "error"),
     (re.compile(r"\bне печатает\b|\bне печата(ет|ю)\b", re.I), "not printing"),
@@ -68,6 +73,8 @@ def expand_queries(text: str) -> list[str]:
             out.append("extruder replacement module guide")
         if "door" in extra_txt and any(x in extra_txt for x in ("replace", "install", "remov", "glass")):
             out.append("glass door replacement install guide")
+        if "scraping" in extra_txt or "flatness" in extra_txt:
+            out.append("nozzle scraping hot bed troubleshooting guide")
 
     seen: set[str] = set()
     uniq: list[str] = []

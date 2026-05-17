@@ -50,7 +50,39 @@ def _topic_path_bonus(topic: str | None, url: str) -> int:
             b += 52
         elif "door" in u and "glass" in u:
             b += 28
+    if _topic_is_bed_setup_intent(topic):
+        if "nozzle-scraping" in u or "scraping" in u:
+            b += 55
+        elif "first-layer" in u:
+            b += 28
+        elif "leveling" in u or "level" in u:
+            b += 18
+        if "hot-bed" in u or "hotbed" in u:
+            b += 12
     return b
+
+
+def _topic_is_bed_setup_intent(topic: str | None) -> bool:
+    if not topic:
+        return False
+    tl = topic.lower()
+    has_bed = any(k in tl for k in ("стол", "bed", "платформ", "hot bed", "hotbed"))
+    has_setup = any(
+        k in tl
+        for k in (
+            "настрой",
+            "калибр",
+            "уровн",
+            "level",
+            "calibrat",
+            "куб",
+            "scraping",
+            "царапа",
+            "первый слой",
+            "first layer",
+        )
+    )
+    return has_bed and has_setup
 
 
 def _topic_is_door_intent(topic: str | None) -> bool:

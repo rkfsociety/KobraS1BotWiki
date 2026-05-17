@@ -35,6 +35,19 @@ async def user_has_admin_command_access(
         return True
     if chat.type == ChatType.PRIVATE:
         return True
+    if chat.type == ChatType.CHANNEL:
+        # В канале постить могут только админы. Пост «от имени канала» — без from_user.
+        msg = update.effective_message
+        if msg is not None and getattr(msg, "sender_chat", None) is not None:
+            return True
+        if user is None:
+            return False
+        try:
+            member = await context.bot.get_chat_member(chat.id, user.id)
+        except Exception as e:
+            logging.warning("get_chat_member failed chat=%s user=%s: %s", chat.id, user.id, e)
+            return False
+        return member.status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR)
     if chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
         return False
     try:

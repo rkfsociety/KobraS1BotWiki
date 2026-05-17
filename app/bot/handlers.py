@@ -65,6 +65,46 @@ from app.error_codes_catalog import ErrorCodeInfo
 from app.ru_layer import expand_queries
 from app.web_wiki_index import WebWikiIndex
 
+# CommandHandler в PTB не обрабатывает channel_post — маршрутизируем вручную (см. lifecycle.py).
+_CHANNEL_COMMAND_HANDLERS: dict[str, object] = {}
+
+
+def _register_channel_commands() -> None:
+    if _CHANNEL_COMMAND_HANDLERS:
+        return
+    _CHANNEL_COMMAND_HANDLERS.update(
+        {
+            "help": cmd_help,
+            "id": cmd_id,
+            "admincheck": cmd_admincheck,
+            "wiki": cmd_wiki,
+            "ping": cmd_ping,
+            "status": cmd_status,
+            "error": cmd_error,
+            "fix": cmd_fix,
+            "qaadd": cmd_qaadd,
+            "qalist": cmd_qalist,
+            "qadel": cmd_qadel,
+            "update": cmd_update,
+        }
+    )
+
+
+async def on_channel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Команды в Telegram-канале (паблик): апдейты приходят как channel_post, не message."""
+    _register_channel_commands()
+    msg = update.effective_message
+    if not msg or not msg.text:
+        return
+    head = (msg.text.split(maxsplit=1)[0] if msg.text else "").strip()
+    if not head.startswith("/"):
+        return
+    cmd = head.split("@", 1)[0][1:].lower()
+    handler = _CHANNEL_COMMAND_HANDLERS.get(cmd)
+    if handler is None:
+        return
+    await handler(update, context)  # type: ignore[misc]
+
 
 async def _deny_unless_admin_command_access(
     update: Update,
@@ -258,6 +298,8 @@ async def cmd_admincheck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     lines = [_t(lang, "admincheck_header"), ""]
     if chat.type == ChatType.PRIVATE:
         lines.append(_t(lang, "admincheck_private"))
+    elif chat.type == ChatType.CHANNEL:
+        lines.append(_t(lang, "admincheck_channel"))
     else:
         lines.append(_t(lang, "admincheck_chat").format(chat_id=chat.id, chat_type=str(chat.type)))
         try:
