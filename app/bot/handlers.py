@@ -55,6 +55,7 @@ from app.bot.text_heuristics import (
     _is_error_code_query,
     _is_generic_help_without_context,
     _model_slug_hints,
+    _needs_model_clarification,
 )
 from app.bot.wiki_ranking import (
     _response_wiki_url_acceptable,
@@ -367,7 +368,7 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "last_url_ts_by_chat": {},
         },
     )
-    if await _try_reply_manual_qa(
+    if not _needs_model_clarification(query) and await _try_reply_manual_qa(
         update,
         msg,
         context=context,
@@ -1337,7 +1338,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     ):
         return
 
-    if await _try_reply_manual_qa(
+    if not _needs_model_clarification(text) and await _try_reply_manual_qa(
         update,
         msg,
         context=context,

@@ -37,6 +37,8 @@ def _topic_needs_printer_model(text: str) -> bool:
         # Коды ошибок обрабатываются отдельно через _extract_error_code/_is_error_code_query.
         "калибр",
         "левел",
+        "уровн",
+        "настрой",
         "не печатает",
         "ремень",
         "застрял",
@@ -69,7 +71,14 @@ def _topic_needs_printer_model(text: str) -> bool:
         "hinge",
         "enclosure",
     )
-    return any(x in t for x in ru + en)
+    if any(x in t for x in ru + en):
+        return True
+    # «кубы» / leveling cubes при настройке стола — разная инструкция по моделям
+    if "куб" in t and any(
+        k in t for k in ("стол", "калибр", "уровн", "настрой", "level", "bed", "скрейп", "царап", "сопл")
+    ):
+        return True
+    return False
 
 
 def _extract_error_code(text: str) -> str | None:
