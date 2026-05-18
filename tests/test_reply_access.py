@@ -59,3 +59,27 @@ def test_general_only_topic_zero():
         chat_id=-1001,
         topic_id=42,
     )
+
+
+def test_both_lists_require_chat_and_topic():
+    """Чат в ALLOWED_CHAT_IDS не открывает все темы форума — нужна и тема из ALLOWED_TOPIC_IDS."""
+    chats = frozenset({-1001})
+    topics = frozenset({10, 20})
+    assert chat_topic_in_allowed_lists(
+        allowed_chat_ids=chats,
+        allowed_topic_ids=topics,
+        chat_id=-1001,
+        topic_id=10,
+    )
+    assert not chat_topic_in_allowed_lists(
+        allowed_chat_ids=chats,
+        allowed_topic_ids=topics,
+        chat_id=-1001,
+        topic_id=99,
+    )
+    assert not chat_topic_in_allowed_lists(
+        allowed_chat_ids=chats,
+        allowed_topic_ids=topics,
+        chat_id=-1002,
+        topic_id=10,
+    )

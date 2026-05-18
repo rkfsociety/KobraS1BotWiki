@@ -139,8 +139,10 @@ def _format_skip(msg: str) -> str | None:
         lines.append(f"Страниц в индексе: {m.group(1)}")
     if m := re.search(r"url=(\S+)", msg):
         lines.append(f"Черновик URL: {_esc(m.group(1))}")
+    # Текст уже в «Входящее» (seen) для того же mid — не дублируем в зеркале.
     if m := re.search(r"\bquery=(.+)$", msg):
-        lines.append(f"Текст запроса: {_esc(m.group(1)[:LOG_MIRROR_TEXT_MAX])}")
+        if not mid_m:
+            lines.append(f"Текст запроса: {_esc(m.group(1)[:LOG_MIRROR_TEXT_MAX])}")
     if m := re.search(r"hints=(.+)$", msg):
         lines.append(f"Модель в запросе: {_esc(m.group(1))}")
     if cmd_m := re.search(r"cmd=/(\w+)", msg):

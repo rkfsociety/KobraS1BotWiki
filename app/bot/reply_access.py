@@ -26,7 +26,9 @@ def chat_topic_in_allowed_lists(
     """
     True — чат/тема в ALLOWED_CHAT_IDS / ALLOWED_TOPIC_IDS (или списки не заданы).
 
-    Логика OR: достаточно совпадения по chat_id или по message_thread_id.
+    Только чаты: сообщение в перечисленном chat_id (любая тема).
+    Только темы: topic_id в списке (в любом чате).
+    Оба списка: chat_id в ALLOWED_CHAT_IDS и тема подходит под ALLOWED_TOPIC_IDS.
     0 в ALLOWED_TOPIC_IDS — только General (topic_id is None).
     """
     if allowed_chat_ids is None and allowed_topic_ids is None:
@@ -46,7 +48,7 @@ def chat_topic_in_allowed_lists(
         is_topic_allowed = topic_id is None
     else:
         is_topic_allowed = topic_id is not None and topic_id in allowed_topic_ids
-    return is_chat_allowed or is_topic_allowed
+    return is_chat_allowed and is_topic_allowed
 
 
 def _member_can_send_messages(member) -> bool:

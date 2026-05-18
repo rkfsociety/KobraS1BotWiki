@@ -21,3 +21,7 @@ categories:
       - chore
 change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
 no-changes-template: "Нет изменений в этой версии."
+template: |
+  ## Изменения
+
+  $CHANGES

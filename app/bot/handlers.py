@@ -41,6 +41,7 @@ from app.bot.i18n import _detect_user_lang, _lang_from_message, _t
 from app.bot.reply_logging import _log_bot_reply
 from app.bot.telegram_log_mirror import LOG_MIRROR_TEXT_MAX
 from app.bot.decision_log import log_seen_message, log_skip
+from app.bot.reply_access import chat_topic_in_allowed_lists, should_process_incoming_wiki_message
 from app.bot.review_mention import reply_for_user
 from app.bot.stores import (
     _answer_ctx_key,
@@ -560,7 +561,12 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         # Обычная логика: разрешаем если topic_id в списке или список не задан
         is_topic_allowed = (allowed_topics is None) or (actual_topic_id is not None and actual_topic_id in allowed_topics)
     
-    is_allowed = is_chat_allowed or is_topic_allowed
+    is_allowed = chat_topic_in_allowed_lists(
+        allowed_chat_ids=allowed_chats,
+        allowed_topic_ids=allowed_topics,
+        chat_id=chat_id,
+        topic_id=actual_topic_id,
+    )
     
     bot_username = context.application.bot_data.get("bot_username")
     text = (
@@ -1086,6 +1092,15 @@ async def on_any_update(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     try:
         if isinstance(update, Update):
+            chat = update.effective_chat
+            m = update.effective_message
+            if chat and m and not chat_topic_in_allowed_lists(
+                allowed_chat_ids=settings.allowed_chat_ids,
+                allowed_topic_ids=settings.allowed_topic_ids,
+                chat_id=chat.id,
+                topic_id=m.message_thread_id,
+            ):
+                return
             kind = (
                 "message"
                 if update.message
@@ -1138,40 +1153,16 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         },
     )
     chat_id = update.effective_chat.id
-    message_thread_id = update.effective_message.message_thread_id if update.effective_message else None
-    
-    # Проверка разрешённых чатов и тем
-    # Бот отвечает только если чат или тема в списке разрешённых (или списки не заданы)
-    allowed_chats = settings.allowed_chat_ids
-    allowed_topics = settings.allowed_topic_ids
-    
-    # Для on_message используем тот же подход: если message_thread_id=None в форуме,
-    # это может быть общая тема General, но мы всё равно считаем topic_id=None
-    actual_topic_id = message_thread_id
-    
-    # Специальная обработка: если allowed_topics содержит 0, это означает "только общая тема General"
-    # В этом случае actual_topic_id должен быть None (что и есть для General)
-    allow_general_only = allowed_topics is not None and 0 in allowed_topics
-    
-    is_chat_allowed = (allowed_chats is None) or (chat_id in allowed_chats)
-    
-    if allow_general_only:
-        # Разрешаем только если message_thread_id is None (общая тема)
-        is_topic_allowed = actual_topic_id is None
-    else:
-        # Обычная логика: разрешаем если topic_id в списке или список не задан
-        is_topic_allowed = (allowed_topics is None) or (actual_topic_id is not None and actual_topic_id in allowed_topics)
-    
-    # Если списки заданы — проверяем, что хотя бы одно условие выполнено
-    # Если ни один список не задан — бот работает везде (старое поведение)
-    if allowed_chats is not None or allowed_topics is not None:
-        if not (is_chat_allowed or is_topic_allowed):
-            if settings.log_decisions:
-                log_skip(chat_id, "not_in_allowed_lists", msg=update.effective_message, topic=message_thread_id)
-            return
-    
     msg = update.effective_message
-    if not msg:
+    topic_id = msg.message_thread_id
+    ok, _reason = await should_process_incoming_wiki_message(
+        context,
+        settings,
+        update.effective_chat,
+        chat_id,
+        topic_id,
+    )
+    if not ok:
         return
     # В группах часто вопросы прилетают как "text", но иногда как подпись к медиа.
     raw_text = msg.text if msg.text is not None else msg.caption
@@ -1348,7 +1339,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 score=best_score,
                 min=settings.min_score,
                 url=best_doc.url,
-                query=text[:LOG_MIRROR_TEXT_MAX],
             )
         return
     clarify_hi = await _try_send_printer_clarify(

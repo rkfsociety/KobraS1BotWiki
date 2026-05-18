@@ -13,7 +13,7 @@ def test_seen_incoming_not_truncated_at_120():
     assert out is not None
     assert "смазку" in out
     assert "xxxx" in out
-def test_skip_low_score_shows_query():
+def test_skip_low_score_shows_query_without_mid():
     q = "как смазать механизм " + ("y" * 100)
     msg = f"skip chat=-1001 reason=low_score score=59 min=72 url=https://wiki.example/x query={q}"
     record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
@@ -21,6 +21,15 @@ def test_skip_low_score_shows_query():
     assert out is not None
     assert "Текст запроса:" in out
     assert "как смазать" in out
+
+def test_skip_low_score_omits_query_when_mid():
+    q = "как смазать механизм " + ("y" * 100)
+    msg = f"skip chat=-1001 reason=low_score mid=99 score=59 min=72 url=https://wiki.example/x query={q}"
+    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
+    out = format_log_for_telegram(record)
+    assert out is not None
+    assert "Текст запроса:" not in out
+    assert "как смазать" not in out
 def test_log_mirror_text_max_reasonable():
     assert LOG_MIRROR_TEXT_MAX >= 500
 
