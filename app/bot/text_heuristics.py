@@ -179,6 +179,94 @@ def _pick_error_code_doc(index: WebWikiIndex, code: str, *, context_text: str) -
     # Если суффикса не нашли и базовой нет — неоднозначно, пусть вызывающий уточнит модель.
     return candidates[0] if len(candidates) == 1 else None
 
+def _topic_is_ace_not_detected_intent(text: str) -> bool:
+    """Принтер/софт не видит ACE Pro (аська)."""
+    t = text.lower()
+    has_ace = any(
+        k in t
+        for k in (
+            "ace pro",
+            "ace-pro",
+            "аська",
+            "аска",
+            "аськ",
+            "эйс",
+        )
+    ) or re.search(r"\bace\b", t)
+    has_not_seen = any(
+        k in t
+        for k in (
+            "не видит",
+            "не вид",
+            "не определя",
+            "не наход",
+            "не подключа",
+            "not detected",
+            "doesn't see",
+            "does not see",
+            "not see",
+            "can't see",
+            "cannot see",
+        )
+    ) or ("видится" in t and any(k in t for k in ("аська", "аска", "ace")))
+    return bool(has_ace and has_not_seen)
+
+
+def _user_already_replaced_motherboard(text: str) -> bool:
+    t = text.lower()
+    if not any(k in t for k in ("материн", "motherboard", "mainboard", "main board")):
+        return False
+    return any(
+        k in t
+        for k in (
+            "поменял",
+            "заменил",
+            "сменил",
+            "прислали",
+            "поставил",
+            "менял",
+            "replaced",
+            "already",
+        )
+    )
+
+
+def _has_geo_social_cues(text: str) -> bool:
+    """Просьба найти владельцев принтера поблизости (не тех. вопрос)."""
+    t = text.lower()
+    people = ("кто", "есть ли", "найдётся", "найдется", "познаком", "встрет", "живёт", "живет", "живут")
+    geo = (
+        "рядом",
+        "поблизости",
+        "недалеко",
+        "област",
+        "город",
+        "обнинск",
+        "наро-фоминск",
+        "наро фоминск",
+        "москв",
+        "питер",
+        "спб",
+        "санкт-петербург",
+        "район",
+    )
+    return any(p in t for p in people) and any(g in t for g in geo)
+
+
+def _is_geo_social_only_request(text: str) -> bool:
+    """
+    Координация встреч/обмена с соседями — бот молчит.
+    Если в том же сообщении есть тех. проблема (ACE, код ошибки) — ищем вики.
+    """
+    if not _has_geo_social_cues(text):
+        return False
+    if _topic_is_ace_not_detected_intent(text) or _is_error_code_query(text):
+        return False
+    if _topic_needs_printer_model(text) and _printer_mentioned(text):
+        return False
+    return True
+
+
 def _needs_model_clarification(text: str) -> bool:
     # Для кодов ошибок модель не спрашиваем — либо найдём страницу по коду, либо промолчим.
     if _is_error_code_query(text):

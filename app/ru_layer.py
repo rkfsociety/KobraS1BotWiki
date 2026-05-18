@@ -49,6 +49,8 @@ _MAP: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bснять\b|\bразобрать\b", re.I), "remove disassemble"),
     (re.compile(r"\bкобра\b", re.I), "kobra"),
     (re.compile(r"\bкомбо\b", re.I), "combo"),
+    (re.compile(r"\bаська\b|\bаска\b|\bаськ\w*\b|\bэйс\b", re.I), "ACE Pro filament station"),
+    (re.compile(r"\bace\s*pro\b", re.I), "ACE Pro"),
     (re.compile(r"\bдвер(ь|и|ей|ью|ями)?\b", re.I), "glass door acrylic enclosure"),
     (re.compile(r"\bпередн(яя|ей|юю|ие|их)?\b", re.I), "front"),
     (re.compile(r"\bпетл(и|я|ей|ью)?\b", re.I), "hinge door"),
@@ -87,6 +89,10 @@ def expand_queries(text: str) -> list[str]:
             out.append("glass door replacement install guide")
         if "scraping" in extra_txt or "flatness" in extra_txt:
             out.append("nozzle scraping hot bed troubleshooting guide")
+        if re.search(r"(аська|аска|аськ\w*|ace\s*pro|\bace\b)", base, re.I) and re.search(
+            r"не\s+вид|not\s+(see|detect)|doesn.?t\s+see", base, re.I
+        ):
+            out.append("printer binding ACE Pro network connection troubleshooting")
         if re.search(r"филамент|подач|шестерн|экструдер|feeding|extruder", base, re.I) and re.search(
             r"не\s+пода|срыв|крутит|застрял|jam|clog|block|feeding", base, re.I
         ):

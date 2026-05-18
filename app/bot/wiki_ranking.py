@@ -10,7 +10,9 @@ from app.bot.text_heuristics import (
     _extract_error_code,
     _is_error_code_query,
     _model_slug_hints,
+    _topic_is_ace_not_detected_intent,
     _topic_is_filament_feed_intent,
+    _user_already_replaced_motherboard,
 )
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
@@ -60,6 +62,21 @@ def _topic_path_bonus(topic: str | None, url: str) -> int:
             b += 18
         if "hot-bed" in u or "hotbed" in u:
             b += 12
+    if _topic_is_ace_not_detected_intent(topic):
+        if "printer-binding" in u or "binding" in u:
+            b += 58
+        if "network-connection" in u:
+            b += 48
+        if "firmware" in u:
+            b += 32
+        if "ace-pro" in u:
+            b += 22
+        if u.rstrip("/").endswith("/faq") or "/faq" in u:
+            b += 18
+        if "motherboard" in u and ("replacement" in u or "replace" in u):
+            b -= 72 if _user_already_replaced_motherboard(topic) else 38
+        if "hotbed-replacement" in u or "extruder" in u and "replacement" in u:
+            b -= 35
     if _topic_is_filament_feed_intent(topic):
         if "print-head-clogging" in u or ("clogging" in u and "print" in u):
             b += 62
@@ -254,6 +271,21 @@ def _guide_url_matches_model_hints(url: str, hints: frozenset[str]) -> bool:
     return any(h in u for h in hints)
 
 
+def _ace_connection_guide_url_plausible(url: str) -> bool:
+    u = url.lower().replace("_", "-")
+    if "printer-binding" in u or "/binding" in u:
+        return True
+    if "network-connection" in u:
+        return True
+    if "firmware" in u and "update" in u:
+        return True
+    if "ace-pro" in u:
+        return True
+    if u.rstrip("/").endswith("/faq") or "/faq" in u:
+        return True
+    return False
+
+
 def _door_guide_url_plausible(url: str) -> bool:
     u = url.lower().replace("_", "-")
     if "glass-door" in u:
@@ -287,6 +319,14 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
         url, allow_silicone=_topic_is_nozzle_silicone_intent(question)
     ):
         return False
+    if _topic_is_ace_not_detected_intent(question):
+        u = url.lower()
+        if "motherboard" in u and ("replacement" in u or "replace" in u):
+            if _user_already_replaced_motherboard(question):
+                return False
+        if not _ace_connection_guide_url_plausible(url):
+            if any(k in u for k in ("replacement", "replace-guide")):
+                return False
     if _topic_is_filament_feed_intent(question) and not _filament_feed_guide_url_plausible(url):
         return False
     return True
