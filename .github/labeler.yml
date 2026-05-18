@@ -1,0 +1,30 @@
+bot:
+  - changed-files:
+      - any-glob-to-any-file:
+          - app/bot/**
+          - app/**
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file: tests/**
+
+wiki:
+  - changed-files:
+      - any-glob-to-any-file:
+          - wiki/**
+          - "**/*.md"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: .github/**
+
+deploy:
+  - changed-files:
+      - any-glob-to-any-file:
+          - deploy/**
+          - "**/*.sh"
+          - "**/*.cmd"
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file: requirements.txt

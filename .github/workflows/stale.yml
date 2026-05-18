@@ -1,0 +1,30 @@
+name: Stale
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-label: stale
+          stale-pr-label: stale
+          exempt-issue-labels: pinned,security,dependabot
+          exempt-pr-labels: pinned,security,dependabot
+          stale-issue-message: >
+            Этот issue давно без активности. Закроется через 14 дней, если не появятся комментарии.
+          stale-pr-message: >
+            Этот PR давно без активности. Закроется через 14 дней, если не появятся комментарии.
+          close-issue-message: Issue закрыт из‑за неактивности.
+          close-pr-message: PR закрыт из‑за неактивности.

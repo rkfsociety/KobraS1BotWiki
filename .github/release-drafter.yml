@@ -1,0 +1,23 @@
+name-template: v$RESOLVED_VERSION
+tag-template: v$RESOLVED_VERSION
+categories:
+  - title: Features
+    labels:
+      - enhancement
+      - feature
+  - title: Bug fixes
+    labels:
+      - bug
+      - fix
+  - title: Bot
+    labels:
+      - bot
+  - title: Dependencies
+    labels:
+      - dependencies
+  - title: Maintenance
+    labels:
+      - ci
+      - chore
+change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
+no-changes-template: "Нет изменений в этой версии."

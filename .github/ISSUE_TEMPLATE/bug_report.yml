@@ -1,0 +1,30 @@
+name: Баг
+description: Сообщить об ошибке в боте или документации
+labels: [bug]
+body:
+  - type: markdown
+    value: Опишите проблему максимально конкретно. Не публикуйте токены бота и содержимое `.env`.
+  - type: textarea
+    id: description
+    attributes:
+      label: Что произошло
+      placeholder: Бот не ответил / ответил неверной ссылкой / упал при старте…
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как воспроизвести
+      placeholder: "1. Группа … 2. Сообщение …"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Коммит или версия (если знаете)
+      placeholder: hash / дата деплоя
+  - type: textarea
+    id: logs
+    attributes:
+      label: Фрагмент лога (без секретов)
+      render: shell

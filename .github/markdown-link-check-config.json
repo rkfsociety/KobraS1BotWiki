@@ -1,0 +1,11 @@
+{
+  "aliveStatusCodes": [200, 206, 301, 302, 307, 308],
+  "timeout": "30s",
+  "retryOn429": true,
+  "retryCount": 2,
+  "fallbackRetryDistances": [5000, 10000],
+  "ignorePatterns": [
+    { "pattern": "^mailto:" },
+    { "pattern": "^tel:" }
+  ]
+}

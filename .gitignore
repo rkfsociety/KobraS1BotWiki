@@ -21,7 +21,13 @@ pipenv.lock
 # Coverage reports
 .coverage
 coverage/
+coverage.xml
 htmlcov/
+.pytest_cache/
+
+# Security scan artifacts
+bandit.json
+results.sarif
 
 # IDE
 .vscode/
