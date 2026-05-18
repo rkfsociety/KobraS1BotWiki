@@ -25,6 +25,18 @@ _MAP: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bошибк(а|у)\b|\berr\b", re.I), "error"),
     (re.compile(r"\bне печатает\b|\bне печата(ет|ю)\b", re.I), "not printing"),
     (re.compile(r"\bзастрял(а|о)?\b|\bзаклинил(о|а)?\b", re.I), "jam stuck"),
+    (re.compile(r"\bфиламент\w*\b", re.I), "filament"),
+    (re.compile(r"\bпода(ет|ёт|ач|еки)\w*\b", re.I), "feeding feed extruder"),
+    (re.compile(r"\bшестерн\w*\b", re.I), "extruder gear filament feed"),
+    (re.compile(r"\bсрыв\w*\b", re.I), "slipping skipping extruder gear"),
+    (re.compile(r"\bне\s+пода\w*\b", re.I), "not feeding filament"),
+    (
+        re.compile(
+            r"\bмотор\w*\b.{0,40}\b(подач|филамент|экструдер)|\b(подач|филамент|экструдер)\b.{0,40}\bмотор",
+            re.I,
+        ),
+        "extruder feed motor stepper",
+    ),
     (re.compile(r"\bнить\b|\bсопл(и|я)\b", re.I), "stringing"),
     (re.compile(r"\bретракт\b", re.I), "retraction"),
     (re.compile(r"\bшумит\b|\bшум\b", re.I), "noise"),
@@ -75,6 +87,12 @@ def expand_queries(text: str) -> list[str]:
             out.append("glass door replacement install guide")
         if "scraping" in extra_txt or "flatness" in extra_txt:
             out.append("nozzle scraping hot bed troubleshooting guide")
+        if re.search(r"филамент|подач|шестерн|экструдер|feeding|extruder", base, re.I) and re.search(
+            r"не\s+пода|срыв|крутит|застрял|jam|clog|block|feeding", base, re.I
+        ):
+            out.append(
+                "filament feeding timeout print head clogging extruder abnormal blocking troubleshooting"
+            )
 
     seen: set[str] = set()
     uniq: list[str] = []

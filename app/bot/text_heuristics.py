@@ -219,12 +219,21 @@ def _model_slug_hints(text: str) -> frozenset[str]:
         else:
             out.add("kobra-max")
 
-    if re.search(r"kobra\s*s\s*1\b", tl) or re.search(r"kobra\s*s1\b", tl) or "kobra-s1" in tl:
-        if combo or "kobra-s1-combo" in tl:
+    is_kobra_s1 = bool(
+        re.search(r"kobra\s*s\s*1\b", tl)
+        or re.search(r"kobra\s*s1\b", tl)
+        or "kobra-s1" in tl
+        or re.search(r"кобра\s*s\s*1\b", tl)
+        or re.search(r"кобра\s*s1\b", tl)
+    )
+    if is_kobra_s1:
+        if combo or "kobra-s1-combo" in tl or "комбо" in tl:
             out.add("kobra-s1-combo")
             out.add("kobra-s1")  # тот же корпус; путь вики часто с суффиксом -combo
         else:
             out.add("kobra-s1")
+            # Большинство гайдов S1 (подача, заторы) лежат в ветке -combo.
+            out.add("kobra-s1-combo")
     if (re.search(r"kobra\s*3\b", tl) or "kobra-3" in tl or re.search(r"кобра\s*3\b", tl)) and not is_kobra_3_max:
         if combo or "kobra-3-combo" in tl:
             out.add("kobra-3-combo")
@@ -244,3 +253,61 @@ def _model_slug_hints(text: str) -> frozenset[str]:
     if re.search(r"\bphoton\b", tl):
         out.add("photon")
     return frozenset(out)
+
+
+def _topic_is_filament_feed_intent(text: str | None) -> bool:
+    """
+    Подача филамента / экструдер крутит, но не тянет, срывы шестерни, затор.
+    Не путать с осью Z/X/Y и USB-драйверами.
+    """
+    if not text:
+        return False
+    tl = text.lower()
+    has_filament = any(
+        k in tl
+        for k in (
+            "филамент",
+            "filament",
+            "подач",
+            "feeding",
+            "feed ",
+            "экструдер",
+            "extruder",
+            "шестерн",
+            "gear",
+            "ролик",
+            "idler",
+        )
+    )
+    has_problem = any(
+        k in tl
+        for k in (
+            "не пода",
+            "не тян",
+            "не идёт",
+            "не идет",
+            "перестал",
+            "срыв",
+            "slip",
+            "skipping",
+            "застрял",
+            "jam",
+            "clog",
+            "затор",
+            "block",
+            "не крут",
+        )
+    )
+    has_feed_motor = ("мотор" in tl or "motor" in tl or "шагов" in tl or "stepper" in tl) and any(
+        k in tl
+        for k in (
+            "подач",
+            "филамент",
+            "экструдер",
+            "feed",
+            "extruder",
+            "шестерн",
+            "filament",
+        )
+    )
+    return (has_filament and has_problem) or has_feed_motor

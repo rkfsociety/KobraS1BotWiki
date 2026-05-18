@@ -10,6 +10,7 @@ from app.bot.text_heuristics import (
     _extract_error_code,
     _is_error_code_query,
     _model_slug_hints,
+    _topic_is_filament_feed_intent,
 )
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
@@ -59,6 +60,31 @@ def _topic_path_bonus(topic: str | None, url: str) -> int:
             b += 18
         if "hot-bed" in u or "hotbed" in u:
             b += 12
+    if _topic_is_filament_feed_intent(topic):
+        if "print-head-clogging" in u or ("clogging" in u and "print" in u):
+            b += 62
+        elif "feeding-timeout" in u or re.search(r"11511", u):
+            b += 54
+        elif "abnormal-blocking" in u or "blockage" in u or re.search(r"11518", u):
+            b += 50
+        elif "extruder-module" in u or ("extruder" in u and "replacement" in u):
+            b += 28
+        elif "material-break" in u:
+            b += 22
+        if "z-axis-motor" in u or "/z-axis" in u:
+            b -= 72
+        if any(k in u for k in ("y-axis", "x-axis", "x-ais", "belt-replacement", "belt")):
+            b -= 68
+        if "usb-flash-driver" in u or "printer-binding" in u:
+            b -= 55
+        if u.rstrip("/").endswith("/assembly") or "/assembly" in u and "extruder" not in u:
+            b -= 42
+        if "hotbed-replacement" in u or "firmware-update" in u:
+            b -= 38
+        if "ace-pro-blocking" in u and not any(
+            k in tl for k in ("ace", "аська", "аска", "эйс")
+        ):
+            b -= 30
     return b
 
 
@@ -135,8 +161,58 @@ def _nozzle_guide_url_plausible(url: str, *, allow_silicone: bool) -> bool:
     return True
 
 
+def _filament_feed_guide_url_plausible(url: str) -> bool:
+    u = url.lower().replace("_", "-")
+    if re.search(r"1151[18]", u):
+        return True
+    good = (
+        "feeding-timeout",
+        "feeding",
+        "print-head-clogging",
+        "clogging",
+        "abnormal-blocking",
+        "blockage",
+        "extruder-module",
+        "material-break",
+        "four-in-one-out",
+    )
+    if any(g in u for g in good):
+        return True
+    if "extruder" in u and any(k in u for k in ("troubleshoot", "replacement", "guide", "module")):
+        return True
+    return False
+
+
 def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
-    """Тема «дверь», а URL про другое узло — сильный штраф (иначе тянет purge-wiper из-за replace)."""
+    """Тема «дверь» или «подача филамента», а URL про другое узло — сильный штраф."""
+    if _topic_is_filament_feed_intent(topic):
+        u = url.lower().replace("_", "-")
+        if _filament_feed_guide_url_plausible(url):
+            return 0
+        bad = (
+            "z-axis",
+            "y-axis",
+            "x-axis",
+            "x-ais",
+            "belt",
+            "hotbed",
+            "heated-bed",
+            "power-supply",
+            "motherboard",
+            "firmware",
+            "usb-flash",
+            "printer-binding",
+            "camera",
+            "light-bar",
+            "glass-door",
+            "limit-switch",
+            "rack-installation",
+        )
+        for b in bad:
+            if b in u:
+                return 78
+        if u.rstrip("/").endswith("/assembly") or "/assembly" in u:
+            return 55
     if not _topic_is_door_intent(topic):
         return 0
     u = url.lower().replace("_", "-")
@@ -210,6 +286,8 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
     if _topic_is_nozzle_intent(question) and not _nozzle_guide_url_plausible(
         url, allow_silicone=_topic_is_nozzle_silicone_intent(question)
     ):
+        return False
+    if _topic_is_filament_feed_intent(question) and not _filament_feed_guide_url_plausible(url):
         return False
     return True
 
