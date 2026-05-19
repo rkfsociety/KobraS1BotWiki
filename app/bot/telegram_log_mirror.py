@@ -58,6 +58,19 @@ _APSCHEDULER_SKIP_RE = re.compile(
 
 )
 
+# Причины пропуска, которые НЕ зеркалим в Telegram: для них блок «📩 Входящее»
+# уже содержит весь контекст (чат, ссылка, пользователь, текст), и отдельный
+# блок «⏭ Решение: пропуск» лишь дублирует поля. В файловом логе они остаются.
+_SKIP_REASONS_NOT_MIRRORED: frozenset[str] = frozenset(
+    {
+        "not_triggered",
+        "not_a_question",
+        "conversational_chatter",
+        "marketplace_promo",
+        "slash_command",
+    }
+)
+
 _REASON_RU: dict[str, str] = {
 
     "not_triggered": "не вопрос и нет @бота / ответа на бота",
@@ -234,6 +247,12 @@ def _format_skip(msg: str) -> str | None:
         return None
 
     reason = reason_m.group(1)
+
+    # «Тихие» причины глушим в зеркале: блок «Входящее» уже отдал чат/ссылку/текст,
+    # и второй блок только дублирует те же гиперссылки и chat-id.
+    if reason in _SKIP_REASONS_NOT_MIRRORED:
+
+        return None
 
     lines = [
 

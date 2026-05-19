@@ -67,6 +67,36 @@ def test_skip_log_includes_message_link():
     assert "https://t.me/c/2295062981/12345" in out
 
 
+def test_skip_not_triggered_suppressed_in_mirror():
+    # «not_triggered» — самая частая причина: блок «Входящее» уже отдал чат+ссылку+текст,
+    # отдельный блок «Решение: пропуск» лишь дублирует поля, поэтому в зеркало не уходит.
+    msg = "skip chat=-1002295062981 reason=not_triggered mid=12345 user=42"
+    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
+    assert format_log_for_telegram(record) is None
+
+
+def test_skip_quiet_reasons_suppressed_in_mirror():
+    # Группа «не для бота»: ни одна из этих причин не должна зеркалиться отдельным блоком.
+    for reason in (
+        "not_a_question",
+        "conversational_chatter",
+        "marketplace_promo",
+        "slash_command",
+    ):
+        msg = f"skip chat=-1001 reason={reason} mid=99 user=42"
+        record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
+        assert format_log_for_telegram(record) is None, reason
+
+
+def test_skip_low_score_still_mirrored():
+    # Содержательные причины (бот пытался ответить, но не смог) остаются в зеркале.
+    msg = "skip chat=-1002295062981 reason=low_score mid=12345 score=59 min=72"
+    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
+    out = format_log_for_telegram(record)
+    assert out is not None
+    assert "Решение: пропуск" in out
+
+
 def test_seen_multiline_text_in_mirror():
     msg = (
         "seen chat=-1001 user=42 has_reply=false reply_mid=None reply_from=None "
