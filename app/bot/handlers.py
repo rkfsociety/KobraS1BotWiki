@@ -108,6 +108,8 @@ from app.bot.text_heuristics import (
 
     _extract_error_code,
 
+    _is_conversational_chatter,
+
     _is_error_code_query,
 
     _is_generic_help_without_context,
@@ -2437,6 +2439,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         if settings.log_decisions:
 
             log_skip(chat_id, "marketplace_promo", msg=msg)
+
+        return
+
+    if _is_conversational_chatter(text):
+
+        if settings.log_decisions:
+
+            log_skip(chat_id, "conversational_chatter", msg=msg)
 
         return
 

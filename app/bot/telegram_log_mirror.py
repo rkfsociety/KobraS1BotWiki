@@ -63,6 +63,7 @@ _REASON_RU: dict[str, str] = {
     "not_triggered": "не вопрос и нет @бота / ответа на бота",
 
     "not_a_question": "не похоже на вопрос",
+    "conversational_chatter": "бытовая реплика в чате (не запрос к боту)",
 
     "non_admin_command": "служебная команда не от админа",
 

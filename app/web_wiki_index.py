@@ -181,7 +181,17 @@ def _looks_like_question(text: str) -> bool:
 
     # иначе бот будет "влезать" в разговор.
 
-    if "не помнит как" in t or "уже не помнит как" in t:
+    if re.search(r"\b(уже\s+)?не\s+помнит\s+как\b", t):
+
+        return False
+
+    if re.search(r"\bужас\s+как\b", t) and "?" not in text:
+
+        return False
+
+    if re.search(r"\bкак\s+на\b", t) and not re.search(
+        r"\bкак\s+(?:откалибр|настро|почин|исправ|сделать|убрать|решить|подключ|замен)\b", t
+    ):
 
         return False
 
@@ -193,34 +203,11 @@ def _looks_like_question(text: str) -> bool:
 
         return True
 
-    return any(
-
-        w in t
-
-        for w in (
-
-            "как",
-
-            "почему",
-
-            "зачем",
-
-            "что",
-
-            "где",
-
-            "когда",
-
-            "кто",
-
-            "можно ли",
-
-            "помогите",
-
-            "не работает",
-
+    return bool(
+        re.search(
+            r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает)\b",
+            t,
         )
-
     )
 
 

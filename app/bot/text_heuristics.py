@@ -1301,6 +1301,76 @@ def _is_marketplace_promo_message(text: str | None) -> bool:
 
 
 
+
+# Сравнительное «как на кобре», разговорное «ужас как» в конце — не вопрос к боту.
+_COLOQUIAL_KAK_RE = re.compile(
+    r"(?:"
+    r"\bужас\s+как\b|"
+    r"\b\w+\s+как\s*[!?.…\U0001f300-\U0001faff]*\s*$|"
+    r"\bкак\s+на\s+\w+"
+    r")",
+    re.I | re.UNICODE,
+)
+
+
+def _message_has_help_intent(text: str) -> bool:
+    """Пользователь ищет помощь / инструкцию, а не просто комментирует чат."""
+    if not text or not text.strip():
+        return False
+    raw = text.strip()
+    t = re.sub(r"\s+", " ", raw.lower()).strip()
+    if "?" in raw:
+        return True
+    if _is_error_code_query(text):
+        return True
+    if re.search(r"\b(кинь|скинь|дай|подкинь|киньте|скиньте|дайте)\w*\b.{0,30}\bссыл", t):
+        return True
+    if "ссыл" in t and any(w in t for w in ("вики", "wiki", "настрой", "калибр", "уровн", "стол", "куб")):
+        return True
+    if re.search(r"\bне\s+могу\s+найти\b", t):
+        return True
+    return bool(
+        re.search(
+            r"\b(?:"
+            r"как\s+(?:откалибр|настро|почин|исправ|сделать|убрать|решить|подключ|замен|почист|смаз|провер)|"
+            r"почему|зачем|"
+            r"что\s+(?:делать|значит|не\s+так)|"
+            r"где\s+(?:найти|взять|скачать)|"
+            r"кто\s+знает|"
+            r"не\s+работает|"
+            r"помогите|помоги|"
+            r"подскаж|"
+            r"скажите\s+как"
+            r")\b",
+            t,
+        )
+    )
+
+
+def _is_conversational_chatter(text: str) -> bool:
+    """Бытовая реплика в чате — не отвечать ссылкой из вики."""
+    if not text or not text.strip():
+        return False
+    if _message_has_help_intent(text):
+        return False
+    if _is_marketplace_promo_message(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _COLOQUIAL_KAK_RE.search(t):
+        return True
+    if re.search(r"\bчто\s*ли\b|\bчтоли\b", t):
+        return True
+    if re.search(r"\bразберемся\b", t):
+        return True
+    if re.search(r"\bшумит\b|\bшум\b", t):
+        return True
+    if re.search(r"\b(?:они|у\s+них|тут\s+кстати)\b", t) and re.search(
+        r"\b(?:приклеил|приклеили|сделал|сделали|кстати)\b", t
+    ):
+        return True
+    return False
+
+
 def _is_generic_help_without_context(text: str) -> bool:
 
 
