@@ -40,6 +40,23 @@ def _msg_ids(msg: Message | None) -> tuple[int | None, int | None]:
     return msg.message_id, thread if thread else None
 
 
+def _normalize_log_line_text(text: str) -> str:
+    """Одна строка в логе: переносы не ломают разбор seen/skip в зеркале."""
+    return text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", " · ").strip()
+
+
+def incoming_text_for_log(msg: Message, text: str) -> str:
+    """Полный контекст для зеркала: цитата reply (если есть) + текст сообщения."""
+    parts: list[str] = []
+    if msg.reply_to_message:
+        parent = msg.reply_to_message.text or msg.reply_to_message.caption
+        if parent and parent.strip():
+            parts.append(f"↩ {_normalize_log_line_text(parent)}")
+    parts.append(_normalize_log_line_text(text))
+    joined = " · ".join(p for p in parts if p)
+    return joined[:LOG_MIRROR_TEXT_MAX]
+
+
 def log_seen_message(
     *,
     chat_id: int,
@@ -60,7 +77,7 @@ def log_seen_message(
         reply_from,
         mid,
         thread if thread else "None",
-        text[:LOG_MIRROR_TEXT_MAX],
+        incoming_text_for_log(msg, text),
     )
 
 
