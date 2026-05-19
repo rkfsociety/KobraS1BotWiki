@@ -559,7 +559,8 @@ def _format_body(msg: str, record: logging.LogRecord) -> str | None:
     m = _RE_STARTUP_READY.match(msg)
     if m:
         bot = m.group(1).lstrip("@")
-        wiki, qa, codes, fix = m.group(2), m.group(3), m.group(4), m.group(5)
+        # Распаковываем счётчики из лог-строки: wiki/QA/коды/fix-store; fix-store не показываем в зеркале
+        wiki, qa, codes, _ = m.group(2), m.group(3), m.group(4), m.group(5)
         idx_ok = m.group(7) == "true"
         tail = " · индекс из кэша" if idx_ok else ""
         return (

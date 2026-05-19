@@ -7,13 +7,18 @@ on:
   push:
     branches: [master]
 
-permissions:
-  security-events: write
-  id-token: write
+# Минимальные права по умолчанию; конкретные права заданы внутри job (требование Scorecard)
+permissions: read-all
 
 jobs:
   analysis:
     runs-on: ubuntu-latest
+    # Scorecard требует объявлять security-events/id-token именно на уровне job, а не глобально
+    permissions:
+      security-events: write
+      id-token: write
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
