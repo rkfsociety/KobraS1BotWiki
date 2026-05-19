@@ -143,8 +143,6 @@ def main() -> None:
         app.bot_data["manual_qa_entries"] = load_manual_qa_store()
     except Exception:
         app.bot_data["manual_qa_entries"] = []
-    logging.info("Manual QA: %d записей", len(app.bot_data["manual_qa_entries"]))
-
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("id", cmd_id))
     app.add_handler(CommandHandler("admincheck", cmd_admincheck))
@@ -167,13 +165,10 @@ def main() -> None:
     app.add_handler(MessageHandler((filters.TEXT | filters.CAPTION), on_message))
     app.add_error_handler(on_error)
 
-    logging.info("Бот запущен. Wiki docs: %d", wiki_index.doc_count)
-
     async def _post_init(application: Application) -> None:
         me = await application.bot.get_me()
         application.bot_data["bot_username"] = me.username
         application.bot_data["bot_id"] = me.id
-        logging.info("Bot username: @%s", me.username)
         # Каталог ошибок (fallback, если у кода нет отдельной страницы /error-codes/<code>-code)
         try:
             manual = _load_manual_error_codes()
@@ -183,17 +178,11 @@ def main() -> None:
                 refresh_hours=max(1, int(settings.wiki_refresh_hours)),
             )
             application.bot_data["error_codes_catalog"] = merge_manual_overrides(scraped, manual)
-            logging.info(
-                "Каталог кодов ошибок загружен: %d (manual=%d)",
-                len(application.bot_data["error_codes_catalog"]),
-                len(manual),
-            )
         except Exception as e:
             logging.warning("Не удалось загрузить каталог кодов ошибок: %s", e)
         # Локальные фиксы ссылок (/fix)
         try:
             application.bot_data["fix_store"] = _load_fix_store()
-            logging.info("Fix-store загружен: %d", len(application.bot_data["fix_store"]))
         except Exception as e:
             logging.warning("Не удалось загрузить fix-store: %s", e)
         try:
@@ -201,10 +190,25 @@ def main() -> None:
             nd = wix.doc_count if wix is not None else "?"
             await notify_ops(
                 application,
-                f"Старт бота\n@{me.username}\nwiki_docs={nd}\npid={os.getpid()}",
+                f"Старт @{me.username} · wiki={nd} · pid={os.getpid()}",
             )
         except Exception as e:
             logging.warning("ops_notify при старте: %s", e)
+        try:
+            idxr = application.bot_data["wiki_indexer"]
+            wix = application.bot_data.get("wiki_index")
+            logging.info(
+                "startup_ready bot=%s wiki=%d qa=%d codes=%d fix=%d pid=%d index_done=%s",
+                me.username or "?",
+                wix.doc_count if wix is not None else 0,
+                len(application.bot_data.get("manual_qa_entries") or []),
+                len(application.bot_data.get("error_codes_catalog") or {}),
+                len(application.bot_data.get("fix_store") or {}),
+                os.getpid(),
+                str(idxr.is_done()).lower(),
+            )
+        except Exception as e:
+            logging.warning("startup_ready: %s", e)
         if application.bot_data.get("log_mirror_handler") is not None:
             interval = max(1, int(settings.ops_log_mirror_interval_seconds))
             application.bot_data["log_mirror_job"] = application.job_queue.run_repeating(

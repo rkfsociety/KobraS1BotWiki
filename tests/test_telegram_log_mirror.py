@@ -92,6 +92,28 @@ def test_bot_reply_with_user_and_query():
     assert "Пользователь:" in out
 
 
+def test_startup_ready_compact_mirror():
+    msg = "startup_ready bot=AnycubicWiki_bot wiki=1703 qa=1 codes=92 fix=0 pid=12345 index_done=true"
+    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
+    out = format_log_for_telegram(record)
+    assert out is not None
+    assert "Бот запущен" in out
+    assert "@AnycubicWiki_bot" in out
+    assert "1703" in out
+    assert "индекс из кэша" in out
+    assert "@@" not in out
+
+
+def test_startup_noise_suppressed():
+    for msg in (
+        "Загружен кэш индекса: /path (страниц: 1703)",
+        "Manual QA: 1 записей",
+        "Bot username: @AnycubicWiki_bot",
+    ):
+        record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
+        assert format_log_for_telegram(record) is None
+
+
 def test_incoming_text_for_log_includes_reply_quote():
     class _User:
         id = 1

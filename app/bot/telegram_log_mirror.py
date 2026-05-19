@@ -147,6 +147,10 @@ _RE_INDEX_PROGRESS = re.compile(
 
 )
 
+_RE_STARTUP_READY = re.compile(
+    r"^startup_ready bot=(\S+) wiki=(\d+) qa=(\d+) codes=(\d+) fix=(\d+) "
+    r"pid=(\d+) index_done=(true|false)$"
+)
 _RE_CLARIFY = re.compile(
 
     r"^clarify chat=(?P<chat>-?\d+) score=(?P<score>\d+) url=(?P<url>\S+) reason=(?P<reason>\w+)"
@@ -385,7 +389,7 @@ def format_log_for_telegram(record: logging.LogRecord, *, redact: str | None = N
 
         if name == "apscheduler.scheduler" and msg.startswith("Removed job"):
 
-            return "✅ <b>Индексация вики</b>\nФоновая задача снята с расписания"
+            return None
 
         return None
 
@@ -416,8 +420,7 @@ def format_log_for_telegram(record: logging.LogRecord, *, redact: str | None = N
 def _format_body(msg: str, record: logging.LogRecord) -> str | None:
 
     if msg == "Индексация завершена — job index_step отключён":
-
-        return "✅ <b>Индексация вики завершена</b>\nВсе страницы из sitemap загружены в память"
+        return None
 
     if msg.startswith("Индексация завершена"):
 
@@ -553,17 +556,26 @@ def _format_body(msg: str, record: logging.LogRecord) -> str | None:
 
         return f"🔄 <b>Перезапуск</b>\n{_esc(msg)}"
 
-    if msg.startswith("Бот запущен. Wiki docs:"):
+    m = _RE_STARTUP_READY.match(msg)
+    if m:
+        bot = m.group(1).lstrip("@")
+        wiki, qa, codes, fix = m.group(2), m.group(3), m.group(4), m.group(5)
+        idx_ok = m.group(7) == "true"
+        tail = " · индекс из кэша" if idx_ok else ""
+        return (
+            f"🚀 <b>Бот запущен</b> · @{_esc(bot)}\n"
+            f"Вики: {wiki} · QA: {qa} · коды: {codes}{tail}"
+        )
 
-        return f"🚀 <b>Бот запущен</b>\nСтраниц в индексе: {_esc(msg.split(':')[-1].strip())}"
-
-    if msg.startswith("Bot username:"):
-
-        return f"🤖 Имя бота: @{_esc(msg.split(':', 1)[1].strip())}"
-
-    if msg.startswith("Загружен кэш индекса"):
-
-        return f"📂 {_esc(msg)}"
+    if (
+        msg.startswith("Бот запущен. Wiki docs:")
+        or msg.startswith("Bot username:")
+        or msg.startswith("Загружен кэш индекса")
+        or msg.startswith("Manual QA:")
+        or msg.startswith("Каталог кодов ошибок загружен:")
+        or msg.startswith("Fix-store загружен:")
+    ):
+        return None
 
     if msg.startswith("Зеркало лога в Telegram") or msg.startswith("Лог-файл:"):
 
