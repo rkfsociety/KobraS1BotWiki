@@ -99,6 +99,10 @@ class Settings:
     ops_log_mirror_level: int
     #: Как часто сливать буфер лога в Telegram (сек)
     ops_log_mirror_interval_seconds: int
+    #: Перед обработкой вики-сообщения проверять getChatMember (бот может писать в чат/тему)
+    require_can_reply: bool
+    #: TTL кэша результата проверки (сек), при REQUIRE_CAN_REPLY=1
+    reply_access_cache_seconds: int
     reply_review_mention: str
 
 
@@ -209,6 +213,10 @@ def load_settings() -> Settings:
     ops_log_mirror_level = getattr(logging, ops_log_mirror_level_name, logging.INFO)
     ops_log_mirror_interval_seconds = max(1, _get_int("OPS_LOG_MIRROR_INTERVAL_SECONDS", 2))
 
+    require_can_reply = _get_bool("REQUIRE_CAN_REPLY", False)
+
+    reply_access_cache_seconds = max(1, _get_int("REPLY_ACCESS_CACHE_SECONDS", 300))
+
     reply_review_mention = (os.getenv("REPLY_REVIEW_MENTION") or "rkfsociety").strip()
 
     # Загрузка списка разрешённых chat_id и topic_id из переменных окружения
@@ -279,5 +287,7 @@ def load_settings() -> Settings:
         ops_log_mirror_enabled=ops_log_mirror_enabled,
         ops_log_mirror_level=ops_log_mirror_level,
         ops_log_mirror_interval_seconds=ops_log_mirror_interval_seconds,
+        require_can_reply=require_can_reply,
+        reply_access_cache_seconds=reply_access_cache_seconds,
         reply_review_mention=reply_review_mention,
     )
