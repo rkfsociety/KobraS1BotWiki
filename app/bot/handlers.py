@@ -1653,8 +1653,6 @@ async def cmd_qaadd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     uid = msg.from_user.id if msg.from_user else None
 
-    chat_id = update.effective_chat.id
-
     norm = (msg.text or msg.caption or "").replace("\r\n", "\n")
 
     body = re.sub(r"^/qaadd(?:@[\w]+)?\s*", "", norm, count=1, flags=re.I).strip()
@@ -1813,8 +1811,6 @@ async def cmd_qalist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     uid = msg.from_user.id if msg.from_user else None
 
-    chat_id = update.effective_chat.id
-
     entries = context.application.bot_data.get("manual_qa_entries")
 
     if not isinstance(entries, list) or not entries:
@@ -1897,8 +1893,6 @@ async def cmd_qadel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
 
     uid = msg.from_user.id if msg.from_user else None
-
-    chat_id = update.effective_chat.id
 
     args = list(context.args or [])
 
@@ -2037,8 +2031,6 @@ async def cmd_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     lang = _lang_from_message(context=context, msg=msg, text=(msg.text or msg.caption or ""))
 
     uid = msg.from_user.id if msg.from_user else None
-
-    chat_id = update.effective_chat.id
 
     lock = context.application.bot_data.get("git_update_lock")
 

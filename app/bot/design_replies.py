@@ -1,8 +1,6 @@
 """Ответы из справочника конструкции (без вики)."""
 from __future__ import annotations
 
-import logging
-
 from telegram import Message
 
 from app.bot.reply_logging import log_bot_reply_for_message
