@@ -1,6 +1,8 @@
 import asyncio
 import os
 
+import app.bot.layer_model_gate  # noqa: F401 — патчи до handlers
+
 from app.bot.lifecycle import main
 
 if __name__ == "__main__":
