@@ -31,8 +31,30 @@ def should_tag_reviewer(msg: Message) -> bool:
     return chat.type in (ChatType.GROUP, ChatType.SUPERGROUP)
 
 
-async def reply_for_user(msg: Message, settings: Settings, text: str, **kwargs) -> Message:
-    """reply_text с @ревьюером в группах (не в личке)."""
+async def reply_for_user(
+    msg: Message,
+    settings: Settings,
+    text: str,
+    *,
+    log_kind: str | None = None,
+    log_extra: dict | None = None,
+    log_user_id: int | None = None,
+    **kwargs,
+) -> Message:
+    """reply_text с @ревьюером в группах (не в личке); опционально — лог в зеркало Telegram."""
+    body = text
     if should_tag_reviewer(msg):
-        text = with_review_mention(text, settings)
-    return await msg.reply_text(text, **kwargs)
+        body = with_review_mention(text, settings)
+    sent = await msg.reply_text(body, **kwargs)
+    if log_kind:
+        from app.bot.reply_logging import log_bot_reply_for_message
+
+        log_bot_reply_for_message(
+            log_kind,
+            msg=msg,
+            reply_text=body,
+            sent=sent,
+            user_id=log_user_id,
+            **(log_extra or {}),
+        )
+    return sent

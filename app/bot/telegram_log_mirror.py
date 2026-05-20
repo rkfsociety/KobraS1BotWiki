@@ -58,19 +58,6 @@ _APSCHEDULER_SKIP_RE = re.compile(
 
 )
 
-# Причины пропуска, которые НЕ зеркалим в Telegram: для них блок «📩 Входящее»
-# уже содержит весь контекст (чат, ссылка, пользователь, текст), и отдельный
-# блок «⏭ Решение: пропуск» лишь дублирует поля. В файловом логе они остаются.
-_SKIP_REASONS_NOT_MIRRORED: frozenset[str] = frozenset(
-    {
-        "not_triggered",
-        "not_a_question",
-        "conversational_chatter",
-        "marketplace_promo",
-        "slash_command",
-    }
-)
-
 _REASON_RU: dict[str, str] = {
 
     "not_triggered": "не вопрос и нет @бота / ответа на бота",
@@ -125,6 +112,16 @@ _KIND_RU: dict[str, str] = {
     "printer_design_fact": "справка по конструкции принтера",
 
     "error_code_clarify_prompt": "уточнение модели для кода ошибки",
+
+    "error_code_wiki": "ссылка на вики после уточнения кода ошибки",
+
+    "clarify_followup_wiki": "ссылка на вики после уточнения модели",
+
+    "clarify_correction_wiki": "ссылка на вики (поправка модели)",
+
+    "clarify_followup_uncertain": "не удалось найти после уточнения",
+
+    "clarify_correction_uncertain": "не удалось найти (поправка модели)",
 
 }
 
@@ -232,95 +229,9 @@ def _reason_ru(code: str) -> str:
 
     return _REASON_RU.get(code, code.replace("_", " "))
 
-def _format_skip(msg: str) -> str | None:
-
-    if not msg.startswith("skip chat="):
-
-        return None
-
-    chat_m = re.search(r"chat=(-?\d+)", msg)
-
-    reason_m = re.search(r"reason=(\w+)", msg)
-
-    if not chat_m or not reason_m:
-
-        return None
-
-    reason = reason_m.group(1)
-
-    # «Тихие» причины глушим в зеркале: блок «Входящее» уже отдал чат/ссылку/текст,
-    # и второй блок только дублирует те же гиперссылки и chat-id.
-    if reason in _SKIP_REASONS_NOT_MIRRORED:
-
-        return None
-
-    lines = [
-
-        "⏭ <b>Решение: пропуск</b>",
-
-        _chat_line(chat_m.group(1)),
-
-        f"Причина: {_esc(_reason_ru(reason))}",
-
-    ]
-
-    mid_m = re.search(r"\bmid=(\d+)", msg)
-
-    thread_m = re.search(r"\bthread=(\d+)", msg)
-
-    if mid_m and (link := _message_link_line(chat_m.group(1), mid_m.group(1), thread_m.group(1) if thread_m else None)):
-
-        lines.append(link)
-
-    user_m = re.search(r"user=(\d+)", msg)
-
-    if user_m:
-
-        lines.insert(2, _user_line(user_m.group(1)))
-
-    topic_m = re.search(r"topic=(\S+)", msg)
-
-    if topic_m and topic_m.group(1) != "None":
-
-        lines.append(f"Тема форума: <code>{_esc(topic_m.group(1))}</code>")
-
-    if m := re.search(r"\bcode=(\d+)\b", msg):
-
-        lines.append(f"Код ошибки: <code>{m.group(1)}</code>")
-
-    if m := re.search(r"score=(\d+)", msg):
-
-        lines.append(f"Оценка поиска: {m.group(1)}")
-
-    if m := re.search(r"min=(\d+)", msg):
-
-        lines.append(f"Порог MIN_SCORE: {m.group(1)}")
-
-    if m := re.search(r"docs=(\d+)", msg):
-
-        lines.append(f"Страниц в индексе: {m.group(1)}")
-
-    if m := re.search(r"url=(\S+)", msg):
-
-        lines.append(f"Черновик URL: {_esc(m.group(1))}")
-
-    # Текст уже в «Входящее» (seen) для того же mid — не дублируем в зеркале.
-
-    if m := re.search(r"\bquery=(.+)$", msg):
-
-        if not mid_m:
-
-            lines.append(f"Текст запроса: {_esc(m.group(1)[:LOG_MIRROR_TEXT_MAX])}")
-
-    if m := re.search(r"hints=(.+)$", msg):
-
-        lines.append(f"Модель в запросе: {_esc(m.group(1))}")
-
-    if cmd_m := re.search(r"cmd=/(\w+)", msg):
-
-        lines.append(f"Команда: /{cmd_m.group(1)}")
-
-    return "\n".join(lines)
+def _is_skip_log(msg: str) -> bool:
+    # Пропуски в зеркало не отправляем — только фактические ответы бота (bot_reply).
+    return msg.startswith("skip chat=")
 
 def _format_bot_reply(msg: str) -> str | None:
 
@@ -336,21 +247,45 @@ def _format_bot_reply(msg: str) -> str | None:
 
     lines = [
 
-        "✅ <b>Решение: ответ в чат</b>",
+        "💬 <b>Ответ бота</b>",
 
-        f"Действие: {_esc(kind_ru)}",
+        f"Тип: {_esc(kind_ru)}",
 
         _chat_line(m.group("chat")),
 
     ]
 
-    reply_mid_m = re.search(r"\bmessage_id=(\d+)", msg)
+    user_m = re.search(r"\buser=(\d+)", msg)
+
+    if user_m:
+
+        lines.append(_user_line(user_m.group(1)))
 
     thread_m = re.search(r"\bthread=(\d+)", msg)
 
-    if reply_mid_m and (
+    incoming_mid_m = re.search(r"\bmid=(\d+)", msg)
+
+    if incoming_mid_m and (
 
         link := _message_link_line(
+
+            m.group("chat"),
+
+            incoming_mid_m.group(1),
+
+            thread_m.group(1) if thread_m else None,
+
+        )
+
+    ):
+
+        lines.append(f"Вопрос: {link}")
+
+    reply_mid_m = re.search(r"\bmessage_id=(\d+)", msg)
+
+    if reply_mid_m and (
+
+        bot_link := _message_link_line(
 
             m.group("chat"),
 
@@ -362,7 +297,27 @@ def _format_bot_reply(msg: str) -> str | None:
 
     ):
 
-        lines.append(link)
+        lines.append(f"Ответ: {bot_link}")
+
+    user_text_m = re.search(r"\buser_text=(.+?)(?:\s+\w+=|\s+reply_text=|$)", msg)
+
+    if not user_text_m:
+
+        user_text_m = re.search(r"\buser_text=(.+)$", msg)
+
+    reply_text_m = re.search(r"\breply_text=(.+)$", msg)
+
+    if user_text_m:
+
+        lines.append(f"<b>Вопрос пользователя:</b>\n{_esc(user_text_m.group(1)[:LOG_MIRROR_TEXT_MAX])}")
+
+    elif qm := re.search(r"\bquery=(.+?)(?:\s+\w+=|$)", msg):
+
+        lines.append(f"<b>Вопрос пользователя:</b>\n{_esc(qm.group(1)[:LOG_MIRROR_TEXT_MAX])}")
+
+    if reply_text_m:
+
+        lines.append(f"<b>Ответ бота:</b>\n{_esc(reply_text_m.group(1)[:LOG_MIRROR_TEXT_MAX])}")
 
     if sm := re.search(r"score=(\d+)", msg):
 
@@ -379,16 +334,6 @@ def _format_bot_reply(msg: str) -> str | None:
     if hm := re.search(r"hints=(\S+)", msg):
 
         lines.append(f"Модель: {_esc(hm.group(1))}")
-
-    user_m = re.search(r"\buser=(\d+)", msg)
-
-    if user_m:
-
-        lines.append(_user_line(user_m.group(1)))
-
-    if qm := re.search(r"\bquery=(.+)$", msg):
-
-        lines.append(f"Текст запроса: {_esc(qm.group(1)[:LOG_MIRROR_TEXT_MAX])}")
 
     return "\n".join(lines)
 
@@ -477,11 +422,9 @@ def _format_body(msg: str, record: logging.LogRecord) -> str | None:
 
         )
 
-    skip = _format_skip(msg)
+    if _is_skip_log(msg):
 
-    if skip:
-
-        return skip
+        return None
 
     reply = _format_bot_reply(msg)
 
@@ -489,79 +432,17 @@ def _format_body(msg: str, record: logging.LogRecord) -> str | None:
 
         return reply
 
-    m = _RE_SEEN.match(msg)
+    if _RE_SEEN.match(msg):
 
-    if m:
-
-        text = (m.group("text") or "").strip()
-
-        if not text:
-
-            return None
-
-        lines = ["📩 <b>Входящее</b>", _chat_line(m.group("chat")), _user_line(m.group("user"))]
-
-        if link := _message_link_line(m.group("chat"), m.group("mid"), m.group("thread")):
-
-            lines.append(link)
-
-        if m.group("reply") == "true":
-
-            lines.append("Ответ (reply) на другое сообщение")
-
-        lines.append(f"Текст: {_esc(text[:LOG_MIRROR_TEXT_MAX])}")
-
-        return "\n".join(lines)
+        return None
 
     if msg.startswith("Входящее сообщение chat="):
 
-        m2 = re.match(r"^Входящее сообщение chat=(-?\d+) user=(\S+): (.*)$", msg)
+        return None
 
-        if m2:
+    if _RE_CLARIFY.match(msg):
 
-            return "\n".join(
-
-                [
-
-                    "📩 <b>Входящее</b>",
-
-                    _chat_line(m2.group(1)),
-
-                    _user_line(m2.group(2)),
-
-                    f"Текст: {_esc(m2.group(3)[:LOG_MIRROR_TEXT_MAX])}",
-
-                ]
-
-            )
-
-    m = _RE_CLARIFY.match(msg)
-
-    if m:
-
-        lines = [
-
-            "❓ <b>Решение: уточнение модели</b>",
-
-            _chat_line(m.group("chat")),
-
-            f"Причина: {_esc(_reason_ru(m.group('reason')))}",
-
-            f"Оценка: {m.group('score')}",
-
-            f"Черновик URL: {_esc(m.group('url'))}",
-
-        ]
-
-        if m.group("mid") and (
-
-            link := _message_link_line(m.group("chat"), m.group("mid"), m.group("thread"))
-
-        ):
-
-            lines.append(link)
-
-        return "\n".join(lines)
+        return None
 
     if msg.startswith("Команда /update:"):
 

@@ -78,7 +78,7 @@ from app.bot.ops_notify import notify_ops
 
 from app.bot.i18n import _detect_user_lang, _lang_from_message, _t
 
-from app.bot.reply_logging import _log_bot_reply
+from app.bot.reply_logging import log_bot_reply_for_message
 
 from app.bot.telegram_log_mirror import LOG_MIRROR_TEXT_MAX
 
@@ -374,8 +374,13 @@ async def _try_reply_manual_qa(
 
     sent = await reply_for_user(
 
-        msg, settings, body, parse_mode=ParseMode.HTML, disable_web_page_preview=True
-
+        msg,
+        settings,
+        body,
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+        log_kind=log_kind,
+        log_user_id=uid,
     )
 
     _record_bot_answer_context(
@@ -391,8 +396,6 @@ async def _try_reply_manual_qa(
         url=None,
 
     )
-
-    _log_bot_reply(log_kind, chat_id, uid)
 
     if apply_rate_limit:
 
@@ -474,7 +477,9 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     uid = msg.from_user.id if msg.from_user else None
 
-    _log_bot_reply("cmd_help", update.effective_chat.id, uid, admin=str(is_admin).lower())
+    log_bot_reply_for_message(
+        "cmd_help", msg=msg, reply_text=body, sent=sent, user_id=uid, admin=str(is_admin).lower()
+    )
 
 async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
@@ -530,7 +535,7 @@ async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     uid = msg.from_user.id if msg.from_user else None
 
-    _log_bot_reply("cmd_id", update.effective_chat.id, uid)
+    log_bot_reply_for_message("cmd_id", msg=msg, reply_text=text, sent=sent, user_id=uid)
 
 async def cmd_admincheck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
@@ -618,7 +623,7 @@ async def cmd_admincheck(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     )
 
-    _log_bot_reply("cmd_admincheck", chat.id, user.id)
+    log_bot_reply_for_message("cmd_admincheck", msg=msg, reply_text=body, sent=sent, user_id=user.id)
 
 async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
@@ -666,7 +671,7 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_wiki_usage", chat_id, uid)
+        log_bot_reply_for_message("cmd_wiki_usage", msg=msg, reply_text=ut, sent=sent, user_id=uid)
 
         return
 
@@ -776,7 +781,9 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_wiki_not_found", chat_id, uid, query=query[:80])
+        log_bot_reply_for_message(
+            "cmd_wiki_not_found", msg=msg, reply_text=nf, sent=sent, user_id=uid, query=query[:80]
+        )
 
         return
 
@@ -800,7 +807,16 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_wiki_low_score", chat_id, uid, score=best_score, min_score=settings.min_score, url=best_doc.url)
+        log_bot_reply_for_message(
+            "cmd_wiki_low_score",
+            msg=msg,
+            reply_text=lc,
+            sent=sent,
+            user_id=uid,
+            score=best_score,
+            min_score=settings.min_score,
+            url=best_doc.url,
+        )
 
         return
 
@@ -885,12 +901,15 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     await reply_for_user(
-
-        msg, settings, reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False
-
+        msg,
+        settings,
+        reply,
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=False,
+        log_kind="cmd_wiki",
+        log_extra={"score": best_score, "url": url},
+        log_user_id=uid,
     )
-
-    _log_bot_reply("cmd_wiki", chat_id, uid, score=best_score, url=url)
 
 async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
@@ -1028,7 +1047,7 @@ async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     uid = msg.from_user.id if msg.from_user else None
 
-    _log_bot_reply("cmd_ping", update.effective_chat.id, uid)
+    log_bot_reply_for_message("cmd_ping", msg=msg, reply_text=text, sent=sent, user_id=uid)
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
@@ -1212,7 +1231,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     uid = msg.from_user.id if msg.from_user else None
 
-    _log_bot_reply("cmd_status", chat_id, uid)
+    log_bot_reply_for_message("cmd_status", msg=msg, reply_text=text, sent=reply_msg, user_id=uid)
 
     schedule_delete_slash_command_and_reply(
 
@@ -1282,7 +1301,7 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_error_usage", chat_id, uid)
+        log_bot_reply_for_message("cmd_error_usage", msg=msg, reply_text=eu, sent=sent, user_id=uid)
 
         return
 
@@ -1312,7 +1331,7 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_error_no_ctx", chat_id, uid, bad_mid=bad_mid)
+        log_bot_reply_for_message("cmd_error_no_ctx", msg=msg, reply_text=ur, sent=sent, user_id=uid, bad_mid=bad_mid)
 
         return
 
@@ -1378,7 +1397,15 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_error_no_better", chat_id, uid, score=(best_score if best_doc else None), url=(best_doc.url if best_doc else None))
+        log_bot_reply_for_message(
+            "cmd_error_no_better",
+            msg=msg,
+            reply_text=nb,
+            sent=sent,
+            user_id=uid,
+            score=(best_score if best_doc else None),
+            url=(best_doc.url if best_doc else None),
+        )
 
         return
 
@@ -1424,7 +1451,9 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     _record_bot_answer_context(context=context, chat_id=chat_id, bot_message_id=sent.message_id, query=query, url=url)
 
-    _log_bot_reply("cmd_error_retry", chat_id, uid, score=best_score, url=url)
+    log_bot_reply_for_message(
+        "cmd_error_retry", msg=msg, reply_text=retry_body, sent=sent, user_id=uid, score=best_score, url=url
+    )
 
 def _extract_url_arg(args: list[str]) -> str | None:
 
@@ -1492,7 +1521,7 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_fix_usage", chat_id, uid)
+        log_bot_reply_for_message("cmd_fix_usage", msg=msg, reply_text=fur, sent=sent, user_id=uid)
 
         return
 
@@ -1518,7 +1547,7 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_fix_usage", chat_id, uid)
+        log_bot_reply_for_message("cmd_fix_usage", msg=msg, reply_text=fu, sent=sent, user_id=uid)
 
         return
 
@@ -1548,7 +1577,7 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_fix_no_ctx", chat_id, uid, bad_mid=bad_mid)
+        log_bot_reply_for_message("cmd_fix_no_ctx", msg=msg, reply_text=ur, sent=sent, user_id=uid, bad_mid=bad_mid)
 
         return
 
@@ -1604,7 +1633,7 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     _record_bot_answer_context(context=context, chat_id=chat_id, bot_message_id=sent.message_id, query=query, url=good_url)
 
-    _log_bot_reply("cmd_fix", chat_id, uid, url=good_url)
+    log_bot_reply_for_message("cmd_fix", msg=msg, reply_text=fix_body, sent=sent, user_id=uid, url=good_url)
 
 async def cmd_qaadd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
@@ -1656,7 +1685,7 @@ async def cmd_qaadd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_qaadd_usage", chat_id, uid)
+        log_bot_reply_for_message("cmd_qaadd_usage", msg=msg, reply_text=usage, sent=sent, user_id=uid)
 
         return
 
@@ -1684,7 +1713,7 @@ async def cmd_qaadd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_qaadd_usage", chat_id, uid)
+        log_bot_reply_for_message("cmd_qaadd_usage", msg=msg, reply_text=usage, sent=sent, user_id=uid)
 
         return
 
@@ -1740,7 +1769,7 @@ async def cmd_qaadd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_qaadd", chat_id, uid, keys=len(key_parts))
+        log_bot_reply_for_message("cmd_qaadd", msg=msg, reply_text=ok_body, sent=sent, user_id=uid, keys=len(key_parts))
 
     else:
 
@@ -1762,7 +1791,9 @@ async def cmd_qaadd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_qaadd_fail", chat_id, uid, reason=detail[:120])
+        log_bot_reply_for_message(
+            "cmd_qaadd_fail", msg=msg, reply_text=fail, sent=sent, user_id=uid, reason=detail[:120]
+        )
 
 async def cmd_qalist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
@@ -1804,7 +1835,8 @@ async def cmd_qalist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         )
 
-        _log_bot_reply("cmd_qalist_empty", chat_id, uid)
+        empty_text = _t(lang, "qalist_empty")
+        log_bot_reply_for_message("cmd_qalist_empty", msg=msg, reply_text=empty_text, sent=sent, user_id=uid)
 
         return
 
@@ -1846,7 +1878,7 @@ async def cmd_qalist(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     )
 
-    _log_bot_reply("cmd_qalist", chat_id, uid, n=len(entries))
+    log_bot_reply_for_message("cmd_qalist", msg=msg, reply_text=body, sent=sent, user_id=uid, n=len(entries))
 
 async def cmd_qadel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
@@ -1890,7 +1922,7 @@ async def cmd_qadel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_qadel_usage", chat_id, uid)
+        log_bot_reply_for_message("cmd_qadel_usage", msg=msg, reply_text=usage, sent=sent, user_id=uid)
 
         return
 
@@ -1918,7 +1950,7 @@ async def cmd_qadel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_qadel_usage", chat_id, uid)
+        log_bot_reply_for_message("cmd_qadel_usage", msg=msg, reply_text=usage, sent=sent, user_id=uid)
 
         return
 
@@ -1964,7 +1996,7 @@ async def cmd_qadel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_qadel", chat_id, uid, n=n)
+        log_bot_reply_for_message("cmd_qadel", msg=msg, reply_text=body, sent=sent, user_id=uid, n=n)
 
     else:
 
@@ -1986,7 +2018,7 @@ async def cmd_qadel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         )
 
-        _log_bot_reply("cmd_qadel_fail", chat_id, uid, n=n)
+        log_bot_reply_for_message("cmd_qadel_fail", msg=msg, reply_text=body, sent=sent, user_id=uid, n=n)
 
 async def cmd_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
@@ -2056,7 +2088,7 @@ async def cmd_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
             )
 
-            _log_bot_reply("cmd_update_exc", chat_id, uid)
+            log_bot_reply_for_message("cmd_update_exc", msg=msg, reply_text=body, sent=sent, user_id=uid)
 
             await notify_ops(context.application, f"/update: исключение при git\n{type(e).__name__}: {e}")
 
@@ -2088,7 +2120,9 @@ async def cmd_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
             )
 
-            _log_bot_reply("cmd_update_noop", chat_id, uid, detail=(gmsg or "")[:160])
+            log_bot_reply_for_message(
+                "cmd_update_noop", msg=msg, reply_text=body, sent=sent, user_id=uid, detail=(gmsg or "")[:160]
+            )
 
             if gmsg != "уже актуально":
 
@@ -2114,7 +2148,9 @@ async def cmd_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         )
 
-        _log_bot_reply("cmd_update_pull", chat_id, uid, detail=gmsg)
+        log_bot_reply_for_message(
+            "cmd_update_pull", msg=msg, reply_text=ok_body, sent=sent, user_id=uid, detail=gmsg
+        )
 
         await schedule_restart_after_pull(
 
@@ -2462,15 +2498,15 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     if _is_generic_help_without_context(text):
 
-        await msg.reply_text(
-
-            _t(lang, "generic_help"),
-
-            disable_web_page_preview=True,
-
+        help_text = _t(lang, "generic_help")
+        sent_help = await msg.reply_text(help_text, disable_web_page_preview=True)
+        log_bot_reply_for_message(
+            "generic_help_clarify",
+            msg=msg,
+            reply_text=help_text,
+            sent=sent_help,
+            user_id=msg.from_user.id if msg.from_user else None,
         )
-
-        _log_bot_reply("generic_help_clarify", chat_id, msg.from_user.id if msg.from_user else None)
 
         return
 
@@ -2541,17 +2577,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 formatted = await _format_error_code_info_ru(context=context, info=info)
 
                 sent = await reply_for_user(
-
                     msg,
-
                     settings,
-
                     formatted,
-
                     parse_mode=ParseMode.HTML,
-
                     disable_web_page_preview=True,
-
+                    log_kind="error_code_text",
+                    log_extra={"code": code},
+                    log_user_id=msg.from_user.id if msg.from_user else None,
                 )
 
                 _record_bot_answer_context(
@@ -2567,8 +2600,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                     url=None,
 
                 )
-
-                _log_bot_reply("error_code_text", chat_id, msg.from_user.id if msg.from_user else None, code=code)
 
                 return
 
@@ -2815,22 +2846,15 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
 
     sent = await reply_for_user(
-
         msg,
-
         settings,
-
         reply,
-
         parse_mode=ParseMode.HTML,
-
         disable_web_page_preview=False,
-
+        log_kind="wiki",
+        log_extra={"score": best_score, "url": url},
+        log_user_id=msg.from_user.id if msg.from_user else None,
     )
-
-    uid_r = msg.from_user.id if msg.from_user else None
-
-    _log_bot_reply("wiki", chat_id, uid_r, score=best_score, url=url)
 
     _record_bot_answer_context(
 

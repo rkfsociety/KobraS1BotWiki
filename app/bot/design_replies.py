@@ -5,7 +5,7 @@ import logging
 
 from telegram import Message
 
-from app.bot.reply_logging import _log_bot_reply
+from app.bot.reply_logging import log_bot_reply_for_message
 from app.bot.text_heuristics import _model_slug_hints
 from app.printer_catalog import explain_door_vs_design
 
@@ -23,11 +23,12 @@ async def _maybe_reply_printer_design_vs_question(
     if not expl:
         return None
     sent = await msg.reply_text(expl, disable_web_page_preview=True)
-    if settings.log_decisions:
-        logging.info(
-            "bot_reply kind=printer_design_fact chat=%s hints=%s",
-            chat_id,
-            " ".join(sorted(hints_d)),
-        )
-    _log_bot_reply("printer_design_fact", chat_id, user_id, hints=" ".join(sorted(hints_d)))
+    log_bot_reply_for_message(
+        "printer_design_fact",
+        msg=msg,
+        reply_text=expl,
+        sent=sent,
+        user_id=user_id,
+        hints=" ".join(sorted(hints_d)),
+    )
     return sent

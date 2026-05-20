@@ -1,40 +1,14 @@
-"""Зеркало лога в Telegram: полный текст входящих."""
+"""Зеркало лога в Telegram: только ответы бота с текстом вопроса и ответа."""
 from __future__ import annotations
-import logging
-from app.bot.decision_log import incoming_text_for_log
-from app.bot.telegram_log_mirror import LOG_MIRROR_TEXT_MAX, format_log_for_telegram
-def test_seen_incoming_not_truncated_at_120():
-    long_tail = "смазку для подшипников и ещё " + ("x" * 200)
-    msg = (
-        "seen chat=-10012295062981 user=42 has_reply=true reply_mid=1 reply_from=99 mid=999 thread=None "
-        f"text=ты еще обалдеешь {long_tail}"
-    )
-    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
-    out = format_log_for_telegram(record)
-    assert out is not None
-    assert "смазку" in out
-    assert "xxxx" in out
-def test_skip_low_score_shows_query_without_mid():
-    q = "как смазать механизм " + ("y" * 100)
-    msg = f"skip chat=-1001 reason=low_score score=59 min=72 url=https://wiki.example/x query={q}"
-    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
-    out = format_log_for_telegram(record)
-    assert out is not None
-    assert "Текст запроса:" in out
-    assert "как смазать" in out
 
-def test_skip_low_score_omits_query_when_mid():
-    q = "как смазать механизм " + ("y" * 100)
-    msg = f"skip chat=-1001 reason=low_score mid=99 score=59 min=72 url=https://wiki.example/x query={q}"
-    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
-    out = format_log_for_telegram(record)
-    assert out is not None
-    assert "Текст запроса:" not in out
-    assert "как смазать" not in out
+import logging
+
+from app.bot.decision_log import incoming_text_for_log, telegram_message_link
+from app.bot.telegram_log_mirror import LOG_MIRROR_TEXT_MAX, format_log_for_telegram
+
+
 def test_log_mirror_text_max_reasonable():
     assert LOG_MIRROR_TEXT_MAX >= 500
-
-from app.bot.decision_log import telegram_message_link
 
 
 def test_telegram_message_link_supergroup():
@@ -47,79 +21,65 @@ def test_telegram_message_link_with_thread():
     assert url == "https://t.me/c/2295062981/7/99"
 
 
-def test_seen_log_includes_message_link():
+def test_seen_not_mirrored():
     msg = (
         "seen chat=-1002295062981 user=42 has_reply=false reply_mid=None reply_from=None "
         "mid=12345 thread=None text=привет"
     )
     record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
-    out = format_log_for_telegram(record)
-    assert out is not None
-    assert "https://t.me/c/2295062981/12345" in out
-    assert "Перейти к сообщению" in out
-
-
-def test_skip_log_includes_message_link():
-    msg = "skip chat=-1002295062981 reason=low_score mid=12345 score=59 min=72"
-    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
-    out = format_log_for_telegram(record)
-    assert out is not None
-    assert "https://t.me/c/2295062981/12345" in out
-
-
-def test_skip_not_triggered_suppressed_in_mirror():
-    # «not_triggered» — самая частая причина: блок «Входящее» уже отдал чат+ссылку+текст,
-    # отдельный блок «Решение: пропуск» лишь дублирует поля, поэтому в зеркало не уходит.
-    msg = "skip chat=-1002295062981 reason=not_triggered mid=12345 user=42"
-    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
     assert format_log_for_telegram(record) is None
 
 
-def test_skip_quiet_reasons_suppressed_in_mirror():
-    # Группа «не для бота»: ни одна из этих причин не должна зеркалиться отдельным блоком.
+def test_skip_not_mirrored():
     for reason in (
+        "not_triggered",
         "not_a_question",
-        "conversational_chatter",
-        "marketplace_promo",
-        "slash_command",
+        "low_score",
+        "cooldown",
     ):
         msg = f"skip chat=-1001 reason={reason} mid=99 user=42"
         record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
         assert format_log_for_telegram(record) is None, reason
 
 
-def test_skip_low_score_still_mirrored():
-    # Содержательные причины (бот пытался ответить, но не смог) остаются в зеркале.
-    msg = "skip chat=-1002295062981 reason=low_score mid=12345 score=59 min=72"
+def test_incoming_message_not_mirrored():
+    msg = "Входящее сообщение chat=-1001 user=42: как смазать"
     record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
-    out = format_log_for_telegram(record)
-    assert out is not None
-    assert "Решение: пропуск" in out
+    assert format_log_for_telegram(record) is None
 
 
-def test_seen_multiline_text_in_mirror():
+def test_clarify_line_not_mirrored():
+    msg = "clarify chat=-1001 score=80 url=https://wiki.example/x reason=model_required mid=99 thread=None"
+    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
+    assert format_log_for_telegram(record) is None
+
+
+def test_bot_reply_shows_user_and_reply_text():
     msg = (
-        "seen chat=-1001 user=42 has_reply=false reply_mid=None reply_from=None "
-        "mid=99 thread=None text=строка один · строка два"
+        "bot_reply kind=wiki chat=-1001 user=42 mid=123 message_id=456 "
+        "score=80 url=https://wiki.example/x "
+        "user_text=как смазать подшипник reply_text=Уже есть в вики · ссылка"
     )
     record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
     out = format_log_for_telegram(record)
     assert out is not None
-    assert "строка один" in out
-    assert "строка два" in out
-
-
-def test_bot_reply_with_user_and_query():
-    msg = (
-        "bot_reply kind=wiki chat=-1001 user=42 score=80 url=https://wiki.example/x "
-        "query=как смазать подшипник"
-    )
-    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
-    out = format_log_for_telegram(record)
-    assert out is not None
-    assert "Решение: ответ в чат" in out
+    assert "Ответ бота" in out
+    assert "Вопрос пользователя:" in out
     assert "как смазать" in out
-    assert "Пользователь:" in out
+    assert "Уже есть в вики" in out
+    assert "https://t.me/c/" in out
+
+
+def test_bot_reply_legacy_query_field():
+    msg = (
+        "bot_reply kind=manual_qa_message chat=-1001 user=42 "
+        "query=термистор reply_text=Ответ из QA"
+    )
+    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
+    out = format_log_for_telegram(record)
+    assert out is not None
+    assert "термистор" in out
+    assert "Ответ из QA" in out
 
 
 def test_startup_ready_compact_mirror():

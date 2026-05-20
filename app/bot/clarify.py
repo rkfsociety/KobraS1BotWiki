@@ -30,7 +30,7 @@ from app.bot.error_codes_wiki import (
 
 from app.bot.i18n import _t
 
-from app.bot.reply_logging import _log_bot_reply
+from app.bot.reply_logging import log_bot_reply_for_message
 
 from app.bot.decision_log import log_seen_message, log_skip
 
@@ -160,14 +160,12 @@ async def _try_send_error_code_clarify(
 
     lang = context.application.bot_data.get("last_user_lang") or "ru"
 
+    clarify_body = _t(lang, "error_code_clarify").format(code=html.escape(code), variants=html.escape(pretty))
+
     sent = await msg.reply_text(
-
-        _t(lang, "error_code_clarify").format(code=html.escape(code), variants=html.escape(pretty)),
-
+        clarify_body,
         parse_mode=ParseMode.HTML,
-
         disable_web_page_preview=True,
-
     )
 
     pending = context.application.bot_data.setdefault("clarify_pending", {})
@@ -184,7 +182,15 @@ async def _try_send_error_code_clarify(
 
     _save_clarify_store(store)
 
-    _log_bot_reply("error_code_clarify_prompt", chat_id, msg.from_user.id, message_id=sent.message_id, code=code, variants=pretty)
+    log_bot_reply_for_message(
+        "error_code_clarify_prompt",
+        msg=msg,
+        reply_text=clarify_body,
+        sent=sent,
+        user_id=msg.from_user.id,
+        code=code,
+        variants=pretty,
+    )
 
     return True
 
@@ -210,24 +216,21 @@ async def _reply_no_guide_for_model(
 
     lang = context.application.bot_data.get('last_user_lang') or 'ru'
 
-    sent = await msg.reply_text(_t(lang, 'no_guide_for_model'), disable_web_page_preview=True)
+    no_guide_body = _t(lang, 'no_guide_for_model')
+    sent = await msg.reply_text(no_guide_body, disable_web_page_preview=True)
 
     if settings.log_decisions:
 
         log_skip(chat_id, "no_guide_for_model", msg=msg, url=best_url, hints=" ".join(sorted(hints)))
 
-    _log_bot_reply(
-
+    log_bot_reply_for_message(
         "no_matching_guide",
-
-        chat_id,
-
-        user_id,
-
+        msg=msg,
+        reply_text=no_guide_body,
+        sent=sent,
+        user_id=user_id,
         url=best_url,
-
         hints=" ".join(sorted(hints)),
-
     )
 
     return sent
@@ -432,18 +435,14 @@ async def _deliver_clarify_combined(
 
         # Подстрахуемся: даже если кто-то ответит reply, мы не хотим продолжать цепочку по кодам ошибок.
 
-        _log_bot_reply(
-
+        log_bot_reply_for_message(
             "error_code_wiki",
-
-            chat_id,
-
-            from_user,
-
+            msg=msg,
+            reply_text=reply,
+            sent=sent,
+            user_id=from_user,
             score=best_score,
-
             url=url,
-
         )
 
         return "wiki"
@@ -492,26 +491,17 @@ async def _deliver_clarify_combined(
 
     if not best_doc or best_score < settings.min_score:
 
-        sent = await msg.reply_text(
+        uncertain_body = _t(context.application.bot_data.get("last_user_lang") or "ru", "still_uncertain")
+        sent = await msg.reply_text(uncertain_body, disable_web_page_preview=True)
 
-            _t(context.application.bot_data.get("last_user_lang") or "ru", "still_uncertain"),
-
-            disable_web_page_preview=True,
-
-        )
-
-        _log_bot_reply(
-
+        log_bot_reply_for_message(
             uncertain_kind,
-
-            chat_id,
-
-            from_user,
-
+            msg=msg,
+            reply_text=uncertain_body,
+            sent=sent,
+            user_id=from_user,
             score=best_score if best_doc else None,
-
             url=(best_doc.url if best_doc else None),
-
         )
 
         # Разрешаем следующий reply только на этот ответ бота
@@ -568,20 +558,15 @@ async def _deliver_clarify_combined(
 
     hints = _model_slug_hints(combined)
 
-    _log_bot_reply(
-
+    log_bot_reply_for_message(
         wiki_kind,
-
-        chat_id,
-
-        from_user,
-
+        msg=msg,
+        reply_text=reply,
+        sent=sent,
+        user_id=from_user,
         score=best_score,
-
         url=url,
-
         hints=" ".join(sorted(hints)) if hints else "-",
-
     )
 
     # Разрешаем следующий reply только на этот ответ бота
@@ -788,14 +773,12 @@ async def _try_send_printer_clarify(
 
     lang = context.application.bot_data.get("last_user_lang") or "ru"
 
+    clarify_body = _t(lang, "clarify_prompt").format(hint=hint)
+
     sent = await msg.reply_text(
-
-        _t(lang, "clarify_prompt").format(hint=hint),
-
+        clarify_body,
         parse_mode=ParseMode.HTML,
-
         disable_web_page_preview=True,
-
     )
 
     pending[ckey] = {"original": text, "ts": now2, "prompt_message_id": sent.message_id}
@@ -810,20 +793,14 @@ async def _try_send_printer_clarify(
 
         logging.info("clarify chat=%s score=%d url=%s reason=model_required mid=%s thread=%s", chat_id, best_score, best_doc.url, msg.message_id, getattr(msg, "message_thread_id", None) or "None")
 
-    _log_bot_reply(
-
+    log_bot_reply_for_message(
         "clarify_prompt",
-
-        chat_id,
-
-        msg.from_user.id,
-
-        message_id=sent.message_id,
-
+        msg=msg,
+        reply_text=clarify_body,
+        sent=sent,
+        user_id=msg.from_user.id,
         score=best_score,
-
         url=best_doc.url,
-
     )
 
     if slash_command_ephemeral:
