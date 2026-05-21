@@ -29,7 +29,13 @@ import threading
 
 
 
-from app.bot.text_heuristics import _is_marketplace_promo_message
+from app.bot.text_heuristics import (
+    _is_chat_meta_discussion,
+    _is_marketplace_promo_message,
+    _is_partial_manual_find_observation,
+    _is_technical_observation_sharing,
+    _is_technical_opinion_sharing,
+)
 
 
 
@@ -158,6 +164,26 @@ def _make_search_blob(doc: WebWikiDoc) -> str:
 def _looks_like_question(text: str) -> bool:
 
     if _is_marketplace_promo_message(text):
+
+        return False
+
+    # «Нашёл только инструкцию как…» — в тексте есть «как», но это не вопрос к боту.
+    if _is_partial_manual_find_observation(text):
+
+        return False
+
+    # Цитата «помогите…» при обсуждении истории чата — не вопрос к боту.
+    if _is_chat_meta_discussion(text):
+
+        return False
+
+    # «Заметил, что параметр X — не тот» — наблюдение, не вопрос (в тексте есть «что»).
+    if _is_technical_observation_sharing(text):
+
+        return False
+
+    # «Как по мне люфт не страшен» — мнение, не вопрос «как сделать».
+    if _is_technical_opinion_sharing(text):
 
         return False
 

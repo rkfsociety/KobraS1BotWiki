@@ -1241,7 +1241,14 @@ def _needs_model_clarification(text: str) -> bool:
 
         return False
 
-
+    # Наблюдения и бытовой чат — модель не уточняем.
+    if (
+        _is_technical_opinion_sharing(text)
+        or _is_technical_observation_sharing(text)
+        or _is_partial_manual_find_observation(text)
+        or _is_chat_meta_discussion(text)
+    ):
+        return False
 
     return _topic_needs_printer_model(text) and not _printer_mentioned(text)
 
@@ -1302,10 +1309,108 @@ def _is_marketplace_promo_message(text: str | None) -> bool:
 
 
 
+def _is_chat_meta_discussion(text: str) -> bool:
+    """Цитата чужого «помогите» или разговор об истории чата — не запрос к боту."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    help_words = ("помогите", "спасите", "help", "памагити", "спаситипамагити")
+    has_help = any(k in t for k in help_words)
+    cited_help = bool(
+        re.search(r'["«\'][^"\']*(?:помогите|спасите|help)', t)
+        or re.search(r"(?:помогите|спасите)\s*(?:\.\.\.|…)", t)
+    )
+    reminisce = bool(
+        re.search(
+            r"\b(?:"
+            r"не\s+помню|перечитал|"
+            r"в\s+чат\s+приш|пришел\s+в\s+чат|"
+            r"впервые\s+вопрос|написал\s+чату|"
+            r"в\s+июн|в\s+чате\b"
+            r")\b",
+            t,
+        )
+    )
+    if reminisce and (has_help or re.search(r"\bвопросами?\b", t)):
+        return True
+    if cited_help and reminisce:
+        return True
+    if cited_help:
+        outside = re.sub(r'["«][^"»]*?[»"]', " ", t)
+        outside = re.sub(r"(?:помогите|спасите)\s*(?:\.\.\.|…)", " ", outside, flags=re.I)
+        if not any(k in outside for k in help_words):
+            return True
+    return False
+
+
+def _is_technical_opinion_sharing(text: str) -> bool:
+    """Мнение в обсуждении (люфт, печать) — не запрос помощи у бота."""
+    if not text or not text.strip():
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\bкак\s+по\s+мне\b", t):
+        return True
+    if re.search(r"\b(?:по\s+мне|мне\s+кажется|я\s+считаю|имхо)\b", t) and re.search(
+        r"\b(?:люфт|backlash|зазор|на\s+печать|печат|не\s+влияет|не\s+страшн|не\s+смертел|по\s+сути)\b",
+        t,
+    ):
+        return True
+    return False
+
+
+def _is_technical_observation_sharing(text: str) -> bool:
+    """Делится находкой о настройках/параметрах — не просит помощи у бота."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    noticed = bool(
+        re.search(
+            r"\b(?:"
+            r"заметил(?:\s*,)?\s*что|заметила(?:\s*,)?\s*что|"
+            r"оказалось\s+что|выяснил(?:ся|а)?\s+что|оказывается|"
+            r"понял(?:\s*,)?\s*что|разобрал(?:ся|а)?\s+что"
+            r")\b",
+            t,
+        )
+    )
+    tinkering = bool(re.search(r"\b(?:разбирал(?:ся|а)?|копал(?:ся|а)?)\b.{0,50}\bнастрой", t))
+    param_talk = bool(
+        re.search(r"\b(?:это\s+)?(?:вовсе\s+)?не\s+(?:параметр|тот|то)\b", t)
+        or re.search(r"\b[a-z][a-z0-9_]{5,}\b", t)
+    )
+    if noticed and (tinkering or param_talk):
+        return True
+    if tinkering and noticed:
+        return True
+    return False
+
+
+def _is_partial_manual_find_observation(text: str) -> bool:
+    """«Нашёл только инструкцию как…» — делится находкой в чате, не просит бота."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # «не нашёл / не могу найти» — это запрос помощи, не бытовая реплика.
+    if re.search(r"\bне\s+(?:могу\s+)?найти\b", t) or re.search(r"\bне\s+наш", t):
+        return False
+    if re.search(r"\b(?:наш[её]л|нашла|нашли|нашлось)\s+(?:тока|только|лишь|одну)\b", t):
+        return True
+    if re.search(r"\b(?:наш[её]л|нашла|нашли|нашлось)\b", t) and "инструкц" in t:
+        return True
+    if re.search(r"\bесть\s+только\b", t) and any(k in t for k in ("инструкц", "гайд", "мануал")):
+        return True
+    return False
+
+
 # Сравнительное «как на кобре», разговорное «ужас как» в конце — не вопрос к боту.
 _COLOQUIAL_KAK_RE = re.compile(
     r"(?:"
     r"\bужас\s+как\b|"
+    r"\bкак\s+по\s+мне\b|"
     r"\b\w+\s+как\s*[!?.…\U0001f300-\U0001faff]*\s*$|"
     r"\bкак\s+на\s+\w+"
     r")",
@@ -1351,6 +1456,14 @@ def _is_conversational_chatter(text: str) -> bool:
     """Бытовая реплика в чате — не отвечать ссылкой из вики."""
     if not text or not text.strip():
         return False
+    if _is_partial_manual_find_observation(text):
+        return True
+    if _is_chat_meta_discussion(text):
+        return True
+    if _is_technical_observation_sharing(text):
+        return True
+    if _is_technical_opinion_sharing(text):
+        return True
     if _message_has_help_intent(text):
         return False
     if _is_marketplace_promo_message(text):
@@ -1389,7 +1502,9 @@ def _is_generic_help_without_context(text: str) -> bool:
 
     t = (text or "").lower()
 
-
+    # «помогите» в цитате про прошлый чат — не просьба к боту.
+    if _is_chat_meta_discussion(text):
+        return False
 
     if not any(k in t for k in ("помогите", "спасите", "help", "памагити", "спаситипамагити")):
 
