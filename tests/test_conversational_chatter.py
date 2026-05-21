@@ -259,3 +259,21 @@ def test_refund_printer_material_opinion_from_log_is_chatter():
 
 def test_filament_choice_question_not_chatter():
     assert not _is_conversational_chatter(_PETG_CHOICE_HELP)
+
+
+_ACE_PRICE_NEGOTIATION = (
+    "Я предлагал ему 9 он мне говорит новая аська стоит 20 от с1 так что давай за 15"
+)
+
+_ACE_PRICE_QUESTION = "сколько стоит новая аська ace pro для kobra s1?"
+
+
+def test_ace_price_negotiation_from_log_is_chatter():
+    assert _is_conversational_chatter(_ACE_PRICE_NEGOTIATION)
+    assert not _looks_like_question(_ACE_PRICE_NEGOTIATION)
+    assert not _message_has_help_intent(_ACE_PRICE_NEGOTIATION)
+
+
+def test_ace_price_question_not_chatter():
+    assert not _is_conversational_chatter(_ACE_PRICE_QUESTION)
+    assert _looks_like_question(_ACE_PRICE_QUESTION)

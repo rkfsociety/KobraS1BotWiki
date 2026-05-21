@@ -1667,10 +1667,51 @@ def _is_printer_purchase_material_opinion(text: str) -> bool:
     return False
 
 
+def _is_price_negotiation_chatter(text: str) -> bool:
+    """Торг о цене б/у узлов (аська, запчасти) — не запрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|что\s+делать|как\s+(?:купить|продать|замен|настро|почин))\b",
+        t,
+    ):
+        return False
+    # «сколько стоит» — вопрос о рынке, не переписка «давай за N»
+    if re.search(r"\bсколько\s+стоит\b", t):
+        return False
+    numbers = re.findall(r"\b\d{1,5}\b", t)
+    # «стоит 20 минут» — не цена
+    if re.search(r"\bстоит\s+\d+\s*(?:минут|мин\.?|секунд|сек\.?|часов|час\.?)\b", t):
+        return False
+    bargain_offer = bool(
+        re.search(
+            r"\b(?:предлагал|предложил|предложи|предлагаю|торгуюсь|сброшу|уступлю)\b",
+            t,
+        )
+    )
+    counter_deal = bool(re.search(r"\bдавай\s+за\b", t))
+    relay_price = bool(
+        re.search(r"\b(?:говорит|сказал|сказала|просит|хочет|берёт|берет)\b", t)
+        and re.search(r"\bстоит\s+\d+\b", t)
+    )
+    price_numbers = len(numbers) >= 2
+    if bargain_offer and (counter_deal or relay_price or price_numbers):
+        return True
+    if counter_deal and relay_price:
+        return True
+    if relay_price and price_numbers:
+        return True
+    return False
+
+
 def _is_non_wiki_chatter_message(text: str) -> bool:
     """Сообщения чата, на которые бот не отвечает из вики."""
     return (
-        _is_printer_purchase_material_opinion(text)
+        _is_price_negotiation_chatter(text)
+        or _is_printer_purchase_material_opinion(text)
         or _is_printer_comparison_opinion(text)
         or _is_printing_status_announcement(text)
         or _is_layer_profile_thread_opinion(text)
