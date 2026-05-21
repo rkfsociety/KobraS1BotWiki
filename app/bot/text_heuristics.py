@@ -1475,10 +1475,33 @@ def _is_conversational_skepticism(text: str) -> bool:
     return False
 
 
+def _is_printing_status_announcement(text: str) -> bool:
+    """«Запускаю первый слой» — статус в чате, не вопрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\bчто\s+(?:делать|значит|не\s+так|не\s+работает)\b", t):
+        return False
+    printing_action = bool(
+        re.search(
+            r"\b(?:запускаю|запустил|начинаю|начал|печатаю|пошл[ао]\s+печать|калибрую)\b",
+            t,
+        )
+    )
+    layer_ctx = bool(re.search(r"\b(?:первый\s+слой|слой|печат|калибр)\b", t))
+    casual_start = bool(re.search(r"^(?:ну\s+что|ну\s*,|поехали|погнали)\b", t))
+    if printing_action and layer_ctx:
+        return True
+    if casual_start and (printing_action or layer_ctx):
+        return True
+    return False
+
+
 def _is_non_wiki_chatter_message(text: str) -> bool:
     """Сообщения чата, на которые бот не отвечает из вики."""
     return (
-        _is_conversational_skepticism(text)
+        _is_printing_status_announcement(text)
+        or _is_conversational_skepticism(text)
         or _is_sarcastic_printer_banter(text)
         or _is_slicer_app_disambiguation(text)
         or _is_filament_testing_plan_sharing(text)
@@ -1506,7 +1529,8 @@ def _message_has_help_intent(text: str) -> bool:
     if not text or not text.strip():
         return False
     if (
-        _is_conversational_skepticism(text)
+        _is_printing_status_announcement(text)
+        or _is_conversational_skepticism(text)
         or _is_sarcastic_printer_banter(text)
         or _is_slicer_app_disambiguation(text)
         or _is_filament_testing_plan_sharing(text)

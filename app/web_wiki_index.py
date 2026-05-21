@@ -217,6 +217,11 @@ def _looks_like_question(text: str) -> bool:
     if re.search(r"\b(?:сомневаюсь|сомневаемся)\b", t) and re.search(r"\bчто\b", t) and "?" not in text:
         return False
 
+    # «Ну что, запускаю слой» — не вопросительное «что».
+    if re.search(r"^ну\s+что\b", t) and "?" not in text:
+        if not re.search(r"\bчто\s+(?:делать|значит|не\s+так|не\s+работает)\b", t):
+            return False
+
     return bool(
         re.search(
             r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает)\b",

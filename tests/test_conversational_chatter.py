@@ -155,3 +155,19 @@ def test_cube_print_skepticism_is_chatter():
     assert _is_conversational_chatter(_CUBE_SKEPTICISM)
     assert not _looks_like_question(_CUBE_SKEPTICISM)
     assert not _needs_model_clarification(_CUBE_SKEPTICISM)
+
+
+_FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
+
+_LAYER_HELP = "первый слой кривой на kobra s1, что делать?"
+
+
+def test_first_layer_announcement_is_chatter():
+    assert _is_conversational_chatter(_FIRST_LAYER_START)
+    assert not _looks_like_question(_FIRST_LAYER_START)
+    assert not _needs_model_clarification(_FIRST_LAYER_START)
+
+
+def test_first_layer_problem_still_question():
+    assert not _is_conversational_chatter(_LAYER_HELP)
+    assert _looks_like_question(_LAYER_HELP)
