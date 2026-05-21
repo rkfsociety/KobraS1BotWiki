@@ -143,3 +143,15 @@ _BACKLASH_HELP = "как убрать люфт на kobra s1, подскажит
 def test_backlash_help_request_still_question():
     assert not _is_conversational_chatter(_BACKLASH_HELP)
     assert _looks_like_question(_BACKLASH_HELP)
+
+
+_CUBE_SKEPTICISM = (
+    "Я вообще сомневаюсь, что там кто-то будет заморачиваться, "
+    "пустят на печать какой нибудь кубик и все на этом"
+)
+
+
+def test_cube_print_skepticism_is_chatter():
+    assert _is_conversational_chatter(_CUBE_SKEPTICISM)
+    assert not _looks_like_question(_CUBE_SKEPTICISM)
+    assert not _needs_model_clarification(_CUBE_SKEPTICISM)

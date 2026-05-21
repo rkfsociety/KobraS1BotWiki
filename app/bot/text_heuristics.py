@@ -1242,12 +1242,7 @@ def _needs_model_clarification(text: str) -> bool:
         return False
 
     # Наблюдения и бытовой чат — модель не уточняем.
-    if (
-        _is_technical_opinion_sharing(text)
-        or _is_technical_observation_sharing(text)
-        or _is_partial_manual_find_observation(text)
-        or _is_chat_meta_discussion(text)
-    ):
+    if _is_non_wiki_chatter_message(text):
         return False
 
     return _topic_needs_printer_model(text) and not _printer_mentioned(text)
@@ -1406,6 +1401,94 @@ def _is_partial_manual_find_observation(text: str) -> bool:
     return False
 
 
+
+def _is_slicer_app_disambiguation(text: str) -> bool:
+    """«Это в ChiTu или Orca?» — уточнение в треде, не запрос к вики."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\bкак\s+(?:настро|установ|использов|скачать|сделать|выбрать)\b", t):
+        return False
+    if _is_error_code_query(text) or _printer_mentioned(text):
+        return False
+    has_slicer = bool(re.search(r"\b(?:слайсер\w*|slicer)\b", t))
+    has_app = bool(
+        re.search(
+            r"\b(?:чиди|чити|chitu|chitubox|orca|орка|anycubic|cura|prusaslicer|bambu\s*studio)\b",
+            t,
+        )
+    )
+    if not (has_slicer or has_app):
+        return False
+    choice = bool(re.search(r"\bили\b", t) or t.count("?") >= 2)
+    demonstrative = bool(re.search(r"^\s*это\s+", t))
+    if (has_slicer and has_app and (choice or demonstrative)) or (has_app and choice and len(t) <= 100):
+        return True
+    return False
+
+
+def _is_filament_testing_plan_sharing(text: str) -> bool:
+    """Планы по катушке/тестам — не запрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\bкатушк", t) and re.search(r"\bтест", t):
+        return True
+    if re.search(r"\b(?:буду|будем)\s+(?:всякое\s+)?тест", t):
+        return True
+    if re.search(r"\b(?:определил|выбрал|отвёл|отвел)\b.{0,30}\bтест", t):
+        return True
+    return False
+
+
+def _is_sarcastic_printer_banter(text: str) -> bool:
+    """Шутки про А4/бумагу или тред с люфтом — не запрос к вики."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\bкак\s+(?:убрать|устранить|уменьшить|настро)\b", t):
+        return False
+    if re.search(r"\b(?:а4|a4)\b", t) and re.search(r"\b(?:принтер|вставля|бумаг)\b", t):
+        return True
+    if re.search(r"\bбумаг\w*\b", t) and re.search(r"\bпечата", t):
+        if re.search(r"\bэто\s+же\s+принтер\b", t) or "?" in text:
+            return True
+    if (t.count("·") >= 2 or t.count("?") >= 2) and re.search(r"\bлюфт\b", t):
+        if not re.search(r"\b(?:помогите|подскаж)\b", t):
+            return True
+    return False
+
+
+def _is_conversational_skepticism(text: str) -> bool:
+    """Скепсис в треде — не запрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\b(?:сомневаюсь|сомневаемся|не\s+думаю|вряд\s+ли|сомнев)\b", t) and re.search(r"\bчто\b", t):
+        return True
+    if re.search(r"\b(?:пустят|напечатают|запустят|заморачив)\b", t) and re.search(
+        r"\b(?:кубик|куб|печат)\b", t
+    ):
+        return True
+    if re.search(r"\bвс[её]\s+на\s+этом\b", t) and re.search(r"\bпечат", t):
+        return True
+    return False
+
+
+def _is_non_wiki_chatter_message(text: str) -> bool:
+    """Сообщения чата, на которые бот не отвечает из вики."""
+    return (
+        _is_conversational_skepticism(text)
+        or _is_sarcastic_printer_banter(text)
+        or _is_slicer_app_disambiguation(text)
+        or _is_filament_testing_plan_sharing(text)
+        or _is_technical_opinion_sharing(text)
+        or _is_technical_observation_sharing(text)
+        or _is_partial_manual_find_observation(text)
+        or _is_chat_meta_discussion(text)
+    )
+
+
 # Сравнительное «как на кобре», разговорное «ужас как» в конце — не вопрос к боту.
 _COLOQUIAL_KAK_RE = re.compile(
     r"(?:"
@@ -1421,6 +1504,13 @@ _COLOQUIAL_KAK_RE = re.compile(
 def _message_has_help_intent(text: str) -> bool:
     """Пользователь ищет помощь / инструкцию, а не просто комментирует чат."""
     if not text or not text.strip():
+        return False
+    if (
+        _is_conversational_skepticism(text)
+        or _is_sarcastic_printer_banter(text)
+        or _is_slicer_app_disambiguation(text)
+        or _is_filament_testing_plan_sharing(text)
+    ):
         return False
     raw = text.strip()
     t = re.sub(r"\s+", " ", raw.lower()).strip()
@@ -1456,13 +1546,7 @@ def _is_conversational_chatter(text: str) -> bool:
     """Бытовая реплика в чате — не отвечать ссылкой из вики."""
     if not text or not text.strip():
         return False
-    if _is_partial_manual_find_observation(text):
-        return True
-    if _is_chat_meta_discussion(text):
-        return True
-    if _is_technical_observation_sharing(text):
-        return True
-    if _is_technical_opinion_sharing(text):
+    if _is_non_wiki_chatter_message(text):
         return True
     if _message_has_help_intent(text):
         return False

@@ -30,11 +30,8 @@ import threading
 
 
 from app.bot.text_heuristics import (
-    _is_chat_meta_discussion,
     _is_marketplace_promo_message,
-    _is_partial_manual_find_observation,
-    _is_technical_observation_sharing,
-    _is_technical_opinion_sharing,
+    _is_non_wiki_chatter_message,
 )
 
 
@@ -167,23 +164,7 @@ def _looks_like_question(text: str) -> bool:
 
         return False
 
-    # «Нашёл только инструкцию как…» — в тексте есть «как», но это не вопрос к боту.
-    if _is_partial_manual_find_observation(text):
-
-        return False
-
-    # Цитата «помогите…» при обсуждении истории чата — не вопрос к боту.
-    if _is_chat_meta_discussion(text):
-
-        return False
-
-    # «Заметил, что параметр X — не тот» — наблюдение, не вопрос (в тексте есть «что»).
-    if _is_technical_observation_sharing(text):
-
-        return False
-
-    # «Как по мне люфт не страшен» — мнение, не вопрос «как сделать».
-    if _is_technical_opinion_sharing(text):
+    if _is_non_wiki_chatter_message(text):
 
         return False
 
@@ -228,6 +209,13 @@ def _looks_like_question(text: str) -> bool:
     if "ссыл" in t and any(w in t for w in ("вики", "wiki", "настрой", "калибр", "уровн", "стол", "куб")):
 
         return True
+
+    if re.search(r"\bтак\s+что\b", t) and "?" not in text:
+        if not re.search(r"\bтак\s+что\s+(?:делать|значит|не\s+так|не\s+работает)\b", t):
+            return False
+
+    if re.search(r"\b(?:сомневаюсь|сомневаемся)\b", t) and re.search(r"\bчто\b", t) and "?" not in text:
+        return False
 
     return bool(
         re.search(

@@ -19,27 +19,22 @@ def model_specifically_identified(text: str) -> bool:
 def topic_is_layer_slicing_intent(text: str | None) -> bool:
     if not text:
         return False
+    from app.bot.text_heuristics import _is_non_wiki_chatter_message
+
+    if _is_non_wiki_chatter_message(text):
+        return False
     tl = text.lower()
     if re.search(r"\b0\.\d{1,3}\b", tl) and re.search(r"слой|слоя|слое|слою|layer", tl):
         return True
-    return any(
-        k in tl
-        for k in (
-            "слой",
-            "слоя",
-            "слое",
-            "слою",
-            "печать",
-            "в печать",
-            "тест",
-            "слайс",
-            "layer",
-            "slic",
-            "test print",
-            "benchy",
-            "профил",
-        )
-    )
+    if re.search(r"\bслайс(?!er\w*)\b", tl) or re.search(r"\bslic(?!er\w*)\b", tl):
+        return True
+    if re.search(r"\b(?:тестов(?:ую|ый|ая)|тест)\s*(?:печат|принт|print)\b", tl):
+        return True
+    if re.search(r"\btest\s*print\b|\bbenchy\b", tl):
+        return True
+    if re.search(r"\bтест\b", tl) and re.search(r"\b(?:слой|слоя|слое|layer|0\.\d|калибр|level)\b", tl):
+        return True
+    return any(k in tl for k in ("слой", "слоя", "слое", "слою", "печать", "в печать", "layer", "профил"))
 
 
 def topic_requires_printer_model(text: str) -> bool:
@@ -51,20 +46,9 @@ def topic_requires_printer_model(text: str) -> bool:
 def needs_model_clarification_for(text: str) -> bool:
     if _is_error_code_query(text):
         return False
-    # Бытовой чат: наблюдения, мнения, цитаты — модель не уточняем.
-    from app.bot.text_heuristics import (
-        _is_chat_meta_discussion,
-        _is_partial_manual_find_observation,
-        _is_technical_observation_sharing,
-        _is_technical_opinion_sharing,
-    )
+    from app.bot.text_heuristics import _is_non_wiki_chatter_message
 
-    if (
-        _is_technical_opinion_sharing(text)
-        or _is_technical_observation_sharing(text)
-        or _is_partial_manual_find_observation(text)
-        or _is_chat_meta_discussion(text)
-    ):
+    if _is_non_wiki_chatter_message(text):
         return False
     return topic_requires_printer_model(text) and not model_specifically_identified(text)
 
