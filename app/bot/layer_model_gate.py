@@ -51,6 +51,21 @@ def topic_requires_printer_model(text: str) -> bool:
 def needs_model_clarification_for(text: str) -> bool:
     if _is_error_code_query(text):
         return False
+    # Бытовой чат: наблюдения, мнения, цитаты — модель не уточняем.
+    from app.bot.text_heuristics import (
+        _is_chat_meta_discussion,
+        _is_partial_manual_find_observation,
+        _is_technical_observation_sharing,
+        _is_technical_opinion_sharing,
+    )
+
+    if (
+        _is_technical_opinion_sharing(text)
+        or _is_technical_observation_sharing(text)
+        or _is_partial_manual_find_observation(text)
+        or _is_chat_meta_discussion(text)
+    ):
+        return False
     return topic_requires_printer_model(text) and not model_specifically_identified(text)
 
 
