@@ -28,6 +28,8 @@ from app.bot.text_heuristics import (
 
     _topic_is_filament_feed_intent,
 
+    _topic_is_filament_material_choice_intent,
+
     _user_already_replaced_motherboard,
 
 )
@@ -93,6 +95,28 @@ def _topic_path_bonus(topic: str | None, url: str) -> int:
         if "nozzle" in u:
 
             b += 20
+
+    if _topic_is_filament_material_choice_intent(topic):
+
+        if "print-tpu" in u:
+
+            b += 72
+
+        elif "filament-guide" in u:
+
+            b += 58
+
+        elif "parameters-selection" in u:
+
+            b += 45
+
+        elif "extra-material" in u and "printing" in u:
+
+            b += 38
+
+        if "replace" in u and "nozzle" in u:
+
+            b -= 70
 
     if "хотэнд" in tl or "hotend" in tl or "hot end" in tl:
 
@@ -286,6 +310,27 @@ def _topic_is_door_intent(topic: str | None) -> bool:
 
 
 
+
+def _filament_material_guide_url_plausible(url: str) -> bool:
+    """Страницы про выбор/печать материала, не замена сопла."""
+    u = url.lower().replace("_", "-")
+    if "print-tpu" in u or "filament-guide" in u:
+        return True
+    if "filament-and-resin" in u and "guide" in u:
+        return True
+    if "parameters-selection" in u:
+        return True
+    if "flexible" in u and "filament" in u:
+        return True
+    if re.search(r"(?:^|/)tpu(?:/|$|-)", u):
+        return True
+    if "extra-material" in u and "printing" in u:
+        return True
+    return False
+
+
+
+
 def _topic_is_nozzle_intent(topic: str | None) -> bool:
 
     if not topic:
@@ -419,6 +464,24 @@ def _filament_feed_guide_url_plausible(url: str) -> bool:
 def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
 
     """Тема «дверь» или «подача филамента», а URL про другое узло — сильный штраф."""
+
+    if _topic_is_filament_material_choice_intent(topic):
+
+        u = url.lower().replace("_", "-")
+
+        if _filament_material_guide_url_plausible(url):
+
+            return 0
+
+        if "replace" in u and "nozzle" in u:
+
+            return 85
+
+        if "nozzle" in u and any(k in u for k in ("scraping", "silicone", "cleaning")):
+
+            return 72
+
+        return 35
 
     if _topic_is_filament_feed_intent(topic):
 
@@ -672,11 +735,23 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
         return False
 
-    if _topic_is_nozzle_intent(question) and not _nozzle_guide_url_plausible(
+    if (
 
-        url, allow_silicone=_topic_is_nozzle_silicone_intent(question)
+        _topic_is_nozzle_intent(question)
+
+        and not _topic_is_filament_material_choice_intent(question)
+
+        and not _nozzle_guide_url_plausible(
+
+            url, allow_silicone=_topic_is_nozzle_silicone_intent(question)
+
+        )
 
     ):
+
+        return False
+
+    if _topic_is_filament_material_choice_intent(question) and not _filament_material_guide_url_plausible(url):
 
         return False
 

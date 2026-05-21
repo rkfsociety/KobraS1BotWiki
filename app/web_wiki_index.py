@@ -202,6 +202,27 @@ def _looks_like_question(text: str) -> bool:
 
         return False
 
+    # «лучше чем на кобре», «выглядит лучше» — сравнение, не вопрос к боту.
+    if re.search(r"\b(?:лучше|хуже)\b", t) and re.search(r"\b(?:чем|как)\s+на\b", t) and "?" not in text:
+        if not re.search(
+            r"\bкак\s+(?:откалибр|настро|почин|исправ|сделать|убрать|решить|подключ|замен)\b", t
+        ):
+            return False
+
+    if re.search(r"\bвыглядит\s+(?:лучше|хуже)\b", t) and "?" not in text:
+        if re.search(r"\b(?:чем|как)\s+на\b", t) or re.search(r"\bстол\w*\b", t):
+            if not re.search(
+                r"\bкак\s+(?:откалибр|настро|почин|исправ|сделать|убрать|решить|подключ|замен)\b", t
+            ):
+                return False
+
+    # «до того как стол крутил» — союзное «как», не «как настроить».
+    if re.search(r"\b(?:до|после|перед)\s+того\s+как\b", t) and "?" not in text:
+        if not re.search(
+            r"\bкак\s+(?:откалибр|настро|почин|исправ|сделать|убрать|решить|подключ|замен)\b", t
+        ):
+            return False
+
     if re.search(r"\b(кинь|скинь|дай|подкинь|киньте|скиньте|дайте)\w*\b.{0,20}\bссыл", t):
 
         return True
@@ -221,6 +242,17 @@ def _looks_like_question(text: str) -> bool:
     if re.search(r"^ну\s+что\b", t) and "?" not in text:
         if not re.search(r"\bчто\s+(?:делать|значит|не\s+так|не\s+работает)\b", t):
             return False
+
+    # «Нуу, что могу сказать» / «зачем оно тебе» — сарказм в треде, не вопрос к боту.
+    if re.search(r"\bчто\s+могу\s+сказать\b", t) and "?" not in text:
+        return False
+    if re.search(r"\bзачем\s+(?:оно|тебе|вам|это|мне|нам)\b", t) and "?" not in text:
+        if re.search(r"\b(?:спал\s+бы|спи\s+бы|не\s+знал\s+про|что\s+могу\s+сказать)\b", t):
+            return False
+
+    # «как раздавая акция» — союзное «как», не вопрос к боту.
+    if re.search(r"\bкак\s+(?:раздавая|акци\w*)\b", t) and "?" not in text:
+        return False
 
     return bool(
         re.search(

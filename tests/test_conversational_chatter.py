@@ -11,6 +11,8 @@ from app.web_wiki_index import _looks_like_question
 
 _BED_COMPARE_MSG = "Разберемся, тут кстати стол регулируется не сверху как на кобре"
 
+_BED_LOOKS_BETTER_MSG = "Но выглядит лучше , чем на кобре (до того как стол крутил)"
+
 _LINK_REQUEST = "Пасаны киньте ссыль на вики кубов по настройке стола чот лох не могу найти"
 
 _LINK_WITH_MODEL = "киньте ссыль на вики кубов по настройке стола для kobra s1"
@@ -25,6 +27,12 @@ _THERMISTOR_HELP = "у меня термистор отвалился на kobra
 def test_bed_compare_other_printer_is_chatter():
     assert _is_conversational_chatter(_BED_COMPARE_MSG)
     assert not _looks_like_question(_BED_COMPARE_MSG)
+
+
+def test_bed_looks_better_than_kobra_from_log_is_chatter():
+    assert _is_conversational_chatter(_BED_LOOKS_BETTER_MSG)
+    assert not _looks_like_question(_BED_LOOKS_BETTER_MSG)
+    assert not _needs_model_clarification(_BED_LOOKS_BETTER_MSG)
 
 
 def test_link_request_still_question_and_needs_model():
@@ -171,3 +179,83 @@ def test_first_layer_announcement_is_chatter():
 def test_first_layer_problem_still_question():
     assert not _is_conversational_chatter(_LAYER_HELP)
     assert _looks_like_question(_LAYER_HELP)
+
+
+_LAYER_PROFILE_OPINION = (
+    "Дык на первый слой же не повлияет , сомневаюсь что он тут будет очень сырой . "
+    "На соковом профиле думаю все норм будет"
+)
+
+_LAYER_PROFILE_OPINION_NO_DOUBT = (
+    "На первый слой не повлияет. На сопловом профиле думаю все норм будет"
+)
+
+
+def test_layer_profile_thread_opinion_from_log_is_chatter():
+    assert _is_conversational_chatter(_LAYER_PROFILE_OPINION)
+    assert not _looks_like_question(_LAYER_PROFILE_OPINION)
+    assert not _needs_model_clarification(_LAYER_PROFILE_OPINION)
+
+
+def test_layer_profile_opinion_without_skepticism_is_chatter():
+    assert _is_conversational_chatter(_LAYER_PROFILE_OPINION_NO_DOUBT)
+    assert not _needs_model_clarification(_LAYER_PROFILE_OPINION_NO_DOUBT)
+
+
+_FIRST_DAYS_STORY = (
+    "Я когда кобру взял, а пластиков еще не набрал, печатал остатками старыми. "
+    "Там тоже пара таких ломких была. Короче, так я в первый же день узнал "
+    "устройство головы, аськи, хаба сзади..."
+)
+
+_FILAMENT_HELP = "как заменить филамент в ace pro на kobra 3 combo?"
+
+
+def test_first_days_discovery_story_is_chatter():
+    assert _is_conversational_chatter(_FIRST_DAYS_STORY)
+    assert not _looks_like_question(_FIRST_DAYS_STORY)
+    assert not _needs_model_clarification(_FIRST_DAYS_STORY)
+
+
+def test_filament_replace_question_not_chatter():
+    assert not _is_conversational_chatter(_FILAMENT_HELP)
+    assert _looks_like_question(_FILAMENT_HELP)
+
+
+_CROOKED_BED_BANTER = (
+    "Нуууу, что могу сказать 😂 · ну и вот зачем оно тебе😂"
+    "спал бы спокойно и не знал про кривой стол"
+)
+
+_CROOKED_BED_HELP = "кривой стол на kobra s1, что делать?"
+
+
+def test_crooked_bed_sarcasm_from_log_is_chatter():
+    assert _is_conversational_chatter(_CROOKED_BED_BANTER)
+    assert not _looks_like_question(_CROOKED_BED_BANTER)
+    assert not _needs_model_clarification(_CROOKED_BED_BANTER)
+
+
+def test_crooked_bed_help_request_still_question():
+    assert not _is_conversational_chatter(_CROOKED_BED_HELP)
+    assert _looks_like_question(_CROOKED_BED_HELP)
+
+
+_REFUND_S1MAX_OPINION = (
+    "Вот думаю если деньги вернут , то может проще X взять , по сути от s1 max толку нет, "
+    "разве что только шлемы печатать 😂. А так я в основном ПЛА и петг печатал , ну и АБС чуток "
+    "побаловался. Хз стал ли бы я печать композитами 🤷‍♂️, интересно конечно попробовать, "
+    "но это чисто как раздавая акция , попробовал и забил 😁"
+)
+
+_PETG_CHOICE_HELP = "какой petg лучше для kobra s1?"
+
+
+def test_refund_printer_material_opinion_from_log_is_chatter():
+    assert _is_conversational_chatter(_REFUND_S1MAX_OPINION)
+    assert not _looks_like_question(_REFUND_S1MAX_OPINION)
+    assert not _needs_model_clarification(_REFUND_S1MAX_OPINION)
+
+
+def test_filament_choice_question_not_chatter():
+    assert not _is_conversational_chatter(_PETG_CHOICE_HELP)

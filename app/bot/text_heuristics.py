@@ -119,6 +119,15 @@ def _topic_needs_printer_model(text: str) -> bool:
 
 
 
+    # Выбор марки/типа пластика (TPU и т.п.) — не путать с сервисом сопла.
+    if _topic_is_filament_material_choice_intent(text):
+
+
+
+        return False
+
+
+
     ru = (
 
 
@@ -1459,6 +1468,35 @@ def _is_sarcastic_printer_banter(text: str) -> bool:
     return False
 
 
+def _is_sarcastic_thread_banter(text: str) -> bool:
+    """Сарказм в треде («спал бы», «зачем тебе») — не запрос к вики."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # Явная просьба о помощи — не отсекаем.
+    if re.search(
+        r"\b(?:"
+        r"как\s+(?:откалибр|настро|почин|исправ|сделать|убрать|решить|подключ|замен)|"
+        r"помогите|подскаж|не\s+работает|что\s+делать"
+        r")\b",
+        t,
+    ):
+        return False
+    shrug = bool(re.search(r"\bчто\s+могу\s+сказать\b", t))
+    rhetorical_why = bool(re.search(r"\bзачем\s+(?:оно|тебе|вам|это|мне|нам)\b", t))
+    sleep_advice = bool(re.search(r"\b(?:спал\s+бы|спи\s+бы|уснул\s+бы)\b.{0,25}\bспокойн", t))
+    wished_ignorance = bool(re.search(r"\bне\s+знал\s+про\b", t))
+    if shrug and (rhetorical_why or sleep_advice or wished_ignorance):
+        return True
+    if rhetorical_why and (sleep_advice or wished_ignorance):
+        return True
+    if sleep_advice and wished_ignorance:
+        return True
+    if shrug and re.search(r"^н+u+\s*,?\s*что\s+могу", t):
+        return True
+    return False
+
+
 def _is_conversational_skepticism(text: str) -> bool:
     """Скепсис в треде — не запрос к вики."""
     if not text or not text.strip() or "?" in text:
@@ -1497,11 +1535,148 @@ def _is_printing_status_announcement(text: str) -> bool:
     return False
 
 
+def _is_layer_profile_thread_opinion(text: str) -> bool:
+    """Мнение в треде про первый слой / профиль сопла — не запрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _is_error_code_query(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\b(?:помогите|подскаж|не\s+работает|что\s+делать)\b", t):
+        return False
+    # «как убрать сдвиг слоя» — это уже запрос помощи, не бытовая реплика.
+    if re.search(r"\bкак\s+(?:убрать|исправ|устранить|настро|сделать)\b", t):
+        return False
+    layer_ctx = bool(re.search(r"\b(?:первый\s+слой|слой\w*|layer)\b", t))
+    # «соковом» — опечатка «сопловом» в обсуждении профиля
+    profile_ctx = bool(re.search(r"\b(?:профил\w*|сопл\w*|соков\w*|nozzle)\b", t))
+    if not (layer_ctx or profile_ctx):
+        return False
+    opinion = bool(
+        re.search(r"\b(?:не\s+повлия|не\s+влия|думаю|кажется|норм|сырой|сыр\w+)\b", t)
+        or re.search(r"\b(?:сомнева|вряд\s+ли|не\s+думаю)\b", t)
+    )
+    return opinion
+
+
+def _is_first_days_experience_sharing(text: str) -> bool:
+    """Рассказ «когда взял кобру / в первый день узнал части» — не запрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\bкак\s+(?:замен|почин|исправ|настро|сделать|убрать|подключ)\b", t):
+        return False
+    # Покупка / первые дни с принтером
+    got_printer = bool(
+        re.search(
+            r"\b(?:когда|как\s+только)\s+.{0,50}\b(?:взял|взяла|купил|купила|получил|получила)\b",
+            t,
+        )
+        or re.search(r"\bкобр\w*\s+взял\b", t)
+        or re.search(r"\bв\s+первый\s+(?:же\s+)?день\b", t)
+    )
+    # Узнал устройство узлов без вопроса к боту
+    discovery = bool(
+        re.search(
+            r"\b(?:узнал|узнала|понял|поняла|разобрался|разобралась)\b.{0,80}\b(?:"
+            r"устройств\w*|голов\w*|хаб\w*|аська\w*|аськ\w*|сопл\w*|экструдер\w*|"
+            r"портал\w*|ремен\w*"
+            r")\b",
+            t,
+        )
+    )
+    leftover_print = bool(
+        re.search(r"\b(?:остатк|стары[мх]|ломк)\b", t) and re.search(r"\bпечатал", t)
+    )
+    casual_wrap = bool(re.search(r"\bкороче\b", t))
+    if discovery and (got_printer or leftover_print or casual_wrap):
+        return True
+    if got_printer and leftover_print:
+        return True
+    return False
+
+
+def _is_printer_comparison_opinion(text: str) -> bool:
+    """Сравнение с другим принтером («лучше чем на кобре») — бытовая реплика, не запрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # Явный запрос «как настроить» — не отсекаем.
+    if re.search(
+        r"\bкак\s+(?:откалибр|настро|почин|исправ|сделать|убрать|решить|подключ|замен|почист|смаз|провер)\b",
+        t,
+    ):
+        return False
+    on_other = bool(re.search(r"\b(?:чем|как)\s+на\s+(?:кобр|фотон|вайпер|друг\w+)\b", t))
+    better_worse = bool(re.search(r"\b(?:лучше|хуже|удобнее|проще)\b", t))
+    looks_cmp = bool(re.search(r"\bвыглядит\s+(?:лучше|хуже|норм|ок)\b", t))
+    # «не сверху как на кобре», «регулируется иначе как на кобре»
+    unlike_other = bool(re.search(r"\b(?:не\s+\w+\s+)?как\s+на\s+(?:кобр|фотон|вайпер)\b", t))
+    if on_other and (better_worse or looks_cmp or unlike_other):
+        return True
+    if looks_cmp and (on_other or re.search(r"\bстол\w*\b", t)):
+        return True
+    if unlike_other:
+        return True
+    return False
+
+
+def _is_printer_purchase_material_opinion(text: str) -> bool:
+    """Размышления о покупке/возврате и опыт с пластиками — не запрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|что\s+делать|как\s+(?:настро|почин|исправ|сделать|убрать))\b",
+        t,
+    ):
+        return False
+    # Возврат / замена принтера / «толку нет от s1 max»
+    purchase_thought = bool(
+        re.search(r"\b(?:вот\s+)?думаю\b", t)
+        or re.search(r"\b(?:проще|лучше)\s+.{0,25}\bвзять\b", t)
+        or re.search(r"\bтолку\s+нет\b", t)
+        or re.search(r"\b(?:верн\w*|возврат)\b.{0,50}\b(?:деньг|курс)\b", t)
+    )
+    printer_ctx = bool(
+        re.search(r"\b(?:s1\s*max|kobra|кобр\w*|vyper|вайпер|фотон|mono|принтер\w*)\b", t)
+        or re.search(r"\b(?:шлем|маск)\w*\s+печат", t)
+    )
+    # «в основном pla/petg печатал», «побаловался с abs»
+    material_past = bool(
+        re.search(r"\b(?:pla|пла|petg|петг|abs|абс|композит|нейлон|nylon|tpu|тпу)\b", t)
+        and re.search(r"\b(?:печатал|печатала|побаловал|пробовал|забил)\b", t)
+    )
+    # «хз стал ли бы … попробовать … и забил»
+    casual_try = bool(
+        (re.search(r"\bхз\b", t) or re.search(r"\bстал\s+ли\s+бы\b", t))
+        and re.search(r"\b(?:попробовать|интересно|акци\w*)\b", t)
+    )
+    if purchase_thought and printer_ctx:
+        return True
+    if material_past and (purchase_thought or casual_try or printer_ctx):
+        return True
+    if casual_try and re.search(r"\bкомпозит", t):
+        return True
+    return False
+
+
 def _is_non_wiki_chatter_message(text: str) -> bool:
     """Сообщения чата, на которые бот не отвечает из вики."""
     return (
-        _is_printing_status_announcement(text)
+        _is_printer_purchase_material_opinion(text)
+        or _is_printer_comparison_opinion(text)
+        or _is_printing_status_announcement(text)
+        or _is_layer_profile_thread_opinion(text)
+        or _is_first_days_experience_sharing(text)
         or _is_conversational_skepticism(text)
+        or _is_sarcastic_thread_banter(text)
         or _is_sarcastic_printer_banter(text)
         or _is_slicer_app_disambiguation(text)
         or _is_filament_testing_plan_sharing(text)
@@ -1512,12 +1687,13 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
     )
 
 
-# Сравнительное «как на кобре», разговорное «ужас как» в конце — не вопрос к боту.
+# Сравнительное «как/чем на кобре», разговорное «ужас как» в конце — не вопрос к боту.
 _COLOQUIAL_KAK_RE = re.compile(
     r"(?:"
     r"\bужас\s+как\b|"
     r"\bкак\s+по\s+мне\b|"
     r"\b\w+\s+как\s*[!?.…\U0001f300-\U0001faff]*\s*$|"
+    r"\b(?:чем|как)\s+на\s+\w+|"
     r"\bкак\s+на\s+\w+"
     r")",
     re.I | re.UNICODE,
@@ -1530,7 +1706,9 @@ def _message_has_help_intent(text: str) -> bool:
         return False
     if (
         _is_printing_status_announcement(text)
+        or _is_layer_profile_thread_opinion(text)
         or _is_conversational_skepticism(text)
+        or _is_sarcastic_thread_banter(text)
         or _is_sarcastic_printer_banter(text)
         or _is_slicer_app_disambiguation(text)
         or _is_filament_testing_plan_sharing(text)
@@ -1552,7 +1730,7 @@ def _message_has_help_intent(text: str) -> bool:
         re.search(
             r"\b(?:"
             r"как\s+(?:откалибр|настро|почин|исправ|сделать|убрать|решить|подключ|замен|почист|смаз|провер)|"
-            r"почему|зачем|"
+            r"почему|зачем(?!\s+(?:оно|тебе|вам|это|мне|нам)\b)|"
             r"что\s+(?:делать|значит|не\s+так)|"
             r"где\s+(?:найти|взять|скачать)|"
             r"кто\s+знает|"
@@ -1868,6 +2046,35 @@ def _model_slug_hints(text: str) -> frozenset[str]:
 
 
 
+
+
+
+def _topic_is_filament_material_choice_intent(text: str | None) -> bool:
+    """Какой пластик/TPU/фирму взять — не замена сопла и не подача филамента."""
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _topic_is_filament_feed_intent(text):
+        return False
+    if re.search(r"\b(?:замен|поменя|смени|установ|replace|remov|disassembl)\w*\b", t):
+        return False
+    has_material = bool(
+        re.search(
+            r"\b(?:тпу|tpu|пластик|филамент|filament|petg|pla|abs|nylon|нейлон|гибк)\w*\b",
+            t,
+        )
+    )
+    if not has_material:
+        return False
+    wants_choice = bool(
+        re.search(
+            r"\b(?:какой|какая|какое|какие|что\s+взять|что\s+лучше|посовет|подскаж|рекоменд|"
+            r"какую\s+фирм|бренд|марк[ау]|which|what\s+filament|brand)\w*\b",
+            t,
+        )
+    )
+    stock_nozzle_ctx = bool(re.search(r"\bродн\w*\s+сопл|\bstock\s+nozzle\b", t))
+    return wants_choice or stock_nozzle_ctx
 
 
 def _topic_is_filament_feed_intent(text: str | None) -> bool:
