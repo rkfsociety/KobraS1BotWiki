@@ -65,6 +65,8 @@ _REASON_RU: dict[str, str] = {
     "not_a_question": "не похоже на вопрос",
     "conversational_chatter": "бытовая реплика в чате (не запрос к боту)",
 
+    "marketplace_commerce": "маркетплейс / ТН ВЭД (не тема вики)",
+
     "non_admin_command": "служебная команда не от админа",
 
     "cooldown": "кулдаун между ответами",

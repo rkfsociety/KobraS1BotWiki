@@ -116,6 +116,8 @@ from app.bot.text_heuristics import (
 
     _is_marketplace_promo_message,
 
+    _topic_is_marketplace_commerce_intent,
+
     _model_slug_hints,
 
     _needs_model_clarification,
@@ -2467,6 +2469,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         if settings.log_decisions:
 
             log_skip(chat_id, "marketplace_promo", msg=msg)
+
+        return
+
+    if _topic_is_marketplace_commerce_intent(text):
+
+        if settings.log_decisions:
+
+            log_skip(chat_id, "marketplace_commerce", msg=msg)
 
         return
 
