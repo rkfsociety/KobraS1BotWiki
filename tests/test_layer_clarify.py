@@ -39,3 +39,9 @@ def test_overview_url_rejected_for_layer_question():
 
 def test_layer_s1_guide_acceptable():
     assert response_wiki_url_acceptable(_LAYER_S1, _S1_FIRST_LAYER)
+
+
+def test_hobby_miniature_print_not_layer_intent():
+    text = "А как же печать миниатюр по вахе ?"
+    assert not topic_is_layer_slicing_intent(text)
+    assert not needs_model_clarification_for(text)
