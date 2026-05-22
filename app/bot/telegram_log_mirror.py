@@ -85,6 +85,8 @@ _REASON_RU: dict[str, str] = {
 
     "error_code_not_found": "код ошибки не найден в вики",
 
+    "error_codes_topic_mismatch": "слово «ошибка» без кода — не раздел error-codes",
+
     "error_code_ambiguous": "код ошибки — несколько вариантов модели",
 
     "no_guide_for_model": "гайд не для этой модели",

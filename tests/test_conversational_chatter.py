@@ -282,6 +282,25 @@ def test_filament_waste_fact_question_still_question():
     assert _looks_like_question(_WASTE_FACT_QUESTION)
 
 
+_FILAMENT_STATS_OPINION = (
+    "Я, все же, пока что, думаю, что нит не так плох, как тут раздувается. "
+    "Просто ошибка статистики"
+)
+
+_FILAMENT_STATS_HELP = "ошибка 11503 на kobra s1, что делать?"
+
+
+def test_filament_stats_opinion_from_log_is_chatter():
+    assert _is_conversational_chatter(_FILAMENT_STATS_OPINION)
+    assert not _looks_like_question(_FILAMENT_STATS_OPINION)
+    assert not _needs_model_clarification(_FILAMENT_STATS_OPINION)
+
+
+def test_error_code_help_not_chatter():
+    assert not _is_conversational_chatter(_FILAMENT_STATS_HELP)
+    assert _looks_like_question(_FILAMENT_STATS_HELP)
+
+
 _ACE_PRICE_NEGOTIATION = (
     "Я предлагал ему 9 он мне говорит новая аська стоит 20 от с1 так что давай за 15"
 )

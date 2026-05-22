@@ -854,6 +854,16 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if not _response_wiki_url_acceptable(query, url):
 
+        # Слово «ошибка» без кода — не отвечаем «нет гайда» по разделу error-codes.
+
+        if "/error-codes" in url.lower() and not _is_error_code_query(query):
+
+            if settings.log_decisions:
+
+                log_skip(chat_id, "error_codes_topic_mismatch", msg=msg, url=url)
+
+            return
+
         sent_ng = await _reply_no_guide_for_model(
 
             msg,
@@ -2764,6 +2774,16 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             if settings.log_decisions:
 
                 log_skip(chat_id, "error_code_not_found", msg=msg, url=url)
+
+            return
+
+        # Слово «ошибка» без кода — не отвечаем «нет гайда» по разделу error-codes.
+
+        if "/error-codes" in url.lower() and not _is_error_code_query(text):
+
+            if settings.log_decisions:
+
+                log_skip(chat_id, "error_codes_topic_mismatch", msg=msg, url=url)
 
             return
 
