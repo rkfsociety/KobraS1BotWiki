@@ -1,8 +1,22 @@
 # Python
 __pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+.eggs/
+dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.nox/
+.tox/
+
+# Временные локальные скрипты (отладка агента / разовые прогоны)
+scripts/_tmp_*.py
 
 # Environment
 .env
@@ -41,3 +55,7 @@ Thumbs.db
 
 # Bot / indexer runtime
 .cache/
+
+# Локальные cmd-обёртки воркера (не часть деплоя бота)
+start-agent-worker.cmd
+stop-agent-worker.cmd
