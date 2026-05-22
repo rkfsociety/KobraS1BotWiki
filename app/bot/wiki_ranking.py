@@ -32,6 +32,10 @@ from app.bot.text_heuristics import (
 
     _topic_is_filament_slicing_settings_intent,
 
+    _topic_is_marketplace_commerce_intent,
+
+    _topic_is_multicolor_firmware_intent,
+
     _user_already_replaced_motherboard,
 
 )
@@ -97,6 +101,18 @@ def _topic_path_bonus(topic: str | None, url: str) -> int:
         if "nozzle" in u:
 
             b += 20
+
+    if _topic_is_multicolor_firmware_intent(topic):
+        if "resin-3d-printer" in u:
+            b -= 85
+        if "fdm-3d-printer" in u and "firmware" in u:
+            b += 48
+        if "firmware-upgrade-log" in u:
+            b += 42
+        if "kobra-s1-combo" in u or "kobra-3-combo" in u:
+            b += 35
+        if "multi-color" in u or "eight-color" in u or "color-printing" in u:
+            b += 30
 
     if _topic_is_filament_material_choice_intent(topic) or _topic_is_filament_slicing_settings_intent(topic):
 
@@ -274,6 +290,8 @@ def _topic_is_bed_setup_intent(topic: str | None) -> bool:
 
             "настрой",
 
+            "настрои",
+
             "калибр",
 
             "уровн",
@@ -315,6 +333,22 @@ def _topic_is_door_intent(topic: str | None) -> bool:
 
 
 
+
+
+def _multicolor_firmware_guide_url_plausible(url: str) -> bool:
+    """Прошивка/лог обновлений и многоцвет — FDM Combo или слайсер, не resin."""
+    u = url.lower().replace("_", "-")
+    if "resin-3d-printer" in u:
+        return False
+    if "software-and-app" in u and "multi-color" in u:
+        return True
+    if "fdm-3d-printer" not in u:
+        return False
+    if "firmware-upgrade-log" in u or "firmware-update" in u:
+        return True
+    if "multi-color" in u or "eight-color" in u or "color-printing" in u:
+        return True
+    return False
 
 
 def _filament_material_guide_url_plausible(url: str) -> bool:
@@ -784,6 +818,15 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
         return False
 
+    if _topic_is_multicolor_firmware_intent(question) and not _multicolor_firmware_guide_url_plausible(url):
+
+        return False
+
+    # Маркетплейс/ТН ВЭД — в вики Anycubic нет ответа, не шлём filament-guide
+    if _topic_is_marketplace_commerce_intent(question):
+
+        return False
+
     return True
 
 
@@ -870,6 +913,13 @@ def _search_best_with_model_bias(
 
     hints = _model_slug_hints(context_text)
 
+    # Многоцвет + прошивка без модели в тексте — по умолчанию Combo (S1 / Kobra 3).
+    if not hints and _topic_is_multicolor_firmware_intent(context_text):
+
+        hints = frozenset({"kobra-s1-combo", "kobra-3-combo"})
+
+    from app.bot.layer_model_gate import overview_url_penalty
+
     by_url: dict[str, tuple[WebWikiDoc, int]] = {}
 
     for q in variants:
@@ -890,7 +940,10 @@ def _search_best_with_model_bias(
 
             part_pen = _wrong_part_for_topic_penalty(topic_for_keywords, doc.url)
 
-            adj_raw = int(score) + bonus - penalty + kw - part_pen
+            # Обзорные страницы модели не подходят как ответ — штраф из layer_model_gate.
+            ov_pen = overview_url_penalty(topic_for_keywords, doc.url)
+
+            adj_raw = int(score) + bonus - penalty + kw - part_pen - ov_pen
 
             prev = by_url.get(doc.url)
 

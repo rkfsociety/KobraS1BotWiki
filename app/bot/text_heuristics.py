@@ -190,6 +190,10 @@ def _topic_needs_printer_model(text: str) -> bool:
 
 
 
+        "настрои",
+
+
+
         "не печатает",
 
 
@@ -1541,6 +1545,19 @@ def _is_conversational_skepticism(text: str) -> bool:
         return True
     if re.search(r"\bвс[её]\s+на\s+этом\b", t) and re.search(r"\bпечат", t):
         return True
+    # Мнение в споре про филамент: «нить не так плоха, раздувают — ошибка статистики»
+    filament_thread = bool(
+        re.search(r"\b(?:нит\w*|нить|филамент|пруток|катушк|пластик)\w*\b", t)
+        or re.search(r"\bошибка\s+статистик\w*\b", t)
+    )
+    downplay = bool(
+        re.search(r"\bдумаю\b", t)
+        and re.search(r"\bчто\b", t)
+        and re.search(r"\b(?:раздува|не\s+так\s+плох|преувелич|перегиб|раздули)\w*\b", t)
+    )
+    stats_dismiss = bool(re.search(r"\bошибка\s+статистик\w*\b", t))
+    if filament_thread and (downplay or stats_dismiss):
+        return True
     return False
 
 
@@ -2256,6 +2273,28 @@ def _topic_is_marketplace_commerce_intent(text: str | None) -> bool:
     if marketplace and (selling or printed_goods):
         return True
     return False
+
+
+
+def _topic_is_firmware_update_intent(text: str | None) -> bool:
+    """Установка/обновление прошивки — не страницы /error-codes/."""
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _is_error_code_query(text):
+        return False
+    if not re.search(r"\b(?:прошив|фирмвар|firmware)\w*\b", t):
+        return False
+    return bool(
+        re.search(
+            r"\b(?:"
+            r"став|обнов|установ|залив|прошив|апдейт|update|flash|"
+            r"прилетел|вышл|вышла|новая|новую|верси|version|"
+            r"можно\s+ли|стоит\s+ли|надо\s+ли|нужно\s+ли"
+            r")\w*\b",
+            t,
+        )
+    )
 
 
 def _topic_is_filament_material_choice_intent(text: str | None) -> bool:

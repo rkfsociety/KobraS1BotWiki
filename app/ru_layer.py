@@ -45,6 +45,7 @@ _MAP: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bцарапа(ет|ют|ет)?\b.*\bстол|\bстол.*\bцарапа", re.I), "nozzle scraping hot bed"),
 
     (re.compile(r"\bпрошивк(а|у)\b|\bфирмвар(е)?\b", re.I), "firmware update"),
+    (re.compile(r"\bцветн\w*\s+печат\w*\b|\bмногоцвет\w*\b", re.I), "multi-color printing firmware"),
 
     (re.compile(r"\bошибк(а|у)\b|\berr\b", re.I), "error"),
 
@@ -152,7 +153,16 @@ def expand_queries(text: str) -> list[str]:
 
     extra: list[str] = []
 
+    # На WB/ТН ВЭД «пластик» — про готовые модели, не про филамент в принтере
+    from app.bot.text_heuristics import _topic_is_marketplace_commerce_intent
+
+    commerce = _topic_is_marketplace_commerce_intent(base)
+
     for pat, repl in _MAP:
+
+        if commerce and repl == "filament plastic material":
+
+            continue
 
         if pat.search(base):
 
