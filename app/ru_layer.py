@@ -107,6 +107,8 @@ _MAP: list[tuple[re.Pattern[str], str]] = [
 
     (re.compile(r"\bаська\b|\bаска\b|\bаськ\w*\b|\bэйс\b", re.I), "ACE Pro filament station"),
 
+    (re.compile(r"\bсушилк\w*\b|\bсуш[иао]т\w*\b", re.I), "filament drying moisture desiccant"),
+
     (re.compile(r"\bace\s*pro\b", re.I), "ACE Pro"),
 
     (re.compile(r"\bдвер(ь|и|ей|ью|ями)?\b", re.I), "glass door acrylic enclosure"),
@@ -205,6 +207,14 @@ def expand_queries(text: str) -> list[str]:
         ):
 
             out.append("printer binding ACE Pro network connection troubleshooting")
+
+        if re.search(r"(аська|аска|аськ\w*|ace\s*pro|\bace\b)", base, re.I) and re.search(
+
+            r"сушилк|суш[иао]т|dryer|drying|влажн|moisture", base, re.I
+
+        ):
+
+            out.append("ACE Pro filament drying moisture storage ace-pro-notes")
 
         if re.search(r"филамент|подач|шестерн|экструдер|feeding|extruder", base, re.I) and re.search(
 

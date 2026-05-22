@@ -1038,6 +1038,26 @@ def _topic_is_ace_connection_intent(text: str | None) -> bool:
 
 
 
+
+def _topic_is_ace_filament_drying_intent(text: str | None) -> bool:
+    """ACE Pro как сушилка / сушка филамента в станции — не замена катушки в ACE."""
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if not (_ace_mentioned(text) or re.search(r"\bаськ\w*\b", t)):
+        return False
+    if re.search(r"\b(?:замен|поменя|смени|установ|replace|remov|disassembl)\w*\b", t):
+        return False
+    has_dry = bool(
+        re.search(
+            r"\b(?:сушилк\w*|суш[иао]т|высуш|просуш|dryer|drying|dry\s*box|"
+            r"влажн\w*|увлаж|moisture|desiccant|гигро)\w*\b",
+            t,
+        )
+    )
+    return has_dry
+
+
 def _user_already_replaced_motherboard(text: str) -> bool:
 
 

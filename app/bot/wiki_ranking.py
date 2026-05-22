@@ -24,6 +24,8 @@ from app.bot.text_heuristics import (
 
     _topic_is_ace_connection_intent,
 
+    _topic_is_ace_filament_drying_intent,
+
     _topic_is_ace_not_detected_intent,
 
     _topic_is_filament_feed_intent,
@@ -225,6 +227,25 @@ def _topic_path_bonus(topic: str | None, url: str) -> int:
             else:
 
                 b -= 48
+
+    if _topic_is_ace_filament_drying_intent(topic):
+
+        if "ace-pro-notes" in u:
+
+            b += 48
+
+        elif "ace-pro" in u and u.rstrip("/").endswith("/faq"):
+
+            b += 28
+
+        if "filament-replacement" in u or ("replacement" in u and "filament" in u):
+
+            b -= 85
+
+        elif "ace-pro" in u and "replacement" in u:
+
+            b -= 65
+
 
     if _topic_is_filament_feed_intent(topic):
 
@@ -756,6 +777,17 @@ def _ace_connection_guide_url_plausible(url: str, *, question: str | None = None
 
 
 
+
+def _ace_drying_guide_url_plausible(url: str) -> bool:
+    """Сушка в ACE: заметки/FAQ, не replacement-guide по катушке."""
+    u = url.lower().replace("_", "-")
+    if "ace-pro-notes" in u:
+        return True
+    if "ace-pro" in u and u.rstrip("/").endswith("/faq"):
+        return True
+    return False
+
+
 def _door_guide_url_plausible(url: str) -> bool:
 
     u = url.lower().replace("_", "-")
@@ -869,6 +901,10 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
         return False
 
     # Маркетплейс/ТН ВЭД — в вики Anycubic нет ответа, не шлём filament-guide
+    if _topic_is_ace_filament_drying_intent(question) and not _ace_drying_guide_url_plausible(url):
+
+        return False
+
     if _topic_is_marketplace_commerce_intent(question):
 
         return False
