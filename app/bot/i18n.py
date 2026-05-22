@@ -49,6 +49,11 @@ def _t(lang: str, key: str) -> str:
             "Уточни, пожалуйста, <b>модель принтера</b> {hint} (например: <b>Kobra S1</b>) и/или <b>код ошибки</b>.\n"
             "Ответь на это сообщение."
         ),
+        "clarify_prompt_no_error_code": (
+            "Похоже, ответ есть в вики, но мне не хватает данных.\n"
+            "Уточни, пожалуйста, <b>модель принтера</b> {hint} (например: <b>Kobra S1</b>).\n"
+            "Ответь на это сообщение."
+        ),
         "err_header": "Ошибка {code}",
         "err_cause": "Причина: {text}",
         "err_fix": "Что делать: {text}",
@@ -129,6 +134,11 @@ def _t(lang: str, key: str) -> str:
         "clarify_prompt": (
             "It looks like the answer is in the wiki, but I’m missing some details.\n"
             "Please specify your <b>printer model</b> {hint} (e.g. <b>Kobra S1</b>) and/or the <b>error code</b>.\n"
+            "Reply to this message."
+        ),
+        "clarify_prompt_no_error_code": (
+            "It looks like the answer is in the wiki, but I’m missing some details.\n"
+            "Please specify your <b>printer model</b> {hint} (e.g. <b>Kobra S1</b>).\n"
             "Reply to this message."
         ),
         "err_header": "Error {code}",

@@ -36,6 +36,8 @@ from app.bot.text_heuristics import (
 
     _topic_is_multicolor_firmware_intent,
 
+    _topic_is_firmware_update_intent,
+
     _user_already_replaced_motherboard,
 
 )
@@ -113,6 +115,14 @@ def _topic_path_bonus(topic: str | None, url: str) -> int:
             b += 35
         if "multi-color" in u or "eight-color" in u or "color-printing" in u:
             b += 30
+
+    if _topic_is_firmware_update_intent(topic) and not _is_error_code_query(topic):
+        if "/error-codes/" in u:
+            b -= 85
+        elif _printer_firmware_guide_url_plausible(url):
+            b += 68
+        elif "firmware" in u:
+            b += 22
 
     if _topic_is_filament_material_choice_intent(topic) or _topic_is_filament_slicing_settings_intent(topic):
 
@@ -351,6 +361,26 @@ def _multicolor_firmware_guide_url_plausible(url: str) -> bool:
     return False
 
 
+def _printer_firmware_guide_url_plausible(url: str) -> bool:
+    """Гайды по обновлению прошивки принтера, не /error-codes/."""
+    u = url.lower().replace("_", "-")
+    if "/error-codes" in u:
+        return False
+    if "firmware-update" in u or "firmware-update-guide" in u:
+        return True
+    if "check-or-updating-printer-firmware" in u:
+        return True
+    if "firmware-version-update" in u or "firmware-upgrade-log" in u:
+        return True
+    if "upload-firmware" in u:
+        return True
+    if "firmware" in u and "update" in u:
+        return True
+    if "general-knowledge" in u and "firmware" in u:
+        return True
+    return False
+
+
 def _filament_material_guide_url_plausible(url: str) -> bool:
     """Страницы про выбор/печать материала, не замена сопла."""
     u = url.lower().replace("_", "-")
@@ -506,6 +536,13 @@ def _filament_feed_guide_url_plausible(url: str) -> bool:
 def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
 
     """Тема «дверь» или «подача филамента», а URL про другое узло — сильный штраф."""
+
+    if _topic_is_firmware_update_intent(topic):
+        if _printer_firmware_guide_url_plausible(url):
+            return 0
+        if "/error-codes/" in url.lower():
+            return 90
+        return 42
 
     if _topic_is_filament_material_choice_intent(topic) or _topic_is_filament_slicing_settings_intent(topic):
 
@@ -819,6 +856,15 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
         return False
 
     if _topic_is_multicolor_firmware_intent(question) and not _multicolor_firmware_guide_url_plausible(url):
+
+        return False
+
+    # Прошивка + настройка стола в одном сообщении — приоритет у гайда по столу.
+    if (
+        _topic_is_firmware_update_intent(question)
+        and not _topic_is_bed_setup_intent(question)
+        and not _printer_firmware_guide_url_plausible(url)
+    ):
 
         return False
 

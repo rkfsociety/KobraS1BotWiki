@@ -56,6 +56,8 @@ from app.bot.text_heuristics import (
 
     _needs_model_clarification,
 
+    _topic_is_firmware_update_intent,
+
 )
 
 from app.bot.wiki_ranking import (
@@ -647,6 +649,10 @@ def _clarify_model_hint_html(text: str) -> str:
 
         "enclosure",
 
+        "прошив",
+
+        "firmware",
+
     )
 
     resin_kw = (
@@ -773,7 +779,14 @@ async def _try_send_printer_clarify(
 
     lang = context.application.bot_data.get("last_user_lang") or "ru"
 
-    clarify_body = _t(lang, "clarify_prompt").format(hint=hint)
+    # Про прошивку — только модель, без «кода ошибки».
+    clarify_key = (
+        "clarify_prompt_no_error_code"
+        if _topic_is_firmware_update_intent(text)
+        else "clarify_prompt"
+    )
+
+    clarify_body = _t(lang, clarify_key).format(hint=hint)
 
     sent = await msg.reply_text(
         clarify_body,
@@ -805,7 +818,7 @@ async def _try_send_printer_clarify(
 
     if slash_command_ephemeral:
 
-        out = _t(lang, "clarify_prompt").format(hint=hint)
+        out = _t(lang, clarify_key).format(hint=hint)
 
         schedule_delete_slash_command_and_reply(
 
