@@ -30,6 +30,8 @@ from app.bot.text_heuristics import (
 
     _topic_is_filament_material_choice_intent,
 
+    _topic_is_filament_slicing_settings_intent,
+
     _user_already_replaced_motherboard,
 
 )
@@ -96,7 +98,7 @@ def _topic_path_bonus(topic: str | None, url: str) -> int:
 
             b += 20
 
-    if _topic_is_filament_material_choice_intent(topic):
+    if _topic_is_filament_material_choice_intent(topic) or _topic_is_filament_slicing_settings_intent(topic):
 
         if "print-tpu" in u:
 
@@ -105,6 +107,10 @@ def _topic_path_bonus(topic: str | None, url: str) -> int:
         elif "filament-guide" in u:
 
             b += 58
+
+        elif re.search(r"/filament-and-resin/?$", u):
+
+            b += 52
 
         elif "parameters-selection" in u:
 
@@ -316,6 +322,8 @@ def _filament_material_guide_url_plausible(url: str) -> bool:
     u = url.lower().replace("_", "-")
     if "print-tpu" in u or "filament-guide" in u:
         return True
+    if re.search(r"/filament-and-resin/?$", u):
+        return True
     if "filament-and-resin" in u and "guide" in u:
         return True
     if "parameters-selection" in u:
@@ -465,7 +473,7 @@ def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
 
     """Тема «дверь» или «подача филамента», а URL про другое узло — сильный штраф."""
 
-    if _topic_is_filament_material_choice_intent(topic):
+    if _topic_is_filament_material_choice_intent(topic) or _topic_is_filament_slicing_settings_intent(topic):
 
         u = url.lower().replace("_", "-")
 
@@ -751,7 +759,10 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
         return False
 
-    if _topic_is_filament_material_choice_intent(question) and not _filament_material_guide_url_plausible(url):
+    if (
+        _topic_is_filament_material_choice_intent(question)
+        or _topic_is_filament_slicing_settings_intent(question)
+    ) and not _filament_material_guide_url_plausible(url):
 
         return False
 

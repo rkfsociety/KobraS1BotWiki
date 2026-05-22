@@ -54,6 +54,8 @@ _MAP: list[tuple[re.Pattern[str], str]] = [
 
     (re.compile(r"\bфиламент\w*\b", re.I), "filament"),
     (re.compile(r"\bтпу\b|\btpu\b", re.I), "TPU flexible filament print settings"),
+    (re.compile(r"\bпетг\b|\bpetg\b", re.I), "PETG filament print settings"),
+    (re.compile(r"\bмост\w*\b", re.I), "bridge flow slicing"),
     (re.compile(r"\bпластик\w*\b", re.I), "filament plastic material"),
 
     (re.compile(r"\bпода(ет|ёт|ач|еки)\w*\b", re.I), "feeding feed extruder"),

@@ -128,6 +128,15 @@ def _topic_needs_printer_model(text: str) -> bool:
 
 
 
+    # Настройки слайсера под PETG/TPU (мост, поток, поддержки) — не привязка к модели Kobra.
+    if _topic_is_filament_slicing_settings_intent(text):
+
+
+
+        return False
+
+
+
     ru = (
 
 
@@ -1494,6 +1503,19 @@ def _is_sarcastic_thread_banter(text: str) -> bool:
         return True
     if shrug and re.search(r"^н+u+\s*,?\s*что\s+могу", t):
         return True
+    # Риторика в треде: «оно тебе не надо · а как же печать миниатюр по вахе».
+    not_needed = bool(re.search(r"\b(?:оно\s+)?тебе\s+(?:точно\s+)?не\s+надо\b", t))
+    rhetorical_but = bool(re.search(r"\bа\s+как\s+же\b", t))
+    hobby_print = bool(
+        re.search(r"\b(?:вах\w*|warhammer|wh40k|40k)\b", t)
+        and re.search(r"\b(?:миниатюр|фигурк|шлем)\w*\b", t)
+    )
+    if not_needed and rhetorical_but:
+        return True
+    if rhetorical_but and hobby_print:
+        return True
+    if hobby_print and "?" in text:
+        return True
     return False
 
 
@@ -1707,10 +1729,106 @@ def _is_price_negotiation_chatter(text: str) -> bool:
     return False
 
 
+def _is_peer_social_printer_question(text: str) -> bool:
+    """Вопрос к человеку в чате (гарантия, «у тебя ещё кобра»), не к боту/вики."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # Явный запрос инструкции или справки по вики — не отсекаем.
+    if re.search(
+        r"\b(?:"
+        r"как\s+(?:откалибр|настро|почин|исправ|сделать|убрать|решить|подключ|замен|провер|узнать)|"
+        r"где\s+(?:найти|взять|скачать|посмотреть)|"
+        r"что\s+(?:делать|значит|не\s+так)|"
+        r"помогите|подскаж|не\s+работает|"
+        r"сколько\s+(?:длится|месяц|лет|дней)\b"
+        r")\b",
+        t,
+    ):
+        return False
+    # Обращение к собеседнику, а не к боту.
+    second_person = bool(
+        re.search(
+            r"\b(?:"
+            r"у\s+тебя|тебе|твой|твоя|твоё|твои|"
+            r"у\s+вас|вам|ваш|ваша|ваши|"
+            r"ты\s+ещё|ты\s+еще"
+            r")\b",
+            t,
+        )
+    )
+    # «Вася, …» или «Вася у тебя …» — не «какая гарантия …».
+    addressed = bool(
+        re.match(r"^[а-яёa-z]{2,15}\s*,\s+", text.strip(), re.I | re.UNICODE)
+        or (
+            re.match(r"^[а-яёa-z]{2,15}\s+", text.strip(), re.I | re.UNICODE)
+            and second_person
+            and not re.match(
+                r"^(?:как|что|где|когда|почему|зачем|сколько|какая|какой|какие|какое|кто|есть\s+ли|можно\s+ли)\b",
+                t,
+                re.I | re.UNICODE,
+            )
+        )
+    )
+    social_topic = bool(
+        re.search(
+            r"\b(?:"
+            r"гарант\w*|"
+            r"ещё\s+на\s+гарант|еще\s+на\s+гарант|"
+            r"купил\w*|купишь|продал\w*|"
+            r"взял\w*|получил\w*|"
+            r"остал\w*|"
+            r"работает\s+ли|"
+            r"еще\s+есть|ещё\s+есть"
+            r")\b",
+            t,
+        )
+    )
+    printer_ctx = bool(re.search(r"\b(?:кобр|фотон|вайпер|принтер|printer|s1|s2|combo)\w*\b", t))
+    if social_topic and (second_person or addressed) and printer_ctx:
+        return True
+    if social_topic and second_person:
+        return True
+    return False
+
+
+def _is_peer_claim_debate_relay(text: str) -> bool:
+    """Пересказ чужого спора в чате (маркетинг/отходы) — не запрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # «чел в чате доказывает», «мне тут … твердит»
+    relay = bool(
+        re.search(
+            r"\b(?:чел|чувак|тип|человек|один|кто-то)\b.{0,55}\b(?:доказывает|спорит|уверяет|твердит|настаивает)\b",
+            t,
+        )
+        or re.search(r"\bмне\s+тут\b.{0,45}\b(?:доказывает|спорит|твердит|настаивает)\b", t)
+    )
+    # Скепсис к рекламным обещаниям (отходы, резка у сопла)
+    marketing_skeptic = bool(
+        re.search(r"\bмаркетинг\w*\b", t)
+        and re.search(r"\b(?:фикци|врань|не\s+роляет|нихуя|ерунд|обман)\w*\b", t)
+    )
+    waste_claim = bool(
+        re.search(r"\bотход\w*\b", t)
+        and re.search(r"\b(?:филамент|режется|сопл)\w*\b", t)
+    )
+    if relay and (marketing_skeptic or waste_claim):
+        return True
+    if marketing_skeptic and waste_claim:
+        return True
+    return False
+
+
 def _is_non_wiki_chatter_message(text: str) -> bool:
     """Сообщения чата, на которые бот не отвечает из вики."""
     return (
-        _is_price_negotiation_chatter(text)
+        _is_peer_claim_debate_relay(text)
+        or _is_peer_social_printer_question(text)
+        or _is_price_negotiation_chatter(text)
         or _is_printer_purchase_material_opinion(text)
         or _is_printer_comparison_opinion(text)
         or _is_printing_status_announcement(text)
@@ -2090,11 +2208,54 @@ def _model_slug_hints(text: str) -> frozenset[str]:
 
 
 
+def _topic_is_marketplace_commerce_intent(text: str | None) -> bool:
+    """Продажа на WB/Ozon, ТН ВЭД готовых моделей — не тема вики Anycubic."""
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # Таможенная классификация / коды для маркетплейса
+    if re.search(r"\b(?:тн\s*вэд|тнвэд|hs\s*code|код\s*тн|вэд\s*код)\w*\b", t):
+        return True
+    marketplace = bool(
+        re.search(
+            r"\b(?:"
+            r"wb|вб|wildberries|озон|ozon|яндекс\.?\s*маркет|market\.yandex|"
+            r"маркетплейс|marketplace"
+            r")\b",
+            t,
+        )
+    )
+    selling = bool(
+        re.search(
+            r"\b(?:"
+            r"прода[еёюя]|продав|выставля|торгую|листинг|"
+            r"кто\s+прода|есть\s+кто\s+прода"
+            r")\w*\b",
+            t,
+        )
+    )
+    printed_goods = bool(
+        re.search(
+            r"\b(?:"
+            r"напечатан\w*|печатн\w*\s+модел|готов\w*\s+издел|"
+            r"3d\s*[-]?\s*print\w*\s+model|printed\s+model"
+            r")\w*\b",
+            t,
+        )
+    )
+    if marketplace and (selling or printed_goods):
+        return True
+    return False
+
+
 def _topic_is_filament_material_choice_intent(text: str | None) -> bool:
     """Какой пластик/TPU/фирму взять — не замена сопла и не подача филамента."""
     if not text:
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
+    # WB/ТН ВЭД с «пластиком» — не выбор филамента для печати
+    if _topic_is_marketplace_commerce_intent(text):
+        return False
     if _topic_is_filament_feed_intent(text):
         return False
     if re.search(r"\b(?:замен|поменя|смени|установ|replace|remov|disassembl)\w*\b", t):
@@ -2116,6 +2277,35 @@ def _topic_is_filament_material_choice_intent(text: str | None) -> bool:
     )
     stock_nozzle_ctx = bool(re.search(r"\bродн\w*\s+сопл|\bstock\s+nozzle\b", t))
     return wants_choice or stock_nozzle_ctx
+
+
+def _topic_is_filament_slicing_settings_intent(text: str | None) -> bool:
+    """Параметры нарезки/печати под материал (PETG, TPU) — не уточнение модели принтера."""
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _topic_is_filament_feed_intent(text):
+        return False
+    has_material = bool(
+        re.search(
+            r"\b(?:тпу|tpu|петг|petg|пла|pla|abs|абс|nylon|нейлон|пластик|филамент|filament)\w*\b",
+            t,
+        )
+    )
+    if not has_material:
+        return False
+    slicing_ctx = bool(
+        re.search(
+            r"\b(?:нарезк|слайс|slic|мост|bridge|поток|flow|поддержк|support|связующ|"
+            r"interface|скорост|температур|охлажд|retraction|ретракт|шов|infill|заполн)\w*\b",
+            t,
+        )
+    )
+    layer_in_slicing = bool(
+        re.search(r"\bслой\w*\b", t)
+        and re.search(r"\b(?:нарезк|слайс|slic|мост|поддержк|support|связующ|поток)\w*\b", t)
+    )
+    return slicing_ctx or layer_in_slicing
 
 
 def _topic_is_filament_feed_intent(text: str | None) -> bool:

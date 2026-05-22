@@ -19,9 +19,15 @@ def model_specifically_identified(text: str) -> bool:
 def topic_is_layer_slicing_intent(text: str | None) -> bool:
     if not text:
         return False
-    from app.bot.text_heuristics import _is_non_wiki_chatter_message
+    from app.bot.text_heuristics import (
+        _is_non_wiki_chatter_message,
+        _topic_is_filament_slicing_settings_intent,
+    )
 
     if _is_non_wiki_chatter_message(text):
+        return False
+    # PETG/TPU + мост/поддержки в нарезке — общая вики по материалам, не модель Kobra.
+    if _topic_is_filament_slicing_settings_intent(text):
         return False
     tl = text.lower()
     if re.search(r"\b0\.\d{1,3}\b", tl) and re.search(r"слой|слоя|слое|слою|layer", tl):
@@ -34,7 +40,17 @@ def topic_is_layer_slicing_intent(text: str | None) -> bool:
         return True
     if re.search(r"\bтест\b", tl) and re.search(r"\b(?:слой|слоя|слое|layer|0\.\d|калибр|level)\b", tl):
         return True
-    return any(k in tl for k in ("слой", "слоя", "слое", "слою", "печать", "в печать", "layer", "профил"))
+    # Голое «печать» без слоя/слайса — бытовой чат («миниатюры по вахе»), не уточнение модели.
+    if any(k in tl for k in ("слой", "слоя", "слое", "слою", "layer")):
+        return True
+    if re.search(r"\b(?:печать|в\s+печать|print)\b", tl) and re.search(
+        r"\b(?:слой|слоя|слое|профил|слайс|калибр|benchy|level|уровн|0\.\d|тест)\b",
+        tl,
+    ):
+        return True
+    if re.search(r"\bпрофил\w*\b", tl) and re.search(r"\b(?:сопл|nozzle|слой|layer|слайс)\b", tl):
+        return True
+    return False
 
 
 def topic_requires_printer_model(text: str) -> bool:
