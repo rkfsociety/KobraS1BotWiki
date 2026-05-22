@@ -137,6 +137,15 @@ def _topic_needs_printer_model(text: str) -> bool:
 
 
 
+    # Прошивка и многоцветная печать (ACE / Combo) — не смола Photon/M3.
+    if _topic_is_multicolor_firmware_intent(text):
+
+
+
+        return False
+
+
+
     ru = (
 
 
@@ -1826,7 +1835,8 @@ def _is_peer_claim_debate_relay(text: str) -> bool:
 def _is_non_wiki_chatter_message(text: str) -> bool:
     """Сообщения чата, на которые бот не отвечает из вики."""
     return (
-        _is_peer_claim_debate_relay(text)
+        _topic_is_marketplace_commerce_intent(text)
+        or _is_peer_claim_debate_relay(text)
         or _is_peer_social_printer_question(text)
         or _is_price_negotiation_chatter(text)
         or _is_printer_purchase_material_opinion(text)
@@ -2284,6 +2294,8 @@ def _topic_is_filament_slicing_settings_intent(text: str | None) -> bool:
     if not text:
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _topic_is_marketplace_commerce_intent(text):
+        return False
     if _topic_is_filament_feed_intent(text):
         return False
     has_material = bool(
@@ -2306,6 +2318,23 @@ def _topic_is_filament_slicing_settings_intent(text: str | None) -> bool:
         and re.search(r"\b(?:нарезк|слайс|slic|мост|поддержк|support|связующ|поток)\w*\b", t)
     )
     return slicing_ctx or layer_in_slicing
+
+
+def _topic_is_multicolor_firmware_intent(text: str | None) -> bool:
+    """Сравнение прошивок под многоцветную печать — FDM Combo, не resin."""
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if not re.search(r"\b(?:прошив|firmware|firmwar)\w*\b", t):
+        return False
+    if re.search(
+        r"\b(?:цветн|многоцвет|multi[\s-]?color|multicolor|ace\s*pro|"
+        r"4[\s-]?in[\s-]?1|four[\s-]?in[\s-]?one|8[\s-]?color|eight[\s-]?color)\w*\b",
+        t,
+    ):
+        return True
+    # «цветная печать» без отдельного слова «цветн»
+    return "цвет" in t and bool(re.search(r"\bпечат\w*\b", t))
 
 
 def _topic_is_filament_feed_intent(text: str | None) -> bool:

@@ -261,6 +261,27 @@ def test_filament_choice_question_not_chatter():
     assert not _is_conversational_chatter(_PETG_CHOICE_HELP)
 
 
+_WASTE_DEBATE_RELAY = (
+    "Мне тут чел в чате старпласта доказывает что меньше отходов на иксе "
+    "это все маркетинг и то что режется филамент ближе к соплу это нихуя не роляет это все фикция"
+)
+
+_WASTE_FACT_QUESTION = (
+    "правда ли что меньше отходов если филамент режется ближе к соплу?"
+)
+
+
+def test_filament_waste_debate_relay_from_log_is_chatter():
+    assert _is_conversational_chatter(_WASTE_DEBATE_RELAY)
+    assert not _looks_like_question(_WASTE_DEBATE_RELAY)
+    assert not _needs_model_clarification(_WASTE_DEBATE_RELAY)
+
+
+def test_filament_waste_fact_question_still_question():
+    assert not _is_conversational_chatter(_WASTE_FACT_QUESTION)
+    assert _looks_like_question(_WASTE_FACT_QUESTION)
+
+
 _ACE_PRICE_NEGOTIATION = (
     "Я предлагал ему 9 он мне говорит новая аська стоит 20 от с1 так что давай за 15"
 )
@@ -277,3 +298,37 @@ def test_ace_price_negotiation_from_log_is_chatter():
 def test_ace_price_question_not_chatter():
     assert not _is_conversational_chatter(_ACE_PRICE_QUESTION)
     assert _looks_like_question(_ACE_PRICE_QUESTION)
+
+
+_WARHAMMER_BANTER = "Оно тебе точно не надо · А как же печать миниатюр по вахе ?😂"
+
+_WARHAMMER_BANTER_SHORT = "А как же печать миниатюр по вахе ?😂"
+
+_LAYER_CALIBRATION_HELP = "как настроить высоту слоя 0.16 на kobra s1 для тестовой печати?"
+
+
+def test_warhammer_miniature_banter_from_log_is_chatter():
+    assert _is_conversational_chatter(_WARHAMMER_BANTER)
+    assert not _needs_model_clarification(_WARHAMMER_BANTER)
+    assert _is_conversational_chatter(_WARHAMMER_BANTER_SHORT)
+    assert not _needs_model_clarification(_WARHAMMER_BANTER_SHORT)
+
+
+def test_layer_calibration_question_not_chatter():
+    assert not _is_conversational_chatter(_LAYER_CALIBRATION_HELP)
+    assert _looks_like_question(_LAYER_CALIBRATION_HELP)
+
+
+_WARRANTY_PEER_QUESTION = "Вася у тебя кобра еще на гарантии?"
+
+_WARRANTY_WIKI_QUESTION = "какая гарантия на kobra s1 combo?"
+
+
+def test_peer_warranty_question_from_log_is_chatter():
+    assert _is_conversational_chatter(_WARRANTY_PEER_QUESTION)
+    assert not _needs_model_clarification(_WARRANTY_PEER_QUESTION)
+
+
+def test_generic_warranty_wiki_question_not_chatter():
+    assert not _is_conversational_chatter(_WARRANTY_WIKI_QUESTION)
+    assert _looks_like_question(_WARRANTY_WIKI_QUESTION)
