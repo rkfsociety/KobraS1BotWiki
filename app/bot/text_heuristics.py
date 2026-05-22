@@ -2285,10 +2285,17 @@ def _topic_is_firmware_update_intent(text: str | None) -> bool:
         return False
     if not re.search(r"\b(?:прошив|фирмвар|firmware)\w*\b", t):
         return False
+    # «Актуально для прошивки 2.7.x» при настройке стола — не запрос на прошивку.
+    if re.search(r"\bактуаль\w*\b", t):
+        if not re.search(
+            r"\b(?:обнов|установ|залив|став\w*|update|flash|прошить)\w*\b",
+            t,
+        ):
+            return False
     return bool(
         re.search(
             r"\b(?:"
-            r"став|обнов|установ|залив|прошив|апдейт|update|flash|"
+            r"став|обнов|установ|залив|апдейт|update|flash|прошить|"
             r"прилетел|вышл|вышла|новая|новую|верси|version|"
             r"можно\s+ли|стоит\s+ли|надо\s+ли|нужно\s+ли"
             r")\w*\b",
