@@ -1690,6 +1690,22 @@ def _is_printer_comparison_opinion(text: str) -> bool:
         return True
     if unlike_other:
         return True
+    # «сравню с тем, что напечатала кобра» / план xyz-куба «ради интереса» — не запрос к вики.
+    cube_compare = bool(
+        re.search(r"\bсравн\w*\b", t)
+        and re.search(r"\b(?:напечатал\w*|куб|xyz)\b", t)
+    )
+    future_cube_test = bool(
+        re.search(r"\b(?:попробую|попробуем|напечатаю)\b", t)
+        and re.search(r"\b(?:куб|xyz)\b", t)
+        and (
+            re.search(r"\bсравн\w*\b", t)
+            or re.search(r"\bради\s+интереса\b", t)
+            or re.search(r"\bнапечатал\w*\b", t)
+        )
+    )
+    if cube_compare or future_cube_test:
+        return True
     return False
 
 

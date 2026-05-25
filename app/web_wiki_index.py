@@ -254,6 +254,11 @@ def _looks_like_question(text: str) -> bool:
     if re.search(r"\bкак\s+(?:раздавая|акци\w*)\b", t) and "?" not in text:
         return False
 
+    # «с тем, что напечатала кобра» — союзное «что», не вопрос к боту.
+    if re.search(r"\bчто\s+напечатал\w*\b", t) and "?" not in text:
+        if re.search(r"\bсравн\w*\b", t) or re.search(r"\bради\s+интереса\b", t):
+            return False
+
     return bool(
         re.search(
             r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает)\b",

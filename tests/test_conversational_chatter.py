@@ -165,6 +165,18 @@ def test_cube_print_skepticism_is_chatter():
     assert not _needs_model_clarification(_CUBE_SKEPTICISM)
 
 
+_CUBE_COMPARE_PLAN = (
+    "Вот я ради интереса в понедельник попробую напечатать xyz куб "
+    "и сравню с тем , что напечатала кобра"
+)
+
+
+def test_xyz_cube_compare_plan_is_chatter():
+    assert _is_conversational_chatter(_CUBE_COMPARE_PLAN)
+    assert not _looks_like_question(_CUBE_COMPARE_PLAN)
+    assert not _needs_model_clarification(_CUBE_COMPARE_PLAN)
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"
