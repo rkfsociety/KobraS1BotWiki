@@ -274,6 +274,11 @@ def _looks_like_question(text: str) -> bool:
     if "?" not in text and re.search(r"\bты\s+говорил\b", t):
         return False
 
+    # «как они так печатают… на видео кажется» — риторика в чате.
+    if re.search(r"\b(?:как\s+они|они\s+так)\b", t) and re.search(r"\bпечата\w*\b", t):
+        if re.search(r"\b(?:не\s+похож\w*|на\s+видео)\b", t):
+            return False
+
     return bool(
         re.search(
             r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает)\b",

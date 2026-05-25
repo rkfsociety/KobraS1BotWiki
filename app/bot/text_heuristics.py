@@ -1401,6 +1401,34 @@ def _is_chat_meta_discussion(text: str) -> bool:
     return False
 
 
+def _is_print_quality_meta_curiosity(text: str) -> bool:
+    """«Как они так печатают / на видео кажется» — любопытство в чате, не запрос к вики."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|не\s+работает|что\s+делать|"
+        r"как\s+(?:настро|откалибр|почин|исправ|сделать|убрать|решить))\b",
+        t,
+    ):
+        return False
+    others_print = bool(
+        re.search(r"\b(?:как\s+они|они\s+так|у\s+них)\b", t)
+        and re.search(r"\bпечата\w*\b", t)
+    )
+    not_like_3d = bool(
+        re.search(r"\b(?:не\s+похож\w*|не\s+выглядит)\b", t)
+        and re.search(r"\b(?:3\s*d|3д|три\s*д)\s*печат", t)
+    )
+    video_doubt = bool(re.search(r"\b(?:на\s+видео|в\s+ролике)\s+кажется\b", t))
+    lingering = bool(re.search(r"\b(?:давно\s+)?возникает\s+вопрос\b", t))
+    if others_print and (not_like_3d or video_doubt):
+        return True
+    if lingering and others_print and ("?" in text or video_doubt):
+        return True
+    return False
+
+
 def _is_material_strength_discussion(text: str) -> bool:
     """Обсуждение прочности TPU/слои vs поперёк — не запрос к вики и не clarify модели."""
     if not text or not text.strip() or "?" in text:
@@ -1971,6 +1999,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_sarcastic_printer_banter(text)
         or _is_slicer_app_disambiguation(text)
         or _is_filament_testing_plan_sharing(text)
+        or _is_print_quality_meta_curiosity(text)
         or _is_technical_opinion_sharing(text)
         or _is_technical_observation_sharing(text)
         or _is_partial_manual_find_observation(text)
@@ -2004,6 +2033,7 @@ def _message_has_help_intent(text: str) -> bool:
         or _is_sarcastic_printer_banter(text)
         or _is_slicer_app_disambiguation(text)
         or _is_filament_testing_plan_sharing(text)
+        or _is_print_quality_meta_curiosity(text)
     ):
         return False
     raw = text.strip()
