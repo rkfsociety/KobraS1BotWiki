@@ -211,6 +211,21 @@ def test_used_printer_purchase_banter_is_chatter():
     assert not _needs_model_clarification(_USED_PURCHASE_BANTER)
 
 
+_TPU_STRENGTH_DISCUSSION = (
+    "Мне интересно, будет ли он прочнее при печати под углом, сломаться то послойно ему сложнее будет · "
+    "Tpu, как я понял, при нормальном спекании пофиг, по слоям, или поперёк."
+)
+
+
+def test_tpu_strength_discussion_is_chatter():
+    from app.bot.layer_model_gate import needs_model_clarification_for, topic_is_layer_slicing_intent
+
+    assert _is_conversational_chatter(_TPU_STRENGTH_DISCUSSION)
+    assert not topic_is_layer_slicing_intent(_TPU_STRENGTH_DISCUSSION)
+    assert not needs_model_clarification_for(_TPU_STRENGTH_DISCUSSION)
+    assert not _looks_like_question(_TPU_STRENGTH_DISCUSSION)
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"

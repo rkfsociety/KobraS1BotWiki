@@ -40,8 +40,8 @@ def topic_is_layer_slicing_intent(text: str | None) -> bool:
         return True
     if re.search(r"\bтест\b", tl) and re.search(r"\b(?:слой|слоя|слое|layer|0\.\d|калибр|level)\b", tl):
         return True
-    # Голое «печать» без слоя/слайса — бытовой чат («миниатюры по вахе»), не уточнение модели.
-    if any(k in tl for k in ("слой", "слоя", "слое", "слою", "layer")):
+    # Голое «слой» в настройках печати — не «послойно» в обсуждении прочности пластика.
+    if re.search(r"\b(?:слой|слоя|слое|слою|layer)\w*\b", tl):
         return True
     if re.search(r"\b(?:печать|в\s+печать|print)\b", tl) and re.search(
         r"\b(?:слой|слоя|слое|профил|слайс|калибр|benchy|level|уровн|0\.\d|тест)\b",

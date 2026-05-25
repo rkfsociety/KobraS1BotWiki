@@ -1401,12 +1401,44 @@ def _is_chat_meta_discussion(text: str) -> bool:
     return False
 
 
+def _is_material_strength_discussion(text: str) -> bool:
+    """Обсуждение прочности TPU/слои vs поперёк — не запрос к вики и не clarify модели."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|как\s+(?:настро|печатать|печат|сделать)|что\s+делать)\b",
+        t,
+    ):
+        return False
+    material = bool(
+        re.search(r"\b(?:tpu|тпу|pla|пла|petg|петг|abs|абс|нейлон|nylon|пластик|филамент)\w*\b", t)
+    )
+    mechanics = bool(
+        re.search(
+            r"\b(?:"
+            r"прочн\w*|слом\w*|послойн\w*|поперёк|поперек|под\s+углом|"
+            r"спекан\w*|по\s+слоям|анизотроп"
+            r")\w*\b",
+            t,
+        )
+    )
+    curiosity = bool(
+        re.search(r"\b(?:мне\s+интересно|интересно\s*,?\s*будет|как\s+я\s+понял)\b", t)
+    )
+    return material and mechanics and curiosity
+
+
 def _is_technical_opinion_sharing(text: str) -> bool:
     """Мнение в обсуждении (люфт, печать) — не запрос помощи у бота."""
     if not text or not text.strip():
         return False
     if _message_has_help_intent(text):
         return False
+    if _is_material_strength_discussion(text):
+        return True
     t = re.sub(r"\s+", " ", text.lower()).strip()
     if re.search(r"\bкак\s+по\s+мне\b", t):
         return True
