@@ -141,6 +141,10 @@ def _topic_needs_printer_model(text: str) -> bool:
     if _topic_is_slicer_vertical_hole_intent(text):
         return False
 
+    # Убрать ушко/brim в слайсере — не привязка к модели принтера.
+    if _topic_is_slicer_feature_help_intent(text):
+        return False
+
 
 
     # Прошивка и многоцветная печать (ACE / Combo) — не смола Photon/M3.
@@ -2158,8 +2162,9 @@ def _message_has_help_intent(text: str) -> bool:
             r"кто\s+знает|"
             r"не\s+работает|"
             r"помогите|помоги|"
-            r"подскаж|"
-            r"скажите\s+как"
+            r"подскаж\w*|"
+            r"скажите\s+как|"
+            r"как\s+(?:\w+\s+){0,10}убрать"
             r")\b",
             t,
         )
@@ -2622,6 +2627,36 @@ def _topic_is_slicer_vertical_hole_intent(text: str | None) -> bool:
         or re.search(r"\b(?:почин\w*|исправ\w*|модел\w*)\b", t)
     )
     return slicer_ctx and hole_ctx and fix_ctx
+
+
+def _topic_is_slicer_feature_help_intent(text: str | None) -> bool:
+    """Убрать «ушко»/brim в слайсере — не quick start вики."""
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if not re.search(r"\b(?:слайсер\w*|slicer|нарезк\w*|слайс\w*|orca)\b", t):
+        return False
+    remove_act = bool(
+        re.search(r"\b(?:убрать|удалить|отключить|выключить|убери|скрыть|remove|disable)\w*\b", t)
+    )
+    feature = bool(
+        re.search(
+            r"\b(?:"
+            r"ушк\w*|уши\b|mouse\s*ear|"
+            r"brim|брим|"
+            r"таб\w*|pointing"
+            r")\b",
+            t,
+        )
+    )
+    struggle = bool(re.search(r"\b(?:не\s+получается|никак\s+не|не\s+могу)\b", t))
+    help_ctx = bool(
+        re.search(r"\b(?:подскаж\w*|помогите|помоги)\b", t)
+        or re.search(r"\bкак\s+(?:\w+\s+){0,10}убрать\b", t)
+    )
+    if remove_act and (feature or struggle):
+        return True
+    return help_ctx and remove_act
 
 
 def _topic_is_multicolor_firmware_intent(text: str | None) -> bool:

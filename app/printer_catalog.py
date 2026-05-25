@@ -146,6 +146,21 @@ def pick_profile_for_hints(hints: frozenset[str]) -> PrinterProfile | None:
     return None
 
 
+def explain_slicer_mouse_ear_removal(question: str) -> str | None:
+    """Убрать «ушко» / mouse ear в слайсере — не quick start вики."""
+    from app.bot.text_heuristics import _topic_is_slicer_feature_help_intent
+
+    if not _topic_is_slicer_feature_help_intent(question):
+        return None
+    return (
+        "«Ушко» в слайсере обычно — mouse ear (ушко brim) или добавленный диск поддержки.\n"
+        "• Выделите модель → Brim / Поддержки → отключите Mouse ears (или аналог в вашей версии).\n"
+        "• Если ушки уже на столе: удалите лишние объекты на платформе или пересоздайте brim без mouse ears.\n"
+        "• Если «ушко» в самой STL — правка в CAD; в слайсере иногда помогает обрезка/модификатор (зависит от версии).\n"
+        "Общий quick start кнопку не показывает — пришлите скрин панели Brim/Support, если пункт не найдёте."
+    )
+
+
 def explain_slicer_vertical_holes(question: str) -> str | None:
     """Отверстия в вертикальных стенках: капля в CAD или настройки слайсера — не quick start вики."""
     from app.bot.text_heuristics import _topic_is_slicer_vertical_hole_intent
