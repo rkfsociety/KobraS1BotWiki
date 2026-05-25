@@ -259,6 +259,10 @@ def _looks_like_question(text: str) -> bool:
         if re.search(r"\bсравн\w*\b", t) or re.search(r"\bради\s+интереса\b", t):
             return False
 
+    # «А я говорил про …?» — риторика в треде, не вопрос к боту.
+    if re.search(r"\b(?:а\s+)?я\s+говорил\s+про\b", t) and "?" in text:
+        return False
+
     return bool(
         re.search(
             r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает)\b",

@@ -177,6 +177,19 @@ def test_xyz_cube_compare_plan_is_chatter():
     assert not _needs_model_clarification(_CUBE_COMPARE_PLAN)
 
 
+_OVERREACTION_RHETORIC = (
+    'Перехвалил, вот что сейчас увидел 😂 · '
+    'А я говорил про "сушить и калибровать пластик"?😂'
+)
+
+
+def test_overreaction_rhetoric_is_chatter():
+    assert _is_conversational_chatter(_OVERREACTION_RHETORIC)
+    assert not _looks_like_question(_OVERREACTION_RHETORIC)
+    assert not _message_has_help_intent(_OVERREACTION_RHETORIC)
+    assert not _needs_model_clarification(_OVERREACTION_RHETORIC)
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"

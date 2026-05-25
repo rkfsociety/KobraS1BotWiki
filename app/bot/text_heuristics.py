@@ -1549,6 +1549,12 @@ def _is_sarcastic_thread_banter(text: str) -> bool:
         return True
     if hobby_print and "?" in text:
         return True
+    # «А я говорил про сушить и калибровать пластик?» — риторическое «я же не про это».
+    if re.search(r"\b(?:а\s+)?я\s+говорил\s+про\b", t) and "?" in text:
+        return True
+    # «Перехвалил, вот что сейчас увидел» — реакция в треде, не запрос к боту.
+    if re.search(r"\bперехвал\w*\b", t) and re.search(r"\b(?:увидел|увидела|сейчас)\b", t):
+        return True
     return False
 
 
