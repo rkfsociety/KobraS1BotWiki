@@ -263,6 +263,21 @@ def test_cross_chat_chitu_tip_is_chatter():
     assert not _looks_like_question(_CHITU_CHAT_TIP)
 
 
+_TWO_ACE_BANTER = "а говорит многоцвет не печатает, вот зачем ему две аськи?"
+
+
+def test_multicolor_ace_sarcasm_is_chatter():
+    import app.bot.layer_model_gate as g
+
+    g.apply_runtime_patches()
+    from app.bot.layer_model_gate import needs_model_clarification_for
+
+    assert _is_conversational_chatter(_TWO_ACE_BANTER)
+    assert not needs_model_clarification_for(_TWO_ACE_BANTER)
+    assert not _looks_like_question(_TWO_ACE_BANTER)
+    assert not _message_has_help_intent(_TWO_ACE_BANTER)
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"

@@ -360,6 +360,10 @@ def _topic_needs_printer_model(text: str) -> bool:
 
         return True
 
+    # «говорит не печатает, зачем ему аськи» — пересказ, не поломка принтера пользователя.
+    if _is_sarcastic_thread_banter(text):
+        return False
+
 
 
     return False
@@ -1648,6 +1652,18 @@ def _is_sarcastic_thread_banter(text: str) -> bool:
         return True
     # «Перехвалил, вот что сейчас увидел» — реакция в треде, не запрос к боту.
     if re.search(r"\bперехвал\w*\b", t) and re.search(r"\b(?:увидел|увидела|сейчас)\b", t):
+        return True
+    # «говорит многоцвет не печатает, зачем ему две аськи?» — сарказм в треде.
+    relay_claim = bool(
+        re.search(r"\b(?:говорит|говорят|сказал\w*|утвержда\w*)\b", t)
+        and re.search(r"\b(?:не\s+)?печата\w*\b", t)
+    )
+    rhetorical_why_other = bool(re.search(r"\b(?:вот\s+)?зачем\s+(?:ему|ей|им|ем)\b", t))
+    ace_multi = bool(
+        re.search(r"\b(?:аська\w*|аськ\w*|ace)\b", t)
+        or re.search(r"\b(?:многоцвет|multi[\s-]?color)\w*\b", t)
+    )
+    if relay_claim and rhetorical_why_other and ace_multi:
         return True
     return False
 

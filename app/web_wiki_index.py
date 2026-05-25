@@ -246,8 +246,10 @@ def _looks_like_question(text: str) -> bool:
     # «Нуу, что могу сказать» / «зачем оно тебе» — сарказм в треде, не вопрос к боту.
     if re.search(r"\bчто\s+могу\s+сказать\b", t) and "?" not in text:
         return False
-    if re.search(r"\bзачем\s+(?:оно|тебе|вам|это|мне|нам)\b", t) and "?" not in text:
-        if re.search(r"\b(?:спал\s+бы|спи\s+бы|не\s+знал\s+про|что\s+могу\s+сказать)\b", t):
+    if re.search(r"\bзачем\s+(?:оно|тебе|вам|это|мне|нам|ему|ей|им|ем)\b", t):
+        if "?" not in text and re.search(r"\b(?:спал\s+бы|спи\s+бы|не\s+знал\s+про|что\s+могу\s+сказать)\b", t):
+            return False
+        if re.search(r"\bговорит\b", t) and re.search(r"\b(?:аська\w*|аськ\w*|многоцвет)\w*\b", t):
             return False
 
     # «как раздавая акция» — союзное «как», не вопрос к боту.
