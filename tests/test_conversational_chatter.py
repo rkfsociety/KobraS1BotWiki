@@ -513,6 +513,21 @@ def test_filament_choice_question_not_tolerance_banter():
     assert _looks_like_question(_FILAMENT_CHOICE_HELP)
 
 
+_ALI_COMBO_ACE = "На алике Х комбо стоит щас 40₽ · комбо это с какой аськой?"
+
+_ACE_REPLACE_HELP = "как заменить филамент в ace pro на kobra 3 combo?"
+
+
+def test_ali_combo_ace_price_from_log_is_chatter():
+    assert _is_conversational_chatter(_ALI_COMBO_ACE)
+    assert not _looks_like_question(_ALI_COMBO_ACE)
+
+
+def test_ace_filament_replace_help_not_marketplace_chat():
+    assert not _is_conversational_chatter(_ACE_REPLACE_HELP)
+    assert _looks_like_question(_ACE_REPLACE_HELP)
+
+
 _WARHAMMER_BANTER = "Оно тебе точно не надо · А как же печать миниатюр по вахе ?😂"
 
 _WARHAMMER_BANTER_SHORT = "А как же печать миниатюр по вахе ?😂"

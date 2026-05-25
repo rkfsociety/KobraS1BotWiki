@@ -2349,6 +2349,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_peer_claim_debate_relay(text)
         or _is_peer_social_printer_question(text)
         or _is_price_negotiation_chatter(text)
+        or _is_combo_ace_marketplace_chat(text)
         or _is_printer_purchase_material_opinion(text)
         or _is_filament_brand_quality_opinion(text)
         or _is_filament_tolerance_banter(text)
@@ -2773,10 +2774,51 @@ def _model_slug_hints(text: str) -> frozenset[str]:
 
 
 
+def _is_combo_ace_marketplace_chat(text: str | None) -> bool:
+    """«На алике комбо 40₽, с какой аськой?» — покупка/комплект, не замена филамента."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|как\s+(?:замен|поменя|смени|загруз|встав|установ|сброс))\b",
+        t,
+    ) and re.search(r"\b(?:филамент|катушк|слот|filament)\w*\b", t):
+        return False
+    marketplace = bool(
+        re.search(
+            r"\b(?:"
+            r"aliexpress|алиэкспресс|алик\w*|"
+            r"wb|вб|ozon|озон|wildberries|яндекс\.?\s*маркет|маркетплейс"
+            r")\b",
+            t,
+        )
+    )
+    price_ctx = bool(
+        re.search(r"\bстоит\b.{0,16}\d+", t)
+        or re.search(r"\d+\s*(?:₽|руб\.?|rub)\b", t)
+    )
+    combo_ace = bool(
+        re.search(r"\bкомбо\b", t)
+        and re.search(r"\b(?:аська\w*|аськ\w*|ace)\b", t)
+        and (
+            "?" in text
+            or re.search(r"\b(?:с\s+какой|какая|какой|что\s+в\s+комплект|в\s+комплекте|входит)\w*\b", t)
+        )
+    )
+    if combo_ace and (marketplace or price_ctx):
+        return True
+    return bool(
+        combo_ace
+        and re.search(r"\b(?:в\s+комплект|комплектац|входит|идёт\s+в|ставят|поставля)\w*\b", t)
+    )
+
+
 def _topic_is_marketplace_commerce_intent(text: str | None) -> bool:
     """Продажа на WB/Ozon, ТН ВЭД готовых моделей — не тема вики Anycubic."""
     if not text:
         return False
+    if _is_combo_ace_marketplace_chat(text):
+        return True
     t = re.sub(r"\s+", " ", text.lower()).strip()
     # Таможенная классификация / коды для маркетплейса
     if re.search(r"\b(?:тн\s*вэд|тнвэд|hs\s*code|код\s*тн|вэд\s*код)\w*\b", t):

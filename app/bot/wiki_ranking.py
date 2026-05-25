@@ -42,6 +42,8 @@ from app.bot.text_heuristics import (
 
     _is_filament_tolerance_banter,
 
+    _is_combo_ace_marketplace_chat,
+
     _topic_is_slicer_vertical_hole_intent,
 
     _topic_is_slicer_feature_help_intent,
@@ -1022,6 +1024,9 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
             return False
 
     if _is_filament_tolerance_banter(question) and "filament-guide" in url.lower():
+        return False
+
+    if _is_combo_ace_marketplace_chat(question) and "filament-replacement" in url.lower():
         return False
 
     if (
