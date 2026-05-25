@@ -1114,9 +1114,39 @@ def _topic_is_ace_filament_slot_intent(text: str | None) -> bool:
     )
 
 
+def _is_ace_unit_trade_banter(text: str | None) -> bool:
+    """«Продать? … ТПУ из аськи не сможет, сушить есть где» — тред про продажу ACE."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|как\s+(?:замен|поменя|смени|загруз|настро|подключ|суш))\b",
+        t,
+    ):
+        return False
+    ace = bool(_ace_mentioned(text) or re.search(r"\bаськ\w*\b", t))
+    if not ace:
+        return False
+    sell = bool(re.search(r"\b(?:продать|продам|продаю|купить|куплю|отдам|продаж)\w*\b", t))
+    tpu_print = bool(
+        re.search(r"\b(?:тпу|tpu)\b", t)
+        and re.search(r"\b(?:печатать|печат|не\s+сможет|не\s+умеет|не\s+получится)\w*\b", t)
+    )
+    dry_elsewhere = bool(
+        re.search(r"\bсуш\w*\b", t)
+        and re.search(r"\b(?:есть\s+где|где[\s-]?то|дома|у\s+меня|не\s+нужн)\w*\b", t)
+    )
+    need_for_tpu = bool(re.search(r"\b(?:нужен|надо)\b", t) and re.search(r"\b(?:тпу|tpu)\b", t))
+    if sell and (tpu_print or dry_elsewhere or need_for_tpu):
+        return True
+    return bool(tpu_print and dry_elsewhere)
+
+
 def _topic_is_ace_filament_drying_intent(text: str | None) -> bool:
     """ACE Pro как сушилка / сушка филамента в станции — не замена катушки в ACE."""
     if not text:
+        return False
+    if _is_ace_unit_trade_banter(text):
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
     if not (_ace_mentioned(text) or re.search(r"\bаськ\w*\b", t)):
@@ -2350,6 +2380,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_peer_social_printer_question(text)
         or _is_price_negotiation_chatter(text)
         or _is_combo_ace_marketplace_chat(text)
+        or _is_ace_unit_trade_banter(text)
         or _is_printer_purchase_material_opinion(text)
         or _is_filament_brand_quality_opinion(text)
         or _is_filament_tolerance_banter(text)

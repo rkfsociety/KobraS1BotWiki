@@ -44,6 +44,8 @@ from app.bot.text_heuristics import (
 
     _is_combo_ace_marketplace_chat,
 
+    _is_ace_unit_trade_banter,
+
     _topic_is_slicer_vertical_hole_intent,
 
     _topic_is_slicer_feature_help_intent,
@@ -999,6 +1001,9 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
     # Маркетплейс/ТН ВЭД — в вики Anycubic нет ответа, не шлём filament-guide
     if _topic_is_ace_filament_drying_intent(question) and not _ace_drying_guide_url_plausible(url):
 
+        return False
+
+    if _is_ace_unit_trade_banter(question) and "ace-pro-notes" in url.lower():
         return False
 
     if _topic_is_ace_filament_slot_intent(question) and not _ace_filament_slot_guide_url_plausible(url):
