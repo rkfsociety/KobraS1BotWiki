@@ -145,6 +145,10 @@ def _topic_needs_printer_model(text: str) -> bool:
     if _topic_is_slicer_feature_help_intent(text):
         return False
 
+    # Резонанс / PA / затухающие колебания — общая калибровка, не уточнение модели вместо ответа.
+    if _topic_is_resonance_pa_tuning_intent(text):
+        return False
+
 
 
     # Прошивка и многоцветная печать (ACE / Combo) — не смола Photon/M3.
@@ -1777,9 +1781,13 @@ def _is_conversational_skepticism(text: str) -> bool:
 
 def _is_printing_status_announcement(text: str) -> bool:
     """«Запускаю первый слой» — статус в чате, не вопрос к вики."""
-    if not text or not text.strip() or "?" in text:
+    if not text or not text.strip():
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
+    if "?" in text and re.search(r"\b(?:есть\s+)?(?:ещё\s+)?вопрос\b", t):
+        return False
+    if "?" in text:
+        return False
     if re.search(r"\bчто\s+(?:делать|значит|не\s+так|не\s+работает)\b", t):
         return False
     printing_action = bool(
@@ -2756,6 +2764,38 @@ def _topic_is_slicer_vertical_hole_intent(text: str | None) -> bool:
         or re.search(r"\b(?:почин\w*|исправ\w*|модел\w*)\b", t)
     )
     return slicer_ctx and hole_ctx and fix_ctx
+
+
+def _topic_is_resonance_pa_tuning_intent(text: str | None) -> bool:
+    """Резонанс, PA, затухающие колебания / вибрации — не clarify вместо ответа."""
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    tuning = bool(
+        re.search(
+            r"\b(?:"
+            r"резонанс|resonance|ringing|"
+            r"колебан\w*|затуха\w*|"
+            r"\bpa\b|pressure\s*advance|"
+            r"input\s*shap|шейпер|shaper|"
+            r"вибрац|jerk|accel|"
+            r"layer\s*shift|сдвиг\s+сл"
+            r")\b",
+            t,
+        )
+    )
+    if not tuning:
+        return False
+    return bool(
+        "?" in text
+        or re.search(
+            r"\b(?:"
+            r"вопрос|связан\w*|почему|подскаж\w*|помогите|"
+            r"что\s+это|не\s+влияет|автокалибр"
+            r")\b",
+            t,
+        )
+    )
 
 
 def _topic_is_slicer_feature_help_intent(text: str | None) -> bool:

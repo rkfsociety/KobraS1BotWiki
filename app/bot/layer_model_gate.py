@@ -22,12 +22,15 @@ def topic_is_layer_slicing_intent(text: str | None) -> bool:
     from app.bot.text_heuristics import (
         _is_non_wiki_chatter_message,
         _topic_is_filament_slicing_settings_intent,
+        _topic_is_resonance_pa_tuning_intent,
     )
 
     if _is_non_wiki_chatter_message(text):
         return False
     # PETG/TPU + мост/поддержки в нарезке — общая вики по материалам, не модель Kobra.
     if _topic_is_filament_slicing_settings_intent(text):
+        return False
+    if _topic_is_resonance_pa_tuning_intent(text):
         return False
     tl = text.lower()
     if re.search(r"\b0\.\d{1,3}\b", tl) and re.search(r"слой|слоя|слое|слою|layer", tl):

@@ -40,6 +40,8 @@ from app.bot.text_heuristics import (
 
     _topic_is_slicer_choice_opinion_intent,
 
+    _topic_is_resonance_pa_tuning_intent,
+
     _topic_is_marketplace_commerce_intent,
 
     _topic_is_multicolor_firmware_intent,
@@ -972,6 +974,11 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
     if _topic_is_marketplace_commerce_intent(question):
 
         return False
+
+    if _topic_is_resonance_pa_tuning_intent(question) and not _model_slug_hints(question):
+        u = url.lower()
+        if "fdm-3d-printer" in u and "/common/" not in u.replace("_", "-"):
+            return False
 
     if (
         _topic_is_slicer_vertical_hole_intent(question)

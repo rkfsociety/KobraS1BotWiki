@@ -146,6 +146,25 @@ def pick_profile_for_hints(hints: frozenset[str]) -> PrinterProfile | None:
     return None
 
 
+def explain_resonance_pa_oscillations(question: str) -> str | None:
+    """Затухающие колебания: резонанс vs PA — не случайный layer-shift чужой модели."""
+    from app.bot.text_heuristics import _topic_is_resonance_pa_tuning_intent
+
+    if not _topic_is_resonance_pa_tuning_intent(question):
+        return None
+    return (
+        "Затухающие «волны»/колебания на отпечатке чаще связаны с **резонансом (ringing)**, а не с PA:\n"
+        "• **Input Shaping / виброкомпенсация** — основной инструмент; автокалибровка как раз про это "
+        "(по оси X/Y). Если «не влияет» — проверьте, что профиль/shaper сохранён и тест на той же скорости, "
+        "что в печати.\n"
+        "• Снизите jerk/acceleration на пробном кубе; иногда помогает ужесточение рамы.\n"
+        "• **PA (Pressure Advance)** — про поток в углах/поворотах экструдера, обычно не «затухающие волны» "
+        "по всей детали; калибруется отдельным тестом.\n"
+        "• **Сдвиг слоя** — другое явление (ступеньки), не затухающий паттерн.\n"
+        "Напишите модель (Kobra S1 / 3 / …) и слайсер — подскажу, где в вики искать shaper/калибровку именно для неё."
+    )
+
+
 def explain_slicer_mouse_ear_removal(question: str) -> str | None:
     """Убрать «ушко» / mouse ear в слайсере — не quick start вики."""
     from app.bot.text_heuristics import _topic_is_slicer_feature_help_intent
