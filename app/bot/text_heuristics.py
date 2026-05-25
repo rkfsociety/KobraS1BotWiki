@@ -2042,6 +2042,30 @@ def _is_printer_comparison_opinion(text: str) -> bool:
     return False
 
 
+def _is_joke_printer_model_clarify_reply(text: str | None) -> bool:
+    """Шуточный ответ на «уточни модель» (фанфик Kobra X Max и т.п.) — не поиск в вики."""
+    if not text or not text.strip():
+        return False
+    if _model_slug_hints(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:"
+        r"kobra\s*x\s*max|"
+        r"\d{1,3}[\s-]*color|"
+        r"giga\s*blaster|brain\s*depilation|depilation|"
+        r"\b5g\b|gt\s*neo|turbo\s*custom"
+        r")\b",
+        t,
+    ):
+        return True
+    words = t.split()
+    if len(words) >= 8 and re.search(r"\banycubic\b", t) and re.search(r"\bkobra\b", t):
+        if re.search(r"\b(?:turbo|neo|custom|blaster|color|max)\b", t):
+            return True
+    return False
+
+
 def _is_filament_brand_quality_opinion(text: str) -> bool:
     """Мнение о качестве стороннего пластика / возня с катушкой в ACE — не вики."""
     if not text or not text.strip() or "?" in text:

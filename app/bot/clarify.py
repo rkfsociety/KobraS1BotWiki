@@ -52,6 +52,10 @@ from app.bot.text_heuristics import (
 
     _is_error_code_query,
 
+    _is_joke_printer_model_clarify_reply,
+
+    _is_non_wiki_chatter_message,
+
     _model_slug_hints,
 
     _needs_model_clarification,
@@ -389,9 +393,19 @@ async def _deliver_clarify_combined(
 
     trace: 'followup' | 'correction'
 
-    Возвращает: printer_design | wiki | uncertain | no_guide
+    Возвращает: printer_design | wiki | uncertain | no_guide | silent
 
     """
+
+    if _is_non_wiki_chatter_message(original) or _is_non_wiki_chatter_message(combined):
+        if settings.log_decisions:
+            log_skip(chat_id, "clarify_chatter_topic", msg=msg, trace=trace)
+        return "silent"
+
+    if not _model_slug_hints(combined) and _is_joke_printer_model_clarify_reply(combined):
+        if settings.log_decisions:
+            log_skip(chat_id, "clarify_joke_model", msg=msg, trace=trace)
+        return "silent"
 
     # Защита: для кодов ошибок не уточняем и не отвечаем "общими" страницами.
 
