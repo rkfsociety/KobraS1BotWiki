@@ -368,6 +368,9 @@ def _topic_needs_printer_model(text: str) -> bool:
     if _is_sarcastic_thread_banter(text):
         return False
 
+    if _is_other_printer_maintenance_story(text):
+        return False
+
 
 
     return False
@@ -1801,6 +1804,86 @@ def _is_layer_profile_thread_opinion(text: str) -> bool:
     return opinion
 
 
+def _mentions_competitor_printer(text: str) -> bool:
+    """Bambu, P2S и др. — не путать с Anycubic Kobra в вики."""
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    return bool(
+        re.search(
+            r"\b(?:"
+            r"bambu|бамбук|п2с|p2s|x1c|"
+            r"prusa|пруса|"
+            r"creality|криалити|ender|"
+            r"flashforge|flashforg|"
+            r"raise3d|qidi"
+            r")\b",
+            t,
+        )
+    )
+
+
+def _is_other_printer_experience_story(text: str) -> bool:
+    """Личная история про чужой принтер (Bambu/P2S) — не гайд Kobra по экструдеру."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж\w*|как\s+(?:разобр|замен|почин|настро)|что\s+делать|не\s+работает)\b",
+        t,
+    ):
+        return False
+    if not _mentions_competitor_printer(text):
+        if not (
+            re.search(r"\bэкструдер\w*\b", t)
+            and re.search(r"\b(?:нажрал\w*|трезв\w*|другое\s+дело)\b", t)
+            and not _printer_mentioned(text)
+        ):
+            return False
+    story = bool(
+        re.search(r"\b(?:мне\s+)?когда\s+.{0,40}\b(?:первый\s+раз|пришлось)\b", t)
+        or re.search(r"\b(?:нажрал\w*|трезв\w*|рука\s+не\s+поднял\w*)\b", t)
+        or re.search(r"\bдругое\s+дело\b", t)
+    )
+    maint = bool(
+        re.search(r"\bэкструдер\w*\b", t) and re.search(r"\b(?:разобр\w*|разбира\w*)\b", t)
+    )
+    return story and (maint or _mentions_competitor_printer(text))
+
+
+def _is_other_printer_maintenance_story(text: str) -> bool:
+    """Личная история про Bambu/P2S и разбор экструдера — не гайд Kobra."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж\w*|как\s+(?:разобр|замен|почин|настро)|что\s+делать|не\s+работает)\b",
+        t,
+    ):
+        return False
+    if _printer_mentioned(text):
+        return False
+    other_brand = bool(
+        re.search(
+            r"\b(?:"
+            r"bambu|бамбук|п2с|p2s|x1c|x1\s*c|"
+            r"prusa|пруса|creality|криалити|flashforge|raise3d"
+            r")\b",
+            t,
+        )
+    )
+    extruder_story = bool(
+        re.search(r"\bэкструдер\w*\b", t)
+        and re.search(r"\b(?:разобр\w*|пришлось|первый\s+раз|нажрал\w*|трезв\w*)\b", t)
+    )
+    casual = bool(re.search(r"\b(?:другое\s+дело|рука\s+не\s+поднял\w*)\b", t))
+    if other_brand and (extruder_story or casual):
+        return True
+    if extruder_story and casual and re.search(r"\bнажрал\w*\b", t):
+        return True
+    return False
+
+
 def _is_first_days_experience_sharing(text: str) -> bool:
     """Рассказ «когда взял кобру / в первый день узнал части» — не запрос к вики."""
     if not text or not text.strip() or "?" in text:
@@ -2103,6 +2186,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_cross_chat_tip_sharing(text)
         or _is_ace_chitu_hardware_observation(text)
         or _is_multicolor_preset_banter(text)
+        or _is_other_printer_maintenance_story(text)
         or _is_chat_meta_discussion(text)
     )
 
@@ -2165,6 +2249,7 @@ def _message_has_help_intent(text: str) -> bool:
         or _is_cross_chat_tip_sharing(text)
         or _is_ace_chitu_hardware_observation(text)
         or _is_multicolor_preset_banter(text)
+        or _is_other_printer_maintenance_story(text)
     ):
         return False
     raw = text.strip()

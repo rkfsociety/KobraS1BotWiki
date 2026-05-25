@@ -305,6 +305,11 @@ def _looks_like_question(text: str) -> bool:
     if re.search(r"\b(?:кто[-\s]?то|ктото)\b", t) and re.search(r"\b(?:многоцвет|наиграл\w*)\w*\b", t):
         return False
 
+    # «когда первый раз разбирал экструдер на п2с» — история, не вопрос «когда».
+    if re.search(r"\bкогда\s+первый\s+раз\b", t) and re.search(r"\bэкструдер\w*\b", t):
+        if re.search(r"\b(?:bambu|бамбук|п2с|p2s|нажрал\w*|разобр\w*)\b", t):
+            return False
+
     return bool(
         re.search(
             r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает)\b",

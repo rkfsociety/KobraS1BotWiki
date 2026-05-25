@@ -296,6 +296,23 @@ def test_multicolor_preset_banter_is_chatter():
     assert not _message_has_help_intent(_MULTICOLOR_BANTER)
 
 
+_BAMBU_EXTRUDER_STORY = (
+    "А вот это другое дело · Мне когда первый раз пришлось экструдер разбирать на п2с, "
+    "я сначала нажрался, а потом разобрал. на трезвую голову рука не поднялась разбирать бамбук"
+)
+
+
+def test_other_printer_extruder_story_is_chatter():
+    import app.bot.layer_model_gate as g
+
+    g.apply_runtime_patches()
+    from app.bot.layer_model_gate import needs_model_clarification_for
+
+    assert _is_conversational_chatter(_BAMBU_EXTRUDER_STORY)
+    assert not needs_model_clarification_for(_BAMBU_EXTRUDER_STORY)
+    assert not _looks_like_question(_BAMBU_EXTRUDER_STORY)
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"
