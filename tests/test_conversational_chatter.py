@@ -302,6 +302,23 @@ _BAMBU_EXTRUDER_STORY = (
 )
 
 
+_P2S_ESUN_OOZE = (
+    "Я его купил только потому что п2с есун не хотел печатать, был брак... "
+    "А техподдержка нафиг шлет, все проверки и калибровки только с оригой пластиком, "
+    "вот и пришлось купить оригу · Но он и оригу печатает так же как и есун, "
+    "сильно течет, собирает каплю и портит печать потом"
+)
+
+_EXTRA_MATERIAL_URL = (
+    "https://wiki.anycubic.com/en/fdm-3d-printer/common/kobra-series-extra-material-in-printing"
+)
+
+
+def test_p2s_esun_ooze_story_from_log_is_chatter():
+    assert _is_conversational_chatter(_P2S_ESUN_OOZE)
+    assert not _needs_model_clarification(_P2S_ESUN_OOZE)
+
+
 def test_other_printer_extruder_story_is_chatter():
     import app.bot.layer_model_gate as g
 

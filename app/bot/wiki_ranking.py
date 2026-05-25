@@ -46,6 +46,8 @@ from app.bot.text_heuristics import (
 
     _is_ace_unit_trade_banter,
 
+    _is_other_printer_maintenance_story,
+
     _topic_is_slicer_vertical_hole_intent,
 
     _topic_is_slicer_feature_help_intent,
@@ -1005,6 +1007,13 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
     if _is_ace_unit_trade_banter(question) and "ace-pro-notes" in url.lower():
         return False
+
+    if _is_other_printer_maintenance_story(question) and not _model_slug_hints(question):
+        u = url.lower().replace("_", "-")
+        if "extra-material" in u or (
+            "filament" in u and "fdm-3d-printer" in u and "/common/" in u
+        ):
+            return False
 
     if _topic_is_ace_filament_slot_intent(question) and not _ace_filament_slot_guide_url_plausible(url):
         return False

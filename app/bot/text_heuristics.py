@@ -157,6 +157,10 @@ def _topic_needs_printer_model(text: str) -> bool:
     if _topic_is_ace_filament_slot_intent(text):
         return False
 
+    # P2S/Bambu + eSUN/ориг. пластик, подтёки — личная история, не модель Kobra.
+    if _is_other_printer_maintenance_story(text):
+        return False
+
 
 
     # Прошивка и многоцветная печать (ACE / Combo) — не смола Photon/M3.
@@ -1980,9 +1984,22 @@ def _is_other_printer_maintenance_story(text: str) -> bool:
         and re.search(r"\b(?:разобр\w*|пришлось|первый\s+раз|нажрал\w*|трезв\w*)\b", t)
     )
     casual = bool(re.search(r"\b(?:другое\s+дело|рука\s+не\s+поднял\w*)\b", t))
+    filament_ooze_story = bool(
+        (other_brand or re.search(r"\b(?:есун|esun)\b", t))
+        and re.search(r"\b(?:купил\w*|пришлось\s+купить)\b", t)
+        and re.search(
+            r"\b(?:"
+            r"брак|течет|текёт|капл\w*|портит\s+печать|"
+            r"не\s+хотел\s+печатать|техподдержк\w*|ориг\w*"
+            r")\b",
+            t,
+        )
+    )
     if other_brand and (extruder_story or casual):
         return True
     if extruder_story and casual and re.search(r"\bнажрал\w*\b", t):
+        return True
+    if filament_ooze_story:
         return True
     return False
 
