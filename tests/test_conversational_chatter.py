@@ -190,6 +190,15 @@ def test_overreaction_rhetoric_is_chatter():
     assert not _needs_model_clarification(_OVERREACTION_RHETORIC)
 
 
+_KOBRA3_STANDS_LIKE_X = "кобра 3 стоит как Х"
+
+
+def test_printer_stands_like_x_is_chatter():
+    assert _is_conversational_chatter(_KOBRA3_STANDS_LIKE_X)
+    assert not _looks_like_question(_KOBRA3_STANDS_LIKE_X)
+    assert not _needs_model_clarification(_KOBRA3_STANDS_LIKE_X)
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"

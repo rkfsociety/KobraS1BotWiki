@@ -1712,6 +1712,9 @@ def _is_printer_comparison_opinion(text: str) -> bool:
     )
     if cube_compare or future_cube_test:
         return True
+    # «кобра 3 стоит как Х» — сравнение в треде, не «как настроить».
+    if re.search(r"\bстоит\s+как\b", t) and _printer_mentioned(text):
+        return True
     return False
 
 
@@ -1922,7 +1925,8 @@ _COLOQUIAL_KAK_RE = re.compile(
     r"\bкак\s+по\s+мне\b|"
     r"\b\w+\s+как\s*[!?.…\U0001f300-\U0001faff]*\s*$|"
     r"\b(?:чем|как)\s+на\s+\w+|"
-    r"\bкак\s+на\s+\w+"
+    r"\bкак\s+на\s+\w+|"
+    r"\bстоит\s+как\s+\w+"
     r")",
     re.I | re.UNICODE,
 )

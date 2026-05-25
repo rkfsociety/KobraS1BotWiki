@@ -263,6 +263,11 @@ def _looks_like_question(text: str) -> bool:
     if re.search(r"\b(?:а\s+)?я\s+говорил\s+про\b", t) and "?" in text:
         return False
 
+    # «кобра 3 стоит как Х» — союзное «как», не вопрос к боту.
+    if re.search(r"\bстоит\s+как\b", t) and "?" not in text:
+        if re.search(r"\b(?:kobra|кобр|vyper|вайпер|photon|фотон)\b", t):
+            return False
+
     return bool(
         re.search(
             r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает)\b",
