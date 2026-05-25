@@ -1701,6 +1701,31 @@ def _is_sarcastic_thread_banter(text: str) -> bool:
     return False
 
 
+def _is_multicolor_preset_banter(text: str) -> bool:
+    """«кто-то наигрался с быстрым многоцветом» / пресет — комментарий, не гайд."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж\w*|как\s+(?:настро|сделать|включ)|что\s+делать|не\s+работает)\b",
+        t,
+    ):
+        return False
+    multicolor = bool(
+        re.search(r"\b(?:многоцвет|multi[\s-]?color|быстр\w*\s+многоцвет|цветн\w*\s+печат)\w*\b", t)
+    )
+    play = bool(re.search(r"\b(?:наиграл\w*|поиграл\w*|поэкспериментир\w*|поигра\w*)\b", t))
+    third_party = bool(re.search(r"\b(?:кто[-\s]?то|ктото|кто\s+нибудь|какой[-\s]?то)\b", t))
+    preset_share = bool(
+        re.search(r"\b(?:сэам\w*|slicemaker|слайсмейк\w*)\b", t) and re.search(r"\b\d{3,6}\b", t)
+    )
+    if multicolor and (play or third_party):
+        return True
+    if preset_share and multicolor:
+        return True
+    return False
+
+
 def _is_conversational_skepticism(text: str) -> bool:
     """Скепсис в треде — не запрос к вики."""
     if not text or not text.strip() or "?" in text:
@@ -2077,6 +2102,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_partial_manual_find_observation(text)
         or _is_cross_chat_tip_sharing(text)
         or _is_ace_chitu_hardware_observation(text)
+        or _is_multicolor_preset_banter(text)
         or _is_chat_meta_discussion(text)
     )
 
@@ -2138,6 +2164,7 @@ def _message_has_help_intent(text: str) -> bool:
         or _is_colloquial_printer_fragment(text)
         or _is_cross_chat_tip_sharing(text)
         or _is_ace_chitu_hardware_observation(text)
+        or _is_multicolor_preset_banter(text)
     ):
         return False
     raw = text.strip()

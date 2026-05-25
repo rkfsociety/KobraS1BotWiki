@@ -287,6 +287,15 @@ def test_chitu_ace_motor_observation_is_chatter():
     assert not _message_has_help_intent(_CHITU_ACE_MOTORS)
 
 
+_MULTICOLOR_BANTER = "Сэамэйкер 95700 · Кто то наигрался с быстрым многоцветом😂"
+
+
+def test_multicolor_preset_banter_is_chatter():
+    assert _is_conversational_chatter(_MULTICOLOR_BANTER)
+    assert not _looks_like_question(_MULTICOLOR_BANTER)
+    assert not _message_has_help_intent(_MULTICOLOR_BANTER)
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"

@@ -301,6 +301,10 @@ def _looks_like_question(text: str) -> bool:
     if re.search(r"\bкак\s+я\s+понял\b", t) and re.search(r"\b(?:чиди|чити|chitu|аська|ace)\b", t):
         return False
 
+    # «кто-то наигрался с многоцветом» — не вопрос «кто».
+    if re.search(r"\b(?:кто[-\s]?то|ктото)\b", t) and re.search(r"\b(?:многоцвет|наиграл\w*)\w*\b", t):
+        return False
+
     return bool(
         re.search(
             r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает)\b",
