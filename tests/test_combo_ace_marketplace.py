@@ -22,3 +22,14 @@ def test_combo_ace_marketplace_chat_detected():
 
 def test_filament_replacement_rejected():
     assert not _response_wiki_url_acceptable(_QUESTION, _BAD_URL)
+
+
+_ACE_PRICE_BANTER = "10₽ вторая аська? Дорого?₽"
+
+
+def test_ace_unit_price_banter_detected():
+    assert _is_combo_ace_marketplace_chat(_ACE_PRICE_BANTER)
+
+
+def test_ace_price_banter_rejects_filament_guide():
+    assert not _response_wiki_url_acceptable(_ACE_PRICE_BANTER, _BAD_URL)

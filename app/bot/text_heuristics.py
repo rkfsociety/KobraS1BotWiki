@@ -2775,15 +2775,24 @@ def _model_slug_hints(text: str) -> frozenset[str]:
 
 
 def _is_combo_ace_marketplace_chat(text: str | None) -> bool:
-    """«На алике комбо 40₽, с какой аськой?» — покупка/комплект, не замена филамента."""
+    """Цена ACE/комбо на маркетплейсе или «дорого?» в треде — не замена филамента."""
     if not text or not text.strip():
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\bсколько\s+стоит\b", t):
+        return False
     if re.search(
         r"\b(?:помогите|подскаж|как\s+(?:замен|поменя|смени|загруз|встав|установ|сброс))\b",
         t,
     ) and re.search(r"\b(?:филамент|катушк|слот|filament)\w*\b", t):
         return False
+    ace_unit_price = bool(
+        re.search(r"\b(?:аська\w*|аськ\w*|ace)\b", t)
+        and re.search(r"\d+\s*₽|\d+₽|\d+\s*(?:руб\.?|rub)\b", t)
+        and re.search(r"\b(?:дорого|дешево|дороговато|вторая|первая|третья)\w*\b", t)
+    )
+    if ace_unit_price:
+        return True
     marketplace = bool(
         re.search(
             r"\b(?:"
@@ -2795,7 +2804,7 @@ def _is_combo_ace_marketplace_chat(text: str | None) -> bool:
     )
     price_ctx = bool(
         re.search(r"\bстоит\b.{0,16}\d+", t)
-        or re.search(r"\d+\s*(?:₽|руб\.?|rub)\b", t)
+        or re.search(r"\d+\s*₽|\d+₽|\d+\s*(?:руб\.?|rub)\b", t)
     )
     combo_ace = bool(
         re.search(r"\bкомбо\b", t)

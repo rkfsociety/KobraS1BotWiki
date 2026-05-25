@@ -528,6 +528,10 @@ def test_ace_filament_replace_help_not_marketplace_chat():
     assert _looks_like_question(_ACE_REPLACE_HELP)
 
 
+def test_ace_unit_price_banter_from_log_is_chatter():
+    assert _is_conversational_chatter("10₽ вторая аська? Дорого?₽")
+
+
 _WARHAMMER_BANTER = "Оно тебе точно не надо · А как же печать миниатюр по вахе ?😂"
 
 _WARHAMMER_BANTER_SHORT = "А как же печать миниатюр по вахе ?😂"
