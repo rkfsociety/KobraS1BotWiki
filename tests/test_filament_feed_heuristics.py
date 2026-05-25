@@ -1,7 +1,11 @@
 """Подача филамента / срывы шестерни на Kobra S1."""
 from __future__ import annotations
 
-from app.bot.text_heuristics import _model_slug_hints, _topic_is_filament_feed_intent
+from app.bot.text_heuristics import (
+    _model_slug_hints,
+    _needs_model_clarification,
+    _topic_is_filament_feed_intent,
+)
 from app.bot.wiki_ranking import (
     _filament_feed_guide_url_plausible,
     _response_wiki_url_acceptable,
@@ -31,7 +35,10 @@ _BAD = (
     "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2/extruder-motor-replacement-guide",
     "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-s1-combo/assembly",
     "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-s1/printer-binding-guide",
+    "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/extruder-replacement",
 )
+
+_SHORT_GEARS = "Шестерни не тянут?"
 
 
 class _FakeIndex:
@@ -64,6 +71,12 @@ def _docs_from_urls(urls: tuple[str, ...]) -> list[WebWikiDoc]:
 
 def test_filament_feed_intent_detected():
     assert _topic_is_filament_feed_intent(_FILAMENT_MSG)
+
+
+def test_short_gears_question_needs_model_and_rejects_max_replacement():
+    assert _topic_is_filament_feed_intent(_SHORT_GEARS)
+    assert _needs_model_clarification(_SHORT_GEARS)
+    assert not _response_wiki_url_acceptable(_SHORT_GEARS, _BAD[-1])
 
 
 def test_cyrillic_kobra_s1_hints():

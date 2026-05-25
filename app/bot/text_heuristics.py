@@ -152,6 +152,12 @@ def _topic_needs_printer_model(text: str) -> bool:
 
 
 
+    # Подача филамента / шестерня — гайды различаются по модели.
+    if _topic_is_filament_feed_intent(text) and not _printer_mentioned(text):
+        return True
+
+
+
     ru = (
 
 

@@ -566,8 +566,24 @@ def _filament_feed_guide_url_plausible(url: str) -> bool:
 
         return True
 
-    if "extruder" in u and any(k in u for k in ("troubleshoot", "replacement", "guide", "module")):
+    if "extruder" in u and "replacement" in u:
+        if any(
+            k in u
+            for k in (
+                "feeding",
+                "clogging",
+                "blockage",
+                "feeding-timeout",
+                "11511",
+                "11518",
+                "troubleshoot",
+                "abnormal",
+            )
+        ):
+            return True
+        return False
 
+    if "extruder" in u and any(k in u for k in ("troubleshoot", "module")):
         return True
 
     return False
