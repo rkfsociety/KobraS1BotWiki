@@ -146,6 +146,25 @@ def pick_profile_for_hints(hints: frozenset[str]) -> PrinterProfile | None:
     return None
 
 
+def explain_ace_filament_slot_reset(question: str) -> str | None:
+    """ACE Pro запомнил материал по чипу — сброс слота без уточнения модели принтера."""
+    from app.bot.text_heuristics import _topic_is_ace_filament_slot_intent
+
+    if not _topic_is_ace_filament_slot_intent(question):
+        return None
+    return (
+        "ACE Pro часто «привязывает» тип пластика к слоту по RFID официальной катушки:\n"
+        "• В приложении/на экране станции откройте слот → смените тип материала вручную "
+        "(PETG/PLA и т.д.), даже если стоит другая катушка.\n"
+        "• Выньте катушку с чипом, вставьте нужный пластик, заново укажите материал для этого слота.\n"
+        "• Если не даёт сменить: остановите задание ACE, перезагрузите станцию (питание), "
+        "повторите смену материала до старта печати.\n"
+        "• Полный сброс «памяти» по чипу в вики обычно не описан — смотрите "
+        "ACE Pro Filament Replacement / FAQ; напишите модель принтера (Kobra 3 Combo / S1 …), "
+        "если нужна ссылка именно под ваш комплект."
+    )
+
+
 def explain_filament_bed_removal(question: str) -> str | None:
     """Отрыв TPU/детали от стола — не print-tpu конкретной модели."""
     from app.bot.text_heuristics import _topic_is_filament_bed_removal_intent

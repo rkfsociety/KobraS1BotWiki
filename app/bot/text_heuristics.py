@@ -153,6 +153,10 @@ def _topic_needs_printer_model(text: str) -> bool:
     if _topic_is_resonance_pa_tuning_intent(text):
         return False
 
+    # ACE Pro: слот/чип запомнил материал — не уточнение модели принтера.
+    if _topic_is_ace_filament_slot_intent(text):
+        return False
+
 
 
     # Прошивка и многоцветная печать (ACE / Combo) — не смола Photon/M3.
@@ -1068,6 +1072,40 @@ def _topic_is_ace_connection_intent(text: str | None) -> bool:
 
 
 
+
+
+def _topic_is_ace_filament_slot_intent(text: str | None) -> bool:
+    """ACE Pro: слот/RFID запомнил PETG, не сменить / сброс — не clarify принтера."""
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if not _ace_mentioned(text):
+        return False
+    slot_ctx = bool(
+        re.search(r"\b(?:слот\w*|slot|катушк\w*|spool)\b", t)
+        or re.search(r"\b(?:филамент|filament|petg|pla|abs|тпу|tpu)\w*\b", t)
+    )
+    memory_issue = bool(
+        re.search(
+            r"\b(?:"
+            r"запомн\w*|remember|"
+            r"чип\w*|rfid|nfc|"
+            r"не\s+да[ёе]т\s+смен|не\s+могу\s+смен|"
+            r"сброс\w*|обнул\w*|очист\w*|reset|clear|"
+            r"смен\w*|помен\w*"
+            r")\b",
+            t,
+        )
+    )
+    if not (slot_ctx and memory_issue):
+        return False
+    return bool(
+        "?" in text
+        or re.search(
+            r"\b(?:подскаж\w*|помогите|как\s+сброс|как\s+смен|вопрос|настрой\w*)\b",
+            t,
+        )
+    )
 
 
 def _topic_is_ace_filament_drying_intent(text: str | None) -> bool:

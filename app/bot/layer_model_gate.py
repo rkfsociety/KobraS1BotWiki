@@ -7,6 +7,7 @@ from app.bot.text_heuristics import (
     _is_error_code_query,
     _model_slug_hints,
     _topic_is_ace_connection_intent,
+    _topic_is_ace_filament_slot_intent,
     _topic_is_ace_not_detected_intent,
 )
 
@@ -91,6 +92,7 @@ def wiki_url_acceptable_for_topic(question: str, url: str) -> bool:
         and not model_specifically_identified(question)
         and not _topic_is_ace_connection_intent(question)
         and not _topic_is_ace_not_detected_intent(question)
+        and not _topic_is_ace_filament_slot_intent(question)
     ):
         return False
     if (topic_requires_printer_model(question) or topic_is_layer_slicing_intent(question)) and is_wiki_model_overview_url(
