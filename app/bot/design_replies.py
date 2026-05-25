@@ -7,6 +7,7 @@ from app.bot.reply_logging import log_bot_reply_for_message
 from app.bot.text_heuristics import _model_slug_hints
 from app.printer_catalog import (
     explain_door_vs_design,
+    explain_filament_bed_removal,
     explain_resonance_pa_oscillations,
     explain_slicer_mouse_ear_removal,
     explain_slicer_vertical_holes,
@@ -22,7 +23,9 @@ async def _maybe_reply_printer_design_vs_question(
 ) -> Message | None:
     """Справочник конструкции: слайсер, дверь камеры — без нерелевантной вики."""
     hints_d = _model_slug_hints(question)
-    expl = explain_resonance_pa_oscillations(question)
+    expl = explain_filament_bed_removal(question)
+    if not expl:
+        expl = explain_resonance_pa_oscillations(question)
     if not expl:
         expl = explain_slicer_mouse_ear_removal(question)
     if not expl:

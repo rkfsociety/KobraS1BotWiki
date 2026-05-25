@@ -119,6 +119,10 @@ def _topic_needs_printer_model(text: str) -> bool:
 
 
 
+    # Отрыв TPU/пластика со стола — не уточнение модели вместо совета.
+    if _topic_is_filament_bed_removal_intent(text):
+        return False
+
     # Выбор марки/типа пластика (TPU и т.п.) — не путать с сервисом сопла.
     if _topic_is_filament_material_choice_intent(text):
 
@@ -2684,11 +2688,51 @@ def _topic_is_firmware_update_intent(text: str | None) -> bool:
     )
 
 
+def _topic_is_filament_bed_removal_intent(text: str | None) -> bool:
+    """Как оторвать TPU/деталь от стола — не гайд print-tpu чужой модели."""
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    has_material = bool(
+        re.search(
+            r"\b(?:тпу|tpu|петг|petg|пла|pla|abs|абс|нейлон|nylon|пластик|филамент|filament|гибк)\w*\b",
+            t,
+        )
+    )
+    has_bed = bool(
+        re.search(
+            r"\b(?:пластин\w*|стол\w*|платформ\w*|build\s*plate|bed|pei|build\s*surface)\b",
+            t,
+        )
+    )
+    has_remove = bool(
+        re.search(
+            r"\b(?:"
+            r"отрыв\w*|оторв\w*|снять|снима\w*|отдел\w*|"
+            r"peel|detach|remove\s+from|"
+            r"отлип\w*|откле\w*"
+            r")\b",
+            t,
+        )
+    )
+    if not (has_material and has_bed and has_remove):
+        return False
+    return bool(
+        "?" in text
+        or re.search(
+            r"\b(?:совет\w*|проще|подскаж\w*|помогите|как\s+лучше|как\s+проще|есть\s+ли)\b",
+            t,
+        )
+    )
+
+
 def _topic_is_filament_material_choice_intent(text: str | None) -> bool:
     """Какой пластик/TPU/фирму взять — не замена сопла и не подача филамента."""
     if not text:
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _topic_is_filament_bed_removal_intent(text):
+        return False
     # WB/ТН ВЭД с «пластиком» — не выбор филамента для печати
     if _topic_is_marketplace_commerce_intent(text):
         return False
@@ -2706,8 +2750,14 @@ def _topic_is_filament_material_choice_intent(text: str | None) -> bool:
         return False
     wants_choice = bool(
         re.search(
-            r"\b(?:какой|какая|какое|какие|что\s+взять|что\s+лучше|посовет|подскаж|рекоменд|"
+            r"\b(?:какой|какая|какое|что\s+взять|что\s+лучше|посовет|подскаж|рекоменд|"
             r"какую\s+фирм|бренд|марк[ау]|which|what\s+filament|brand)\w*\b",
+            t,
+        )
+    ) or bool(
+        re.search(r"\bкакие\b", t)
+        and re.search(
+            r"\b(?:фирм\w*|бренд\w*|марк\w*|пластик\w*|филамент\w*|тпу|tpu)\b",
             t,
         )
     )

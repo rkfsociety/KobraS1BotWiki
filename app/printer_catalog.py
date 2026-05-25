@@ -146,6 +146,23 @@ def pick_profile_for_hints(hints: frozenset[str]) -> PrinterProfile | None:
     return None
 
 
+def explain_filament_bed_removal(question: str) -> str | None:
+    """Отрыв TPU/детали от стола — не print-tpu конкретной модели."""
+    from app.bot.text_heuristics import _topic_is_filament_bed_removal_intent
+
+    if not _topic_is_filament_bed_removal_intent(question):
+        return None
+    return (
+        "TPU сильно цепляется к PEI/стеклу — «проще всего» зависит от покрытия стола:\n"
+        "• Дайте столу остыть — гибкий пластик отпускает лучше.\n"
+        "• Гибкий шпатель: подденьте край и ведите параллельно столу, не рвите вверх.\n"
+        "• На textured PEI иногда помогает слегка смочить край водой (осторожно с электроникой под столом).\n"
+        "• Если «впаивается» каждый раз — чуть меньше прижим первого слоя / Z-offset для TPU.\n"
+        "Статья print-tpu в вики в основном про настройки печати, не про отрыв. "
+        "Напишите модель и тип стола — подскажу, есть ли отдельный совет в вики именно для неё."
+    )
+
+
 def explain_resonance_pa_oscillations(question: str) -> str | None:
     """Затухающие колебания: резонанс vs PA — не случайный layer-shift чужой модели."""
     from app.bot.text_heuristics import _topic_is_resonance_pa_tuning_intent

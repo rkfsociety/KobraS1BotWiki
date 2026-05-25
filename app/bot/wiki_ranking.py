@@ -32,6 +32,8 @@ from app.bot.text_heuristics import (
 
     _topic_is_filament_material_choice_intent,
 
+    _topic_is_filament_bed_removal_intent,
+
     _topic_is_filament_slicing_settings_intent,
 
     _topic_is_slicer_vertical_hole_intent,
@@ -978,6 +980,11 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
     if _topic_is_resonance_pa_tuning_intent(question) and not _model_slug_hints(question):
         u = url.lower()
         if "fdm-3d-printer" in u and "/common/" not in u.replace("_", "-"):
+            return False
+
+    if _topic_is_filament_bed_removal_intent(question) and not _model_slug_hints(question):
+        u = url.lower().replace("_", "-")
+        if "fdm-3d-printer" in u and "filament-and-resin" not in u:
             return False
 
     if (
