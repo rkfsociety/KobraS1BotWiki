@@ -2066,6 +2066,35 @@ def _is_joke_printer_model_clarify_reply(text: str | None) -> bool:
     return False
 
 
+def _is_third_party_filament_brand_chat(text: str) -> bool:
+    """Bambu/eSUN и т.п.: мнение о пластике, PETG HF — не оглавление Filament & Resin."""
+    if not text or not text.strip():
+        return False
+    if _is_error_code_query(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    third_brand = bool(
+        re.search(
+            r"\b(?:"
+            r"bambu\s*lab|бамбул\w*|бамбу\w*|"
+            r"esun|e\s*sun|sunlu|eryone|polymaker|prusament"
+            r")\b",
+            t,
+        )
+    )
+    if not third_brand:
+        return False
+    opinion = bool(
+        re.search(r"\b(?:хорош\w*|плох\w*|качеств\w*|стоит\s+ли|бер[её]те)\w*\b", t)
+        or re.search(r"\bведь\s+хорош", t)
+    )
+    hf_speed = bool(
+        re.search(r"\bpetg\s*hf\b", t)
+        and re.search(r"\b(?:скорост|speed|быстр|высок|надо\s+ли|нужно\s+ли)\w*\b", t)
+    )
+    return opinion or hf_speed or ("?" in text and re.search(r"\bпластик\w*\b", t))
+
+
 def _is_filament_brand_quality_opinion(text: str) -> bool:
     """Мнение о качестве стороннего пластика / возня с катушкой в ACE — не вики."""
     if not text or not text.strip() or "?" in text:
@@ -2862,6 +2891,8 @@ def _topic_is_filament_material_choice_intent(text: str | None) -> bool:
 def _topic_is_filament_slicing_settings_intent(text: str | None) -> bool:
     """Параметры нарезки/печати под материал (PETG, TPU) — не уточнение модели принтера."""
     if not text:
+        return False
+    if _is_third_party_filament_brand_chat(text):
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
     if _topic_is_marketplace_commerce_intent(text):

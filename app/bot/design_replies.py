@@ -12,6 +12,7 @@ from app.printer_catalog import (
     explain_resonance_pa_oscillations,
     explain_slicer_mouse_ear_removal,
     explain_slicer_vertical_holes,
+    explain_third_party_filament_chat,
 )
 
 async def _maybe_reply_printer_design_vs_question(
@@ -24,7 +25,9 @@ async def _maybe_reply_printer_design_vs_question(
 ) -> Message | None:
     """Справочник конструкции: слайсер, дверь камеры — без нерелевантной вики."""
     hints_d = _model_slug_hints(question)
-    expl = explain_ace_filament_slot_reset(question)
+    expl = explain_third_party_filament_chat(question)
+    if not expl:
+        expl = explain_ace_filament_slot_reset(question)
     if not expl:
         expl = explain_filament_bed_removal(question)
     if not expl:

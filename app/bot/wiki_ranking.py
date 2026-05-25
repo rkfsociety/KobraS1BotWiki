@@ -38,6 +38,8 @@ from app.bot.text_heuristics import (
 
     _topic_is_filament_slicing_settings_intent,
 
+    _is_third_party_filament_brand_chat,
+
     _topic_is_slicer_vertical_hole_intent,
 
     _topic_is_slicer_feature_help_intent,
@@ -1010,6 +1012,11 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
     if _topic_is_filament_bed_removal_intent(question) and not _model_slug_hints(question):
         u = url.lower().replace("_", "-")
         if "fdm-3d-printer" in u and "filament-and-resin" not in u:
+            return False
+
+    if _is_third_party_filament_brand_chat(question):
+        u_hub = url.lower().split("?")[0].rstrip("/")
+        if u_hub.endswith("/filament-and-resin"):
             return False
 
     if (

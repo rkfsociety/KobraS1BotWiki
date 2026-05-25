@@ -165,6 +165,35 @@ def explain_ace_filament_slot_reset(question: str) -> str | None:
     )
 
 
+def explain_third_party_filament_chat(question: str) -> str | None:
+    """Чужие бренды (Bambu) и PETG HF — не оглавление Filament & Resin."""
+    import re
+
+    from app.bot.text_heuristics import _is_third_party_filament_brand_chat
+
+    if not _is_third_party_filament_brand_chat(question):
+        return None
+    t = re.sub(r"\s+", " ", question.lower()).strip()
+    lines: list[str] = []
+    if re.search(r"\b(?:bambu|бамбу)\w*\b", t):
+        lines.append(
+            "Пластик Bambu Lab у многих в чате считается ровным по диаметру и удобным по катушке — "
+            "это опыт пользователей, не официальный гайд Anycubic."
+        )
+    if re.search(r"\bpetg\s*hf\b", t):
+        lines.append(
+            "PETG HF рассчитан на больший поток: скорости/объём часто выше, чем у обычного PETG, "
+            "но в рамках профиля HF и температуры сопла — сначала готовый пресет, затем калибровка "
+            "max volumetric speed, а не только «крутить скорость»."
+        )
+    if not lines:
+        return None
+    lines.append(
+        "Раздел Filament & Resin в вики — оглавление по материалам Anycubic, не про сторонние бренды."
+    )
+    return "\n".join(lines)
+
+
 def explain_filament_bed_removal(question: str) -> str | None:
     """Отрыв TPU/детали от стола — не print-tpu конкретной модели."""
     from app.bot.text_heuristics import _topic_is_filament_bed_removal_intent
