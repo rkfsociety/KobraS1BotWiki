@@ -288,6 +288,13 @@ def _looks_like_question(text: str) -> bool:
     ):
         return False
 
+    # «в чате по чиди увидел инфу, что…» — пересказ, не вопрос к боту.
+    if re.search(r"\b(?:в\s+чате|в\s+чат\w*)\b", t) and re.search(
+        r"\b(?:по\s+)?(?:чиди|чити|chitu)\b", t
+    ):
+        if re.search(r"\b(?:увидел\w*|увил\w*|инфу|информац)\b", t) or re.search(r"\bчто\b", t):
+            return False
+
     return bool(
         re.search(
             r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает)\b",

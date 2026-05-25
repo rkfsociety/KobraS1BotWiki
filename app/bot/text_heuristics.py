@@ -1367,6 +1367,30 @@ def _is_marketplace_promo_message(text: str | None) -> bool:
 
 
 
+def _is_cross_chat_tip_sharing(text: str) -> bool:
+    """«В чате по чиди увидел инфу, что…» — пересказ из другого чата, не запрос к вики."""
+    if not text or not text.strip():
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|не\s+работает|что\s+делать|"
+        r"как\s+(?:настро|откалибр|почин|исправ|сделать|убрать|решить))\b",
+        t,
+    ):
+        return False
+    other_chat = bool(
+        re.search(r"\b(?:в\s+чате|в\s+чат\w*|из\s+чата)\b", t)
+        and re.search(r"\b(?:по\s+)?(?:чиди|чити|chitu|chitubox|orca|орка)\b", t)
+    )
+    relay = bool(
+        re.search(r"\b(?:увидел\w*|увил\w*|услышал\w*|наш\w*|прочитал\w*|инфу|информац)\b", t)
+        or (re.search(r"\bчто\b", t) and other_chat)
+    )
+    return other_chat and relay
+
+
 def _is_chat_meta_discussion(text: str) -> bool:
     """Цитата чужого «помогите» или разговор об истории чата — не запрос к боту."""
     if not text or not text.strip():
@@ -2004,6 +2028,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_technical_opinion_sharing(text)
         or _is_technical_observation_sharing(text)
         or _is_partial_manual_find_observation(text)
+        or _is_cross_chat_tip_sharing(text)
         or _is_chat_meta_discussion(text)
     )
 
@@ -2063,6 +2088,7 @@ def _message_has_help_intent(text: str) -> bool:
         or _is_filament_testing_plan_sharing(text)
         or _is_print_quality_meta_curiosity(text)
         or _is_colloquial_printer_fragment(text)
+        or _is_cross_chat_tip_sharing(text)
     ):
         return False
     raw = text.strip()

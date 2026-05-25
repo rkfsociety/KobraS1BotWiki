@@ -247,6 +247,22 @@ def test_colloquial_kobra_fragment_is_chatter():
     assert not _message_has_help_intent(_KOBRA_X_FRAGMENT)
 
 
+_CHITU_CHAT_TIP = (
+    "О, в чате по чиди увиле инфу, что фунссор и на чиди q2 делает стол 😁"
+)
+
+
+def test_cross_chat_chitu_tip_is_chatter():
+    import app.bot.layer_model_gate as g
+
+    g.apply_runtime_patches()
+    from app.bot.layer_model_gate import needs_model_clarification_for
+
+    assert _is_conversational_chatter(_CHITU_CHAT_TIP)
+    assert not needs_model_clarification_for(_CHITU_CHAT_TIP)
+    assert not _looks_like_question(_CHITU_CHAT_TIP)
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"
