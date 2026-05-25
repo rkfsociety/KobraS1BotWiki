@@ -238,6 +238,15 @@ def test_print_quality_video_curiosity_is_chatter():
     assert not _message_has_help_intent(_PRINT_QUALITY_CURIOSITY)
 
 
+_KOBRA_X_FRAGMENT = "Как кобра х"
+
+
+def test_colloquial_kobra_fragment_is_chatter():
+    assert _is_conversational_chatter(_KOBRA_X_FRAGMENT)
+    assert not _looks_like_question(_KOBRA_X_FRAGMENT)
+    assert not _message_has_help_intent(_KOBRA_X_FRAGMENT)
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"

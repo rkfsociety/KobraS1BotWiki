@@ -279,6 +279,15 @@ def _looks_like_question(text: str) -> bool:
         if re.search(r"\b(?:не\s+похож\w*|на\s+видео)\b", t):
             return False
 
+    # «как кобра х» — обрывок сравнения, не вопрос к боту.
+    if re.match(
+        r"^как\s+(?:кобр\w*|kobra\w*|vyper\w*|вайпер\w*|фотон\w*)"
+        r"(?:\s+\w{1,4})?\s*$",
+        t,
+        re.I | re.UNICODE,
+    ):
+        return False
+
     return bool(
         re.search(
             r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает)\b",

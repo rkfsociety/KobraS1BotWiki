@@ -2000,10 +2000,38 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_slicer_app_disambiguation(text)
         or _is_filament_testing_plan_sharing(text)
         or _is_print_quality_meta_curiosity(text)
+        or _is_colloquial_printer_fragment(text)
         or _is_technical_opinion_sharing(text)
         or _is_technical_observation_sharing(text)
         or _is_partial_manual_find_observation(text)
         or _is_chat_meta_discussion(text)
+    )
+
+
+def _is_colloquial_printer_fragment(text: str) -> bool:
+    """Обрывки «как кобра х», «как на кобре» — сравнение в треде, не запрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    raw = text.strip()
+    if len(raw) > 40:
+        return False
+    t = re.sub(r"\s+", " ", raw.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|не\s+работает|что\s+делать|"
+        r"как\s+(?:настро|откалибр|почин|исправ|сделать|убрать|решить|подключ|замен))\b",
+        t,
+    ):
+        return False
+    return bool(
+        re.match(
+            r"^как\s+(?:"
+            r"(?:кобр\w*|kobra\w*|vyper\w*|вайпер\w*|фотон\w*|photon\w*)"
+            r"(?:\s+\w{1,4})?|"
+            r"на\s+(?:кобр\w*|kobra\w*|vyper\w*|вайпер\w*|фотон\w*)"
+            r")\s*$",
+            t,
+            re.I | re.UNICODE,
+        )
     )
 
 
@@ -2034,6 +2062,7 @@ def _message_has_help_intent(text: str) -> bool:
         or _is_slicer_app_disambiguation(text)
         or _is_filament_testing_plan_sharing(text)
         or _is_print_quality_meta_curiosity(text)
+        or _is_colloquial_printer_fragment(text)
     ):
         return False
     raw = text.strip()
@@ -2077,6 +2106,8 @@ def _is_conversational_chatter(text: str) -> bool:
     if _is_marketplace_promo_message(text):
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _is_colloquial_printer_fragment(text):
+        return True
     if _COLOQUIAL_KAK_RE.search(t):
         return True
     if re.search(r"\bчто\s*ли\b|\bчтоли\b", t):
