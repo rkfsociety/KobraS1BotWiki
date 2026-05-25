@@ -146,6 +146,23 @@ def pick_profile_for_hints(hints: frozenset[str]) -> PrinterProfile | None:
     return None
 
 
+def explain_slicer_vertical_holes(question: str) -> str | None:
+    """Отверстия в вертикальных стенках: капля в CAD или настройки слайсера — не quick start вики."""
+    from app.bot.text_heuristics import _topic_is_slicer_vertical_hole_intent
+
+    if not _topic_is_slicer_vertical_hole_intent(question):
+        return None
+    return (
+        "Круглое отверстие в вертикальной стенке FDM часто «сплющивает» сверху: верхняя дуга — нависание, "
+        "пластик не держит свод.\n"
+        "• В модели: отверстие «каплей» (teardrop) или dogbone — надёжнее всего.\n"
+        "• В слайсере: horizontal expansion / расширение отверстий, иногда настройки моста на верхней дуге "
+        "(зависит от Orca/Cura/PrusaSlicer).\n"
+        "• Альтернатива: вынести отверстие в горизонтальную грань или слегка усилить верх дугой.\n"
+        "Общий quick start по слайсеру эту тему не закрывает — подбирайте параметры под материал."
+    )
+
+
 def explain_door_vs_design(question: str, hints: frozenset[str]) -> str | None:
     """
     Если спрашивают про дверь камеры, а по каталогу у модели её нет — возвращаем готовый ответ.

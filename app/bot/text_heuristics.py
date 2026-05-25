@@ -137,6 +137,12 @@ def _topic_needs_printer_model(text: str) -> bool:
 
 
 
+    # Отверстия в вертикальных стенках / «капля» в CAD — не привязка к модели.
+    if _topic_is_slicer_vertical_hole_intent(text):
+        return False
+
+
+
     # Прошивка и многоцветная печать (ACE / Combo) — не смола Photon/M3.
     if _topic_is_multicolor_firmware_intent(text):
 
@@ -2426,6 +2432,26 @@ def _topic_is_filament_slicing_settings_intent(text: str | None) -> bool:
         and re.search(r"\b(?:нарезк|слайс|slic|мост|поддержк|support|связующ|поток)\w*\b", t)
     )
     return slicing_ctx or layer_in_slicing
+
+
+def _topic_is_slicer_vertical_hole_intent(text: str | None) -> bool:
+    """Отверстия в вертикальных стенках: слайсер vs моделирование «каплей» — не quick start."""
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\bкак\s+(?:откалибр|настро|почин|исправ|сделать|убрать|решить|подключ|замен)\b", t):
+        if not re.search(r"\b(?:слайс\w*|slicer)\b", t) and "слайсер" not in t:
+            return False
+    slicer_ctx = bool(re.search(r"\b(?:слайсер\w*|slicer|нарезк\w*|слайс\w*)\b", t))
+    hole_ctx = bool(
+        re.search(r"\b(?:отверст\w*|дыр\w*|hole)\b", t)
+        or (re.search(r"\bстенк\w*\b", t) and re.search(r"\bвертикальн\w*\b", t))
+    )
+    fix_ctx = bool(
+        re.search(r"\b(?:сплющ\w*|деформ\w*|овал\w*|капл\w*|dogbone|teardrop)\b", t)
+        or re.search(r"\b(?:почин\w*|исправ\w*|модел\w*)\b", t)
+    )
+    return slicer_ctx and hole_ctx and fix_ctx
 
 
 def _topic_is_multicolor_firmware_intent(text: str | None) -> bool:

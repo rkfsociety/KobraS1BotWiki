@@ -34,6 +34,8 @@ from app.bot.text_heuristics import (
 
     _topic_is_filament_slicing_settings_intent,
 
+    _topic_is_slicer_vertical_hole_intent,
+
     _topic_is_marketplace_commerce_intent,
 
     _topic_is_multicolor_firmware_intent,
@@ -366,6 +368,26 @@ def _topic_is_door_intent(topic: str | None) -> bool:
 
 
 
+def _slicer_vertical_hole_guide_url_plausible(url: str) -> bool:
+    """Не отдавать quick start / установку слайсера на вопрос про отверстия в стенках."""
+    u = url.lower().replace("_", "-")
+    bad = (
+        "quick-start",
+        "quick-start-guide",
+        "basic-introduction",
+        "installation",
+        "operation-guide-video",
+        "3dphotosliceguide",
+        "3dphotoguide",
+        "slicing-software-installation",
+        "introduction-of-cura",
+    )
+    if any(b in u for b in bad):
+        return False
+    good = ("bridge", "overhang", "horizontal-expansion", "hole", "wall")
+    return any(g in u for g in good)
+
+
 def _multicolor_firmware_guide_url_plausible(url: str) -> bool:
     """Прошивка/лог обновлений и многоцвет — FDM Combo или слайсер, не resin."""
     u = url.lower().replace("_", "-")
@@ -582,6 +604,24 @@ def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
             return 72
 
         return 35
+
+    if _topic_is_slicer_vertical_hole_intent(topic):
+
+        u = url.lower().replace("_", "-")
+
+        if _slicer_vertical_hole_guide_url_plausible(url):
+
+            return 0
+
+        if "quick-start" in u or "quick-start-guide" in u:
+
+            return 90
+
+        if "software-and-app" in u or "slicing-software" in u:
+
+            return 55
+
+        return 40
 
     if _topic_is_filament_feed_intent(topic):
 
@@ -906,6 +946,10 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
         return False
 
     if _topic_is_marketplace_commerce_intent(question):
+
+        return False
+
+    if _topic_is_slicer_vertical_hole_intent(question) and not _slicer_vertical_hole_guide_url_plausible(url):
 
         return False
 
