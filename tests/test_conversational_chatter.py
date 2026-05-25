@@ -199,6 +199,18 @@ def test_printer_stands_like_x_is_chatter():
     assert not _needs_model_clarification(_KOBRA3_STANDS_LIKE_X)
 
 
+_USED_PURCHASE_BANTER = (
+    "Ну это смотря как он ее купил, как новую со скрученным пробегом, "
+    "или с уценкой б/у с пробегом 35 часов · Ты говорил, что та без аськи лежала"
+)
+
+
+def test_used_printer_purchase_banter_is_chatter():
+    assert _is_conversational_chatter(_USED_PURCHASE_BANTER)
+    assert not _looks_like_question(_USED_PURCHASE_BANTER)
+    assert not _needs_model_clarification(_USED_PURCHASE_BANTER)
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"

@@ -1757,6 +1757,22 @@ def _is_printer_purchase_material_opinion(text: str) -> bool:
         return True
     if casual_try and re.search(r"\bкомпозит", t):
         return True
+    ace_ctx = bool(re.search(r"\b(?:аська\w*|аськ\w*|ace)\b", t))
+    # «смотря как купил», б/у, уценка, «пробег» — обсуждение покупки, не вики.
+    if re.search(r"\bкак\s+(?:купить|заказать)\b", t):
+        return False
+    used_purchase = bool(
+        (
+            re.search(r"\b(?:б/?у|бу\b|уценк\w*|пробег\w*|скручен\w*)\b", t)
+            or re.search(r"\b(?:смотря|зависит)\s+как\b", t)
+        )
+        and re.search(r"\bкупил\w*\b", t)
+    )
+    if used_purchase and (printer_ctx or ace_ctx):
+        return True
+    # «ты говорил, что та без аськи лежала» — пересказ в треде.
+    if re.search(r"\bты\s+говорил\b", t) and (ace_ctx or re.search(r"\bлежал\w*\b", t)):
+        return True
     return False
 
 

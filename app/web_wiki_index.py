@@ -268,6 +268,12 @@ def _looks_like_question(text: str) -> bool:
         if re.search(r"\b(?:kobra|кобр|vyper|вайпер|photon|фотон)\b", t):
             return False
 
+    # «смотря как купил», «ты говорил…» — бытовой тред, не вопрос к боту.
+    if "?" not in text and re.search(r"\b(?:смотря|зависит)\s+как\b", t) and re.search(r"\bкупил\w*\b", t):
+        return False
+    if "?" not in text and re.search(r"\bты\s+говорил\b", t):
+        return False
+
     return bool(
         re.search(
             r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает)\b",
