@@ -238,10 +238,6 @@ def _topic_needs_printer_model(text: str) -> bool:
 
 
 
-        "стол",
-
-
-
         "подогрев",
 
 
@@ -354,6 +350,16 @@ def _topic_needs_printer_model(text: str) -> bool:
 
 
 
+        return True
+
+    # «на столе» (мебель) ≠ heated bed; стол принтера — только с калибровкой/печатью.
+    if re.search(r"\bстол\w*\b", t) and re.search(
+        r"\b(?:"
+        r"калибр|уровн|level|скрейп|царап|сопл|подогрев|hotbed|heated|"
+        r"настрой\w*|печат\w*|куб"
+        r")\w*\b",
+        t,
+    ):
         return True
 
 
@@ -2036,6 +2042,31 @@ def _is_printer_comparison_opinion(text: str) -> bool:
     return False
 
 
+def _is_filament_brand_quality_opinion(text: str) -> bool:
+    """Мнение о качестве стороннего пластика / возня с катушкой в ACE — не вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    if _is_error_code_query(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|не\s+печатает|не\s+работает|что\s+делать|"
+        r"как\s+(?:настро|почин|исправ|сделать|замен|подключ))\b",
+        t,
+    ):
+        return False
+    about_quality = bool(
+        re.search(r"\bкачеств\w*\b", t)
+        and re.search(
+            r"\b(?:пластик|филамент|filament|eryone|катушк|spool|brand|бренд)\w*\b",
+            t,
+        )
+    )
+    return about_quality
+
+
 def _is_printer_purchase_material_opinion(text: str) -> bool:
     """Размышления о покупке/возврате и опыт с пластиками — не запрос к вики."""
     if not text or not text.strip() or "?" in text:
@@ -2236,6 +2267,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_peer_social_printer_question(text)
         or _is_price_negotiation_chatter(text)
         or _is_printer_purchase_material_opinion(text)
+        or _is_filament_brand_quality_opinion(text)
         or _is_printer_comparison_opinion(text)
         or _is_printing_status_announcement(text)
         or _is_layer_profile_thread_opinion(text)

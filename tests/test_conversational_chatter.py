@@ -476,6 +476,25 @@ def test_ace_price_question_not_chatter():
     assert _looks_like_question(_ACE_PRICE_QUESTION)
 
 
+_ERYONE_QUALITY_OPINION = (
+    "О качестве пластика eryone. Сломал все то что на столе в попытках "
+    "добраться до нормального пластика и поставить его в ace"
+)
+
+_ERYONE_QUALITY_HELP = "какой eryone petg лучше взять для kobra s1?"
+
+
+def test_eryone_quality_opinion_from_log_is_chatter():
+    assert _is_conversational_chatter(_ERYONE_QUALITY_OPINION)
+    assert not _looks_like_question(_ERYONE_QUALITY_OPINION)
+    assert not _needs_model_clarification(_ERYONE_QUALITY_OPINION)
+
+
+def test_eryone_brand_choice_question_not_chatter():
+    assert not _is_conversational_chatter(_ERYONE_QUALITY_HELP)
+    assert _looks_like_question(_ERYONE_QUALITY_HELP)
+
+
 _WARHAMMER_BANTER = "Оно тебе точно не надо · А как же печать миниатюр по вахе ?😂"
 
 _WARHAMMER_BANTER_SHORT = "А как же печать миниатюр по вахе ?😂"
