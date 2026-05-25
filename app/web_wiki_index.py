@@ -252,6 +252,10 @@ def _looks_like_question(text: str) -> bool:
         if re.search(r"\bговорит\b", t) and re.search(r"\b(?:аська\w*|аськ\w*|многоцвет)\w*\b", t):
             return False
 
+    # «зачем для кобры orca?» — мнение, не вопрос к боту.
+    if re.search(r"\bзачем\s+(?:для|у)\s+кобр\w*\b", t) and re.search(r"\b(?:orca|орка|слайсер)\b", t):
+        return False
+
     # «как раздавая акция» — союзное «как», не вопрос к боту.
     if re.search(r"\bкак\s+(?:раздавая|акци\w*)\b", t) and "?" not in text:
         return False

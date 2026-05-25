@@ -38,6 +38,8 @@ from app.bot.text_heuristics import (
 
     _topic_is_slicer_feature_help_intent,
 
+    _topic_is_slicer_choice_opinion_intent,
+
     _topic_is_marketplace_commerce_intent,
 
     _topic_is_multicolor_firmware_intent,
@@ -623,7 +625,11 @@ def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
 
         return 35
 
-    if _topic_is_slicer_vertical_hole_intent(topic) or _topic_is_slicer_feature_help_intent(topic):
+    if (
+        _topic_is_slicer_vertical_hole_intent(topic)
+        or _topic_is_slicer_feature_help_intent(topic)
+        or _topic_is_slicer_choice_opinion_intent(topic)
+    ):
 
         u = url.lower().replace("_", "-")
 
@@ -970,6 +976,7 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
     if (
         _topic_is_slicer_vertical_hole_intent(question)
         or _topic_is_slicer_feature_help_intent(question)
+        or _topic_is_slicer_choice_opinion_intent(question)
     ) and not _slicer_vertical_hole_guide_url_plausible(url):
 
         return False

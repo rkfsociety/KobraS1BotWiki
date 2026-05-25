@@ -313,6 +313,15 @@ def test_other_printer_extruder_story_is_chatter():
     assert not _looks_like_question(_BAMBU_EXTRUDER_STORY)
 
 
+_ORCA_OPINION = "А зачем для кобры орка? Стандартный слайсер огонь"
+
+
+def test_orca_vs_slicer_opinion_is_chatter():
+    assert _is_conversational_chatter(_ORCA_OPINION)
+    assert not _looks_like_question(_ORCA_OPINION)
+    assert not _message_has_help_intent(_ORCA_OPINION)
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"

@@ -1609,7 +1609,24 @@ def _is_slicer_app_disambiguation(text: str) -> bool:
     demonstrative = bool(re.search(r"^\s*это\s+", t))
     if (has_slicer and has_app and (choice or demonstrative)) or (has_app and choice and len(t) <= 100):
         return True
+    # «зачем для кобры orca? стандартный слайсер огонь» — мнение, не quick start.
+    rhetorical = bool(
+        re.search(r"\bзачем\s+(?:для|у)\s+кобр\w*\b", t) and re.search(r"\b(?:orca|орка)\b", t)
+    )
+    praise = bool(
+        re.search(r"\b(?:огонь|класс|топ|зачёт|зашло|норм|крут)\b", t)
+        and re.search(r"\b(?:слайсер\w*|slicer|orca|орка)\b", t)
+    )
+    if rhetorical or (praise and re.search(r"\bкобр\w*\b", t)):
+        return True
     return False
+
+
+def _topic_is_slicer_choice_opinion_intent(text: str | None) -> bool:
+    """Мнение про Orca vs слайсер для Kobra — не quick start вики."""
+    if not text:
+        return False
+    return _is_slicer_app_disambiguation(text)
 
 
 def _is_filament_testing_plan_sharing(text: str) -> bool:
