@@ -297,6 +297,10 @@ def _looks_like_question(text: str) -> bool:
         if re.search(r"\b(?:увидел\w*|увил\w*|инфу|информац)\b", t) or re.search(r"\bчто\b", t):
             return False
 
+    # «как я понял, в аське 2 тоже» — наблюдение, не вопрос «как».
+    if re.search(r"\bкак\s+я\s+понял\b", t) and re.search(r"\b(?:чиди|чити|chitu|аська|ace)\b", t):
+        return False
+
     return bool(
         re.search(
             r"\b(как|почему|зачем|что|где|когда|кто|можно ли|помогите|не работает)\b",

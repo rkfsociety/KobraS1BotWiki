@@ -1455,6 +1455,35 @@ def _is_print_quality_meta_curiosity(text: str) -> bool:
     return False
 
 
+def _is_ace_chitu_hardware_observation(text: str) -> bool:
+    """ChiTu Box / ACE: «на катушку движок», «как я понял» — не гайд по замене филамента."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|не\s+работает|что\s+делать|"
+        r"как\s+(?:настро|замен|почин|исправ|сделать|подключ))\b",
+        t,
+    ):
+        return False
+    station = bool(
+        re.search(r"\b(?:чиди|чити|chitu|chitubox|аська\w*|аськ\w*|ace)\b", t)
+    )
+    if not station:
+        return False
+    spool_motor = bool(
+        re.search(r"\bкатушк\w*\b", t)
+        and re.search(r"\b(?:движок|мотор|экструдер|feed)\w*\b", t)
+    )
+    understood = bool(re.search(r"\bкак\s+я\s+понял\b", t))
+    also = bool(re.search(r"\b(?:тоже|так\s+же|аналогично)\b", t))
+    if spool_motor:
+        return True
+    if understood and also:
+        return True
+    return understood and re.search(r"\b(?:чиди|аська|ace)\b", t)
+
+
 def _is_material_strength_discussion(text: str) -> bool:
     """Обсуждение прочности TPU/слои vs поперёк — не запрос к вики и не clarify модели."""
     if not text or not text.strip() or "?" in text:
@@ -2043,6 +2072,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_technical_observation_sharing(text)
         or _is_partial_manual_find_observation(text)
         or _is_cross_chat_tip_sharing(text)
+        or _is_ace_chitu_hardware_observation(text)
         or _is_chat_meta_discussion(text)
     )
 
@@ -2103,6 +2133,7 @@ def _message_has_help_intent(text: str) -> bool:
         or _is_print_quality_meta_curiosity(text)
         or _is_colloquial_printer_fragment(text)
         or _is_cross_chat_tip_sharing(text)
+        or _is_ace_chitu_hardware_observation(text)
     ):
         return False
     raw = text.strip()

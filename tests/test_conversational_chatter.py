@@ -278,6 +278,15 @@ def test_multicolor_ace_sarcasm_is_chatter():
     assert not _message_has_help_intent(_TWO_ACE_BANTER)
 
 
+_CHITU_ACE_MOTORS = "а в чиди боксе на каждую катушку по движку. Как я понял и в аська 2 тоже"
+
+
+def test_chitu_ace_motor_observation_is_chatter():
+    assert _is_conversational_chatter(_CHITU_ACE_MOTORS)
+    assert not _looks_like_question(_CHITU_ACE_MOTORS)
+    assert not _message_has_help_intent(_CHITU_ACE_MOTORS)
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"
