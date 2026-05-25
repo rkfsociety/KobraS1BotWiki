@@ -2095,6 +2095,36 @@ def _is_third_party_filament_brand_chat(text: str) -> bool:
     return opinion or hf_speed or ("?" in text and re.search(r"\bпластик\w*\b", t))
 
 
+def _is_filament_tolerance_banter(text: str) -> bool:
+    """«Одному богу известно какой зазор» у втулки — реплика в треде, не filament-guide."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|как\s+(?:настро|сделать|убрать|исправ|замен))\b",
+        t,
+    ):
+        return False
+    idiom = bool(
+        re.search(
+            r"\b(?:"
+            r"одному\s+богу\s+известно|"
+            r"бог\s+его\s+знает|"
+            r"кто\s+его\s+знает|"
+            r"хз\s+какой|"
+            r"никто\s+не\s+знает"
+            r")\b",
+            t,
+        )
+    )
+    clearance = bool(re.search(r"\b(?:зазор\w*|люфт\w*|backlash)\b", t))
+    mech = bool(re.search(r"\b(?:втулк\w*|подшипник|bearing|bushing)\b", t))
+    filament = bool(re.search(r"\b(?:пластик|филамент|filament|пруток|нит)\w*\b", t))
+    return idiom and clearance and mech and filament
+
+
 def _is_filament_brand_quality_opinion(text: str) -> bool:
     """Мнение о качестве стороннего пластика / возня с катушкой в ACE — не вики."""
     if not text or not text.strip() or "?" in text:
@@ -2321,6 +2351,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_price_negotiation_chatter(text)
         or _is_printer_purchase_material_opinion(text)
         or _is_filament_brand_quality_opinion(text)
+        or _is_filament_tolerance_banter(text)
         or _is_printer_comparison_opinion(text)
         or _is_printing_status_announcement(text)
         or _is_layer_profile_thread_opinion(text)
@@ -2855,6 +2886,8 @@ def _topic_is_filament_material_choice_intent(text: str | None) -> bool:
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
     if _topic_is_filament_bed_removal_intent(text):
+        return False
+    if _is_filament_tolerance_banter(text):
         return False
     # WB/ТН ВЭД с «пластиком» — не выбор филамента для печати
     if _topic_is_marketplace_commerce_intent(text):

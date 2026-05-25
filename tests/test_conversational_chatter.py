@@ -495,6 +495,24 @@ def test_eryone_brand_choice_question_not_chatter():
     assert _looks_like_question(_ERYONE_QUALITY_HELP)
 
 
+_TOLERANCE_BANTER = (
+    "Так как одному богу известно какой там зазор между пластиком и втулкой получается"
+)
+
+_FILAMENT_CHOICE_HELP = "какой petg лучше взять для kobra s1?"
+
+
+def test_filament_tolerance_banter_from_log_is_chatter():
+    assert _is_conversational_chatter(_TOLERANCE_BANTER)
+    assert not _looks_like_question(_TOLERANCE_BANTER)
+    assert not _needs_model_clarification(_TOLERANCE_BANTER)
+
+
+def test_filament_choice_question_not_tolerance_banter():
+    assert not _is_conversational_chatter(_FILAMENT_CHOICE_HELP)
+    assert _looks_like_question(_FILAMENT_CHOICE_HELP)
+
+
 _WARHAMMER_BANTER = "Оно тебе точно не надо · А как же печать миниатюр по вахе ?😂"
 
 _WARHAMMER_BANTER_SHORT = "А как же печать миниатюр по вахе ?😂"

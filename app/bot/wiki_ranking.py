@@ -40,6 +40,8 @@ from app.bot.text_heuristics import (
 
     _is_third_party_filament_brand_chat,
 
+    _is_filament_tolerance_banter,
+
     _topic_is_slicer_vertical_hole_intent,
 
     _topic_is_slicer_feature_help_intent,
@@ -1018,6 +1020,9 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
         u_hub = url.lower().split("?")[0].rstrip("/")
         if u_hub.endswith("/filament-and-resin"):
             return False
+
+    if _is_filament_tolerance_banter(question) and "filament-guide" in url.lower():
+        return False
 
     if (
         _topic_is_slicer_vertical_hole_intent(question)
