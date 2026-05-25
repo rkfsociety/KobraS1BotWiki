@@ -1369,9 +1369,7 @@ def _is_marketplace_promo_message(text: str | None) -> bool:
 
 def _is_cross_chat_tip_sharing(text: str) -> bool:
     """«В чате по чиди увидел инфу, что…» — пересказ из другого чата, не запрос к вики."""
-    if not text or not text.strip():
-        return False
-    if _message_has_help_intent(text):
+    if not text or not text.strip() or "?" in text:
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
     if re.search(
