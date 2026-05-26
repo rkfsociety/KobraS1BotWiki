@@ -4,9 +4,14 @@ from __future__ import annotations
 from app.bot.text_heuristics import (
     _is_bare_competitor_printer_question,
     _is_conversational_chatter,
+    _is_conversational_skepticism,
     _is_generic_help_without_context,
+    _is_printer_purchase_material_opinion,
+    _is_technical_observation_sharing,
+    _is_technical_opinion_sharing,
     _message_has_help_intent,
     _needs_model_clarification,
+    _topic_is_marketplace_commerce_intent,
 )
 from app.web_wiki_index import _looks_like_question
 
@@ -603,3 +608,69 @@ def test_long_competitor_question_not_caught():
     assert not _is_bare_competitor_printer_question(
         "как настроить ретракт на bambu a1 combo?"
     )
+
+
+# --- Лог 07:59:33: шутка о тайминге покупки ---
+
+_COMBO_TIMING_JOKE = "А то будет как обычно, куплю Х, а на следующий день комбо выйдет😂"
+
+
+def test_purchase_timing_joke_from_log_is_chatter():
+    assert _is_printer_purchase_material_opinion(_COMBO_TIMING_JOKE)
+    assert _is_conversational_chatter(_COMBO_TIMING_JOKE)
+    assert not _needs_model_clarification(_COMBO_TIMING_JOKE)
+
+
+# --- Лог 08:02:40: совет по комплектации заказа ---
+
+_ORDER_ADVICE_MSG = (
+    "Что ещё сразу докинуть к заказу кроме филамента? "
+    "Не имею ни малейшего понятия, что надо сразу. Или тыкните в FAQ"
+)
+
+
+def test_order_advice_question_is_marketplace_commerce():
+    assert _topic_is_marketplace_commerce_intent(_ORDER_ADVICE_MSG)
+    assert _is_conversational_chatter(_ORDER_ADVICE_MSG)
+
+
+def test_order_advice_question_no_model_clarify():
+    assert not _needs_model_clarification(_ORDER_ADVICE_MSG)
+
+
+# --- Лог 08:05:55: «Как через экструдер пропустили» ---
+
+_EXTRUDER_THREAD_PAST = "Как через экструдер пропустили"
+
+
+def test_extruder_thread_past_action_is_observation():
+    assert _is_technical_observation_sharing(_EXTRUDER_THREAD_PAST)
+    assert _is_conversational_chatter(_EXTRUDER_THREAD_PAST)
+    assert not _needs_model_clarification(_EXTRUDER_THREAD_PAST)
+
+
+def test_extruder_how_to_infinitive_not_caught():
+    # Инфинитив — легитимный вики-запрос, не отсекаем
+    assert not _is_technical_observation_sharing("Как через экструдер пропустить нить?")
+
+
+# --- Лог 08:07:51: «не факт что» + «я думал … а сейчас вижу» ---
+
+_EXTRUDER_SPECULATION = (
+    "наверное , прикольно. Я думал там кусок такой, тип из экструдера доставали, "
+    "а сейчас вижу что вся катушка такая "
+    "Только не факт что в экструдере не схватится шестернями за гладкий участок 😂"
+)
+
+
+def test_ne_fakt_chto_is_skepticism():
+    assert _is_conversational_skepticism(_EXTRUDER_SPECULATION)
+
+
+def test_ya_dumal_a_seychas_vizhu_is_opinion():
+    assert _is_technical_opinion_sharing(_EXTRUDER_SPECULATION)
+
+
+def test_extruder_speculation_from_log_is_chatter():
+    assert _is_conversational_chatter(_EXTRUDER_SPECULATION)
+    assert not _needs_model_clarification(_EXTRUDER_SPECULATION)

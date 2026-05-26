@@ -1623,6 +1623,9 @@ def _is_technical_opinion_sharing(text: str) -> bool:
         t,
     ):
         return True
+    # «я думал … а сейчас вижу что» — коррекция предположения в треде.
+    if re.search(r"\bя\s+думал\b", t) and re.search(r"\b(?:а\s+)?сейчас\s+вижу\b", t):
+        return True
     return False
 
 
@@ -1651,6 +1654,15 @@ def _is_technical_observation_sharing(text: str) -> bool:
     if noticed and (tinkering or param_talk):
         return True
     if tinkering and noticed:
+        return True
+    # «Как через экструдер пропустили» — прош. время мн.ч. = вопрос о чужом действии в треде.
+    thread_past_action = bool(
+        re.search(r"\bкак\b", t)
+        and re.search(r"\bчерез\s+\w+\b", t)
+        and re.search(r"\b\w+(?:ил[иа]|пустили|вели|провели|вставили)\b", t)
+        and len(t.split()) <= 7
+    )
+    if thread_past_action:
         return True
     return False
 
@@ -1837,6 +1849,9 @@ def _is_conversational_skepticism(text: str) -> bool:
     if not text or not text.strip() or "?" in text:
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
+    # «не факт что» — разговорный скептицизм, всегда в контексте обсуждения.
+    if re.search(r"\bне\s+факт\s*,?\s+что\b", t):
+        return True
     if re.search(r"\b(?:сомневаюсь|сомневаемся|не\s+думаю|вряд\s+ли|сомнев)\b", t) and re.search(r"\bчто\b", t):
         return True
     if re.search(r"\b(?:пустят|напечатают|запустят|заморачив)\b", t) and re.search(
@@ -2251,6 +2266,14 @@ def _is_printer_purchase_material_opinion(text: str) -> bool:
         return True
     # «ты говорил, что та без аськи лежала» — пересказ в треде.
     if re.search(r"\bты\s+говорил\b", t) and (ace_ctx or re.search(r"\bлежал\w*\b", t)):
+        return True
+    # «куплю X, а на следующий день комбо выйдет» — шутка о тайминге покупки.
+    timing_joke = bool(
+        re.search(r"\bкупл\w*\b", t)
+        and re.search(r"\b(?:выйдет|появится|выпустят|анонс)\w*\b", t)
+        and re.search(r"\b(?:следующий\s+день|завтра|через\s+день|как\s+обычно|как\s+всегда|у\s+меня\s+всегда)\b", t)
+    )
+    if timing_joke:
         return True
     return False
 
@@ -2963,6 +2986,13 @@ def _topic_is_marketplace_commerce_intent(text: str | None) -> bool:
         )
     )
     if marketplace and (selling or printed_goods):
+        return True
+    # «что ещё докинуть к заказу кроме филамента» — совет по комплектации, не вики.
+    order_advice = bool(
+        re.search(r"\bк\s+заказ\w*\b", t)
+        and re.search(r"\b(?:докин\w*|добав\w*|положить|нужно\s+ещё|ещё\s+взять)\b", t)
+    )
+    if order_advice:
         return True
     return False
 
