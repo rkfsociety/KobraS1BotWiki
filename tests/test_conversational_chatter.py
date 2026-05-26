@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from app.bot.text_heuristics import (
+    _is_bare_competitor_printer_question,
     _is_conversational_chatter,
     _is_generic_help_without_context,
     _message_has_help_intent,
@@ -581,3 +582,24 @@ def test_peer_warranty_question_from_log_is_chatter():
 def test_generic_warranty_wiki_question_not_chatter():
     assert not _is_conversational_chatter(_WARRANTY_WIKI_QUESTION)
     assert _looks_like_question(_WARRANTY_WIKI_QUESTION)
+
+
+# --- Bare competitor printer question (log 07:55:31): «А1 комбо?» ---
+
+def test_bambu_a1_combo_question_from_log_is_chatter():
+    assert _is_bare_competitor_printer_question("А1 комбо?")
+    assert _is_conversational_chatter("А1 комбо?")
+    assert not _needs_model_clarification("А1 комбо?")
+
+
+def test_bare_competitor_variations_are_chatter():
+    assert _is_bare_competitor_printer_question("a1 combo?")
+    assert _is_bare_competitor_printer_question("bambu?")
+    assert _is_bare_competitor_printer_question("p2s?")
+
+
+def test_long_competitor_question_not_caught():
+    # Длинный вопрос с конкурентом — не отсекаем, бот может дать ответ
+    assert not _is_bare_competitor_printer_question(
+        "как настроить ретракт на bambu a1 combo?"
+    )

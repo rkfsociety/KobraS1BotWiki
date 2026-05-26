@@ -2415,6 +2415,33 @@ def _is_vague_filament_thread_reference(text: str) -> bool:
     )
 
 
+def _is_bare_competitor_printer_question(text: str) -> bool:
+    """«А1 комбо?» — короткий вопрос о принтере конкурента (≤4 слова), не вики-запрос к Кобре."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # Только очень короткие сообщения (1–4 слова)
+    if len(t.split()) > 4:
+        return False
+    # Явный запрос инструкции — не отсекаем
+    if re.search(
+        r"\b(?:помогите|подскаж|как\s+(?:настро|исправ|почин|замен|подключ)|"
+        r"что\s+делать|не\s+работает|ошибка|почему|где\s+(?:найти|взять))\b",
+        t,
+    ):
+        return False
+    # Bambu A1 / A1 Combo — Anycubic такой модели не выпускал
+    if re.search(r"\b[аa]1\b", t) and re.search(r"\b(?:комбо|combo)\b", t):
+        return True
+    # Явный конкурент в очень коротком сообщении
+    if re.search(
+        r"\b(?:bambu|бамбу|бамбук|p2s|п2с|x1c|x1\s*c|prusa|пруса|ender|creality|криалити|qidi)\b",
+        t,
+    ):
+        return True
+    return False
+
+
 def _is_non_wiki_chatter_message(text: str) -> bool:
     """Сообщения чата, на которые бот не отвечает из вики."""
     return (
@@ -2428,6 +2455,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_filament_brand_quality_opinion(text)
         or _is_filament_tolerance_banter(text)
         or _is_vague_filament_thread_reference(text)
+        or _is_bare_competitor_printer_question(text)
         or _is_printer_comparison_opinion(text)
         or _is_printing_status_announcement(text)
         or _is_layer_profile_thread_opinion(text)
