@@ -102,6 +102,49 @@ def test_cannot_find_manual_still_question():
     assert _looks_like_question(_NOT_FOUND_HELP)
 
 
+_NOZZLE_GUESS_DEFER = "Мое предположение , что забито сопло, но лучше подождать кого-то опытного \U0001f601"
+
+_NOZZLE_REAL_HELP = "забито сопло на kobra s1, как почистить?"
+
+
+def test_nozzle_guess_deferring_to_expert_is_chatter():
+    assert _is_conversational_chatter(_NOZZLE_GUESS_DEFER)
+    assert not _message_has_help_intent(_NOZZLE_GUESS_DEFER)
+
+
+def test_nozzle_real_help_still_answered():
+    assert not _is_conversational_chatter(_NOZZLE_REAL_HELP)
+    assert _looks_like_question(_NOZZLE_REAL_HELP)
+
+
+_PEER_TEMP_INTERROGATION = "Забито сопло. Температура какая была?"
+
+_TEMP_WIKI_QUESTION = "какая температура сопла нужна для PETG на kobra s1?"
+
+
+def test_peer_temperature_interrogation_is_chatter():
+    assert _is_conversational_chatter(_PEER_TEMP_INTERROGATION)
+
+
+def test_temp_setting_question_still_answered():
+    assert not _is_conversational_chatter(_TEMP_WIKI_QUESTION)
+    assert _looks_like_question(_TEMP_WIKI_QUESTION)
+
+
+_FEED_PROBE = "Если дать с принтера подачу филамента с сопла пластик идет равномерно и ровно?"
+
+_FEED_REAL_HELP = "как настроить подачу филамента на kobra s1?"
+
+
+def test_filament_feed_probe_is_chatter():
+    assert _is_conversational_chatter(_FEED_PROBE)
+
+
+def test_filament_feed_setup_question_still_answered():
+    assert not _is_conversational_chatter(_FEED_REAL_HELP)
+    assert _looks_like_question(_FEED_REAL_HELP)
+
+
 _CHAT_HISTORY_REPLY = (
     'Не помню точно · ты в июне уже в чат пришел с вопросами "помогите..."😅'
     "я чат перечитал с начала, помню что где то 19го июня вроде ты впервые вопрос написал чату"

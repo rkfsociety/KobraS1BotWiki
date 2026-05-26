@@ -2412,6 +2412,60 @@ def _is_peer_claim_debate_relay(text: str) -> bool:
     return False
 
 
+# Допрос автора проблемы о его прошлых параметрах: «температура какая была?».
+_PEER_PAST_PARAM_NOUN_RE = re.compile(
+    r"\b(?:температур\w*|градус\w*|скорост\w*|поток\w*|обдув\w*|ретракт\w*|"
+    r"сопл\w*|стол\w*|пластик\w*|филамент\w*|материал\w*|слой|слоя|слоёв|слоев|"
+    r"заполнен\w*|настройк\w*|профил\w*)\b",
+    re.I | re.UNICODE,
+)
+_PEER_PAST_QUERY_RE = re.compile(
+    r"\b(?:как(?:ая|ой|ие|ое|ую)|сколько|что)\b(?:\W+\w+){0,4}?\W+(?:был\w*|стоял\w*|ставил\w*)\b"
+    r"|\b(?:был\w*|стоял\w*|ставил\w*)\b(?:\W+\w+){0,3}?\W+(?:как(?:ая|ой|ие|ое|ую)|сколько)\b",
+    re.I | re.UNICODE,
+)
+
+
+def _is_peer_diagnostic_interrogation(text: str) -> bool:
+    """«Температура какая была?» — допрос автора о его прошлых настройках, не запрос к вики."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # Явная просьба к боту настроить/починить/объяснить — не отсекаем.
+    if re.search(
+        r"\b(?:как\s+(?:настро|откалибр|почин|исправ|сделать|убрать|подключ|замен|выставить|задать|ставить|поставить)|"
+        r"что\s+делать|почему|помогите|подскаж|какой\s+должн|должн\w*\s+быть|нужн\w*\s+(?:ставить|выставить))\b",
+        t,
+    ):
+        return False
+    return bool(_PEER_PAST_PARAM_NOUN_RE.search(t) and _PEER_PAST_QUERY_RE.search(t))
+
+
+def _is_filament_feed_test_probe(text: str) -> bool:
+    """«Если дать подачу филамента, пластик идёт ровно?» — диагностический вопрос соседу, не к вики."""
+    if not text or not text.strip() or "?" not in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # Явная просьба к боту настроить/починить/объяснить — не отсекаем.
+    if re.search(
+        r"\b(?:как\s+(?:настро|откалибр|почин|исправ|сделать|убрать|подключ|замен|выставить|задать)|"
+        r"что\s+делать|почему|зачем|помогите|подскаж|где\s+(?:найти|взять))\b",
+        t,
+    ):
+        return False
+    cond = bool(
+        re.search(r"\bесли\b", t)
+        and re.search(
+            r"(?:подач\w*|продав\w*|выдав\w*|прогна\w*|прокач\w*|"
+            r"дать\b(?:\W+\w+){0,3}\W+(?:филамент|пластик)|"
+            r"пода(?:ть|ю|ем|ёт)\b)",
+            t,
+        )
+    )
+    behavior = bool(re.search(r"\b(?:равномерн\w*|ровн\w*)", t))
+    return cond and behavior
+
+
 def _is_vague_filament_thread_reference(text: str) -> bool:
     """«а пластик такого план какой лучше» — ссылка на контекст треда, конкретного материала нет."""
     if not text or not text.strip():
@@ -2471,6 +2525,8 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         _topic_is_marketplace_commerce_intent(text)
         or _is_peer_claim_debate_relay(text)
         or _is_peer_social_printer_question(text)
+        or _is_peer_diagnostic_interrogation(text)
+        or _is_filament_feed_test_probe(text)
         or _is_price_negotiation_chatter(text)
         or _is_combo_ace_marketplace_chat(text)
         or _is_ace_unit_trade_banter(text)
@@ -2593,6 +2649,23 @@ def _message_has_help_intent(text: str) -> bool:
     )
 
 
+# «лучше подождать / спросить опытного» — пользователь сам отсылает к людям, не к боту.
+_DEFER_TO_EXPERT_RE = re.compile(
+    r"\b(?:подожд\w*|дожд\w*|дожид\w*|спрос\w*|послуша\w*|пусть\s+(?:скаж\w*|ответ\w*|подскаж\w*))\b"
+    r"(?:\W+\w+){0,3}\W+"
+    r"(?:опытн\w*|знающ\w*|спец\w*|профи|мастер\w*|бывал\w*|тех,\s*кто)",
+    re.I | re.UNICODE,
+)
+
+
+def _is_expert_deferral_chatter(text: str) -> bool:
+    """Делится догадкой и сам предлагает дождаться/спросить опытных — не вопрос боту."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    return bool(_DEFER_TO_EXPERT_RE.search(t))
+
+
 def _is_conversational_chatter(text: str) -> bool:
     """Бытовая реплика в чате — не отвечать ссылкой из вики."""
     if not text or not text.strip():
@@ -2603,6 +2676,8 @@ def _is_conversational_chatter(text: str) -> bool:
         return False
     if _is_marketplace_promo_message(text):
         return False
+    if _is_expert_deferral_chatter(text):
+        return True
     t = re.sub(r"\s+", " ", text.lower()).strip()
     if _is_colloquial_printer_fragment(text):
         return True
