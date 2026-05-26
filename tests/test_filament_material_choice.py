@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from app.bot.text_heuristics import (
+    _is_conversational_chatter,
+    _is_vague_filament_thread_reference,
     _needs_model_clarification,
     _topic_is_filament_material_choice_intent,
     _topic_needs_printer_model,
@@ -87,3 +89,26 @@ def test_search_prefers_print_tpu_over_nozzle_replace():
     assert score >= 60
     assert "print-tpu" in doc.url or "filament-guide" in doc.url
     assert _response_wiki_url_acceptable(_TPU_MSG, doc.url)
+
+
+# --- Vague thread reference (log 06:52:12): «а пластик такого план какой лучше ?» ---
+
+_VAGUE_FILAMENT_THREAD = "а пластик такого план какой лучше ?"
+
+
+def test_vague_filament_thread_reference_detected():
+    assert _is_vague_filament_thread_reference(_VAGUE_FILAMENT_THREAD)
+
+
+def test_vague_filament_thread_is_chatter():
+    assert _is_conversational_chatter(_VAGUE_FILAMENT_THREAD)
+
+
+def test_vague_filament_thread_no_model_clarify():
+    assert not _needs_model_clarification(_VAGUE_FILAMENT_THREAD)
+
+
+def test_vague_filament_with_specific_type_not_caught():
+    # Конкретный тип материала — бот может дать содержательный ответ
+    assert not _is_vague_filament_thread_reference("а petg такого план какой лучше ?")
+    assert not _is_vague_filament_thread_reference("а tpu такого плана какой лучше ?")

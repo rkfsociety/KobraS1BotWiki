@@ -2389,6 +2389,32 @@ def _is_peer_claim_debate_relay(text: str) -> bool:
     return False
 
 
+def _is_vague_filament_thread_reference(text: str) -> bool:
+    """«а пластик такого план какой лучше» — ссылка на контекст треда, конкретного материала нет."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if not re.search(r"\bтакого\s+(?:же\s+)?план\w*\b", t):
+        return False
+    if not re.search(r"\b(?:пластик|филамент|filament)\w*\b", t):
+        return False
+    # Конкретный тип материала или бренд — бот может дать содержательный ответ
+    if re.search(
+        r"\b(?:tpu|тпу|petg|петг|pla|пла|abs|абс|nylon|нейлон|"
+        r"esun|есун|bambu|бамбу|eryone|polymaker|sunlu|"
+        r"hips|хипс|flex|флекс|asa|аса)\b",
+        t,
+    ):
+        return False
+    return (
+        bool(
+            re.search(r"\b(?:какой|что|какие)\b", t)
+            and re.search(r"\b(?:лучше|рекоменд\w*|посовет\w*|взять|брать|купить)\b", t)
+        )
+        or "?" in text
+    )
+
+
 def _is_non_wiki_chatter_message(text: str) -> bool:
     """Сообщения чата, на которые бот не отвечает из вики."""
     return (
@@ -2401,6 +2427,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_printer_purchase_material_opinion(text)
         or _is_filament_brand_quality_opinion(text)
         or _is_filament_tolerance_banter(text)
+        or _is_vague_filament_thread_reference(text)
         or _is_printer_comparison_opinion(text)
         or _is_printing_status_announcement(text)
         or _is_layer_profile_thread_opinion(text)
