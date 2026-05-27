@@ -1520,6 +1520,30 @@ def _is_chat_meta_discussion(text: str) -> bool:
     return False
 
 
+def _is_chat_past_incident_recollection(text: str) -> bool:
+    """«Тут же было в чате как-то, кобра глюкнула когда свет отрубили» — байка из чата, не запрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж\w*|что\s+делать|не\s+работает|"
+        r"как\s+(?:настро|откалибр|почин|исправ|сделать|убрать|решить|подключ|замен))\b",
+        t,
+    ):
+        return False
+    chat_ref = bool(re.search(r"\bв\s+чат\w*\b", t))
+    recollection = bool(
+        re.search(
+            r"\b(?:было|как[\s-]?то|помн\w*|обсужда\w*|рассказыва\w*|писа\w*|"
+            r"уже\s+было|кто[\s-]?то\s+(?:писа|расск))\w*\b",
+            t,
+        )
+    )
+    return chat_ref and recollection
+
+
 def _is_print_quality_meta_curiosity(text: str) -> bool:
     """«Как они так печатают / на видео кажется» — любопытство в чате, не запрос к вики."""
     if not text or not text.strip():
@@ -2318,6 +2342,32 @@ def _is_price_negotiation_chatter(text: str) -> bool:
     return False
 
 
+def _is_price_hyperbole_banter(text: str) -> bool:
+    """Шутка-гипербола о цене («аська как крыло от самолёта будет стоить») — не запрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\bсколько\s+стоит\b", t):
+        return False
+    price = bool(
+        re.search(r"\b(?:сто[ие](?:т|ть|л[аои]?)|стоить|цен[аеуы]|по\s+цене|обойд[её]тся)\b", t)
+    )
+    hyperbole_noun = bool(
+        re.search(
+            r"\bкак\s+(?:крыло|самол[её]т\w*|космолёт\w*|космолет\w*|вертол[её]т\w*|"
+            r"чугунн\w*\s+мост\w*|квартир\w*)\b",
+            t,
+        )
+    )
+    speculative = bool(
+        re.search(r"\bкак\b", t)
+        and re.search(r"\b(?:наверное|наверно|поди|видимо|небось)\b", t)
+    )
+    return price and (hyperbole_noun or speculative)
+
+
 def _is_peer_social_printer_question(text: str) -> bool:
     """Вопрос к человеку в чате (гарантия, «у тебя ещё кобра»), не к боту/вики."""
     if not text or not text.strip():
@@ -2528,6 +2578,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_peer_diagnostic_interrogation(text)
         or _is_filament_feed_test_probe(text)
         or _is_price_negotiation_chatter(text)
+        or _is_price_hyperbole_banter(text)
         or _is_combo_ace_marketplace_chat(text)
         or _is_ace_unit_trade_banter(text)
         or _is_printer_purchase_material_opinion(text)
@@ -2554,6 +2605,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_multicolor_preset_banter(text)
         or _is_other_printer_maintenance_story(text)
         or _is_chat_meta_discussion(text)
+        or _is_chat_past_incident_recollection(text)
     )
 
 

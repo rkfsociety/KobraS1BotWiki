@@ -542,6 +542,42 @@ def test_ace_price_question_not_chatter():
     assert _looks_like_question(_ACE_PRICE_QUESTION)
 
 
+_ACE_PRICE_HYPERBOLE = "А отдельно аська новая наверное как крыло от самолета будет стоить 😁"
+
+_ACE_PRICE_REAL_QUESTION = "сколько стоит новая аська ace pro для kobra s1?"
+
+
+def test_ace_price_hyperbole_from_log_is_chatter():
+    assert _is_conversational_chatter(_ACE_PRICE_HYPERBOLE)
+    assert not _looks_like_question(_ACE_PRICE_HYPERBOLE)
+    assert not _message_has_help_intent(_ACE_PRICE_HYPERBOLE)
+    assert not _needs_model_clarification(_ACE_PRICE_HYPERBOLE)
+
+
+def test_ace_price_real_question_not_hyperbole():
+    assert not _is_conversational_chatter(_ACE_PRICE_REAL_QUESTION)
+    assert _looks_like_question(_ACE_PRICE_REAL_QUESTION)
+
+
+_CHAT_INCIDENT_RECOLLECTION = (
+    "тут же было в чате как то, кобра глюка словила, когда в подстанцую машина врезалась и свет отрубили"
+)
+
+_POWER_OUTAGE_HELP = "кобра выключилась при отключении света, как восстановить печать на kobra s1?"
+
+
+def test_chat_past_incident_recollection_is_chatter():
+    assert _is_conversational_chatter(_CHAT_INCIDENT_RECOLLECTION)
+    assert not _looks_like_question(_CHAT_INCIDENT_RECOLLECTION)
+    assert not _message_has_help_intent(_CHAT_INCIDENT_RECOLLECTION)
+    assert not _needs_model_clarification(_CHAT_INCIDENT_RECOLLECTION)
+
+
+def test_power_outage_recovery_help_still_question():
+    assert not _is_conversational_chatter(_POWER_OUTAGE_HELP)
+    assert _looks_like_question(_POWER_OUTAGE_HELP)
+
+
 _ERYONE_QUALITY_OPINION = (
     "О качестве пластика eryone. Сломал все то что на столе в попытках "
     "добраться до нормального пластика и поставить его в ace"
