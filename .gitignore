@@ -59,3 +59,6 @@ Thumbs.db
 # Локальные cmd-обёртки воркера (не часть деплоя бота)
 start-agent-worker.cmd
 stop-agent-worker.cmd
+
+# Claude Code личные настройки (разрешения и т.п.)
+.claude/settings.local.json
