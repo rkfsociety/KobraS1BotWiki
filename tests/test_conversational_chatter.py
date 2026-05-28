@@ -753,3 +753,14 @@ def test_ya_dumal_a_seychas_vizhu_is_opinion():
 def test_extruder_speculation_from_log_is_chatter():
     assert _is_conversational_chatter(_EXTRUDER_SPECULATION)
     assert not _needs_model_clarification(_EXTRUDER_SPECULATION)
+
+
+# --- Лог 05:01:29: «С партийными печать не интересно как-то становится 😂. Скучно как-то 😁» ---
+
+_PRINT_BOREDOM_MSG = "С партийными печать не интересно как-то становится 😂. Скучно как-то 😁"
+
+
+def test_print_boredom_opinion_from_log_is_chatter():
+    assert _is_technical_opinion_sharing(_PRINT_BOREDOM_MSG)
+    assert _is_conversational_chatter(_PRINT_BOREDOM_MSG)
+    assert not _needs_model_clarification(_PRINT_BOREDOM_MSG)

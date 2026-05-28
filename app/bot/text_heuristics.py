@@ -1650,6 +1650,14 @@ def _is_technical_opinion_sharing(text: str) -> bool:
     # «я думал … а сейчас вижу что» — коррекция предположения в треде.
     if re.search(r"\bя\s+думал\b", t) and re.search(r"\b(?:а\s+)?сейчас\s+вижу\b", t):
         return True
+    # «с партийными печать не интересно как-то становится 😂 скучно как-то» — мнение о потере интереса.
+    boredom_opinion = bool(
+        re.search(r"\b(?:не\s*интересно|неинтересно|скучно|надоело|надоел\w*)\b", t)
+        and re.search(r"\b(?:печат|принтер|3d|3д)\w*\b", t)
+        and re.search(r"\b(?:как-то|становится|стало|как\s+то)\b", t)
+    )
+    if boredom_opinion:
+        return True
     return False
 
 
