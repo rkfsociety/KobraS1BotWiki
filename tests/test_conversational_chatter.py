@@ -764,3 +764,19 @@ def test_print_boredom_opinion_from_log_is_chatter():
     assert _is_technical_opinion_sharing(_PRINT_BOREDOM_MSG)
     assert _is_conversational_chatter(_PRINT_BOREDOM_MSG)
     assert not _needs_model_clarification(_PRINT_BOREDOM_MSG)
+
+
+# --- Лог 09:01:16: мнение о CAD-софте (AutoCAD/Компас) для 3D-моделирования ---
+
+_CAD_SOFTWARE_OPINION_MSG = (
+    "но для 3д моделирования под 3д печать автокад это треш😂"
+    "рисую просто потому что знаю все инструменты, но иногда есть куча "
+    "лишних движений для чего то простого... поэтому вот всё хочу компас "
+    "скачать, но всё времени нет"
+)
+
+
+def test_cad_software_opinion_from_log_is_chatter():
+    assert _is_technical_opinion_sharing(_CAD_SOFTWARE_OPINION_MSG)
+    assert _is_conversational_chatter(_CAD_SOFTWARE_OPINION_MSG)
+    assert not _needs_model_clarification(_CAD_SOFTWARE_OPINION_MSG)

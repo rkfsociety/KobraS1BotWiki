@@ -1658,6 +1658,48 @@ def _is_technical_opinion_sharing(text: str) -> bool:
     )
     if boredom_opinion:
         return True
+    # «автокад это треш, рисую потому что знаю инструменты, хочу компас скачать» —
+    # мнение о CAD-софте для 3D-моделирования, не запрос к вики.
+    cad_software = bool(
+        re.search(
+            r"\b(?:"
+            r"автокад|autocad|"
+            r"компас(?:[\s-]*3[дd])?|kompas|"
+            r"solidworks|солидворкс|"
+            r"fusion(?:\s*360)?|"
+            r"blender|блендер|"
+            r"tinkercad|тинкеркад|"
+            r"freecad|"
+            r"sketchup|скетчап|"
+            r"rhino(?:ceros)?|райно|"
+            r"zbrush|збраш|"
+            r"plasticity|"
+            r"onshape|"
+            r"inventor"
+            r")\b",
+            t,
+        )
+    )
+    if cad_software:
+        modeling_ctx = bool(
+            re.search(
+                r"\b(?:моделир\w*|чертит\w*|чертить|рисую|рисова\w*|"
+                r"3[дd]\s*моделир|для\s+печат\w*|под\s+(?:3[дd]\s*)?печат\w*|"
+                r"знаю\s+(?:все\s+)?инструмент)\b",
+                t,
+            )
+        )
+        opinion_marker = bool(
+            re.search(
+                r"\b(?:треш|трэш|удобн\w*|неудобн\w*|нравит\w*|скучн\w*|"
+                r"хочу\s+(?:скача|поставит|установ|перейти|попроб)\w*|"
+                r"люблю|ненавижу|привык\w*|"
+                r"куча\s+(?:лишн\w*\s+)?движен\w*|лишн\w*\s+движен)\w*\b",
+                t,
+            )
+        )
+        if modeling_ctx and opinion_marker:
+            return True
     return False
 
 
