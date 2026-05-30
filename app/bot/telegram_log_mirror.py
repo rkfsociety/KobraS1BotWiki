@@ -98,35 +98,37 @@ _REASON_RU: dict[str, str] = {
 }
 
 _KIND_RU: dict[str, str] = {
-
     "wiki": "отправлена ссылка на вики",
-
     "clarify_prompt": "запрошено уточнение модели",
-
     "manual_qa_message": "ручной ответ (manual_qa)",
-
     "manual_qa_cmd_wiki": "ручной ответ (/wiki)",
-
     "generic_help_clarify": "просьба уточнить вопрос",
-
     "error_code_text": "отправлена карточка кода ошибки",
-
-    "no_matching_guide": "ответ: нет гайда для этой модели",
-
+    "no_matching_guide": "нет гайда для этой модели",
     "printer_design_fact": "справка по конструкции принтера",
-
     "error_code_clarify_prompt": "уточнение модели для кода ошибки",
+    "error_code_wiki": "вики после уточнения кода ошибки",
+    "clarify_followup_wiki": "вики после уточнения модели",
+    "clarify_correction_wiki": "вики (поправка модели)",
+    "clarify_followup_uncertain": "не найдено после уточнения",
+    "clarify_correction_uncertain": "не найдено (поправка модели)",
+}
 
-    "error_code_wiki": "ссылка на вики после уточнения кода ошибки",
-
-    "clarify_followup_wiki": "ссылка на вики после уточнения модели",
-
-    "clarify_correction_wiki": "ссылка на вики (поправка модели)",
-
-    "clarify_followup_uncertain": "не удалось найти после уточнения",
-
-    "clarify_correction_uncertain": "не удалось найти (поправка модели)",
-
+_KIND_ICON: dict[str, str] = {
+    "wiki": "✅",
+    "clarify_prompt": "❓",
+    "clarify_followup_wiki": "✅",
+    "clarify_correction_wiki": "✅",
+    "clarify_followup_uncertain": "🔍",
+    "clarify_correction_uncertain": "🔍",
+    "manual_qa_message": "📋",
+    "manual_qa_cmd_wiki": "📋",
+    "generic_help_clarify": "💡",
+    "error_code_text": "🔢",
+    "error_code_clarify_prompt": "❓",
+    "error_code_wiki": "✅",
+    "no_matching_guide": "❌",
+    "printer_design_fact": "🖨",
 }
 
 _LEVEL_ICON = {
@@ -174,14 +176,36 @@ _RE_CLARIFY = re.compile(
 )
 
 def _esc(s: str) -> str:
-
     return html.escape(s or "", quote=False)
 
-def _chat_line(chat_id: str) -> str:
 
+def _chat_line(chat_id: str) -> str:
     return f"Чат: <code>{_esc(chat_id)}</code>"
 
 
+def _split_user_context(user_text: str) -> tuple[str, str]:
+    """Разбить user_text на (msg_text, context).
+
+    Формат: «↩ {parent · normalized} · {current · normalized}»
+    Текущее сообщение — всё, что идёт после последней части с «↩» в начале.
+    Эвристика: берём последний · -сегмент как msg.text (работает для однострочных сообщений).
+    """
+    if not user_text.startswith("↩ "):
+        return user_text, ""
+    segs = user_text.split(" · ")
+    if len(segs) < 2:
+        return "", user_text
+    current = segs[-1].strip()
+    context = " · ".join(segs[:-1])
+    return current, context
+
+
+def _short_wiki_url(url: str) -> str:
+    """wiki.anycubic.com/en/fdm-3d-printer/kobra-s1-combo/nozzle → kobra-s1-combo/nozzle"""
+    short = re.sub(r"https?://[^/]+(/en)?", "", url).lstrip("/")
+    if len(short) > 70:
+        short = "…" + short[-67:]
+    return short or url
 
 
 
@@ -238,106 +262,91 @@ def _is_skip_log(msg: str) -> bool:
     return msg.startswith("skip chat=")
 
 def _format_bot_reply(msg: str) -> str | None:
-
     m = _RE_BOT_REPLY.match(msg)
-
     if not m:
-
         return None
 
     kind = m.group("kind")
-
     kind_ru = _KIND_RU.get(kind, kind.replace("_", " "))
-
-    lines = [
-
-        "💬 <b>Ответ бота</b>",
-
-        f"Тип: {_esc(kind_ru)}",
-
-        _chat_line(m.group("chat")),
-
-    ]
+    kind_icon = _KIND_ICON.get(kind, "💬")
+    chat = m.group("chat")
 
     user_m = re.search(r"\buser=(\d+)", msg)
-
-    if user_m:
-
-        lines.append(_user_line(user_m.group(1)))
-
     thread_m = re.search(r"\bthread=(\d+)", msg)
-
     incoming_mid_m = re.search(r"\bmid=(\d+)", msg)
-
-    if incoming_mid_m and (
-
-        link := _message_link_line(
-
-            m.group("chat"),
-
-            incoming_mid_m.group(1),
-
-            thread_m.group(1) if thread_m else None,
-
-        )
-
-    ):
-
-        lines.append(f"Вопрос: {link}")
-
     reply_mid_m = re.search(r"\bmessage_id=(\d+)", msg)
+    thread = thread_m.group(1) if thread_m else None
 
-    if reply_mid_m and (
+    # user_text: всё между user_text= и reply_text= (или концом строки)
+    ut_m = re.search(r"\buser_text=(.+?)(?=\s+reply_text=|$)", msg)
+    if not ut_m:
+        ut_m = re.search(r"\buser_text=(.+)$", msg)
+    user_text_raw = ut_m.group(1).strip() if ut_m else ""
+    if not user_text_raw:
+        if qm := re.search(r"\bquery=(.+?)(?:\s+\w+=|$)", msg):
+            user_text_raw = qm.group(1).strip()
 
-        bot_link := _message_link_line(
+    current_text, context_text = _split_user_context(user_text_raw[:LOG_MIRROR_TEXT_MAX])
 
-            m.group("chat"),
+    rt_m = re.search(r"\breply_text=(.+)$", msg)
+    reply_text = rt_m.group(1) if rt_m else ""
 
-            reply_mid_m.group(1),
+    score_m = re.search(r"\bscore=(\d+)", msg)
+    url_m = re.search(r"\burl=(\S+)", msg)
+    hints_m = re.search(r"\bhints=(\S+)", msg)
+    code_m = re.search(r"\bcode=(\d+)\b", msg)
 
-            thread_m.group(1) if thread_m else None,
+    lines: list[str] = []
 
-        )
+    # ── строка 1: иконка + тип ───────────────────────────────────────
+    lines.append(f"{kind_icon} <b>{_esc(kind_ru)}</b>")
 
-    ):
+    # ── строка 2: чат + пользователь ────────────────────────────────
+    meta = f"💬 <code>{_esc(chat)}</code>"
+    if user_m:
+        meta += f"  👤 <code>{_esc(user_m.group(1))}</code>"
+    lines.append(meta)
 
-        lines.append(f"Ответ: {bot_link}")
+    # ── строка 3: ссылки на вопрос и ответ ──────────────────────────
+    link_parts: list[str] = []
+    if incoming_mid_m and (lq := _message_link_line(chat, incoming_mid_m.group(1), thread)):
+        link_parts.append(f"📩 {lq}")
+    if reply_mid_m and (la := _message_link_line(chat, reply_mid_m.group(1), thread)):
+        link_parts.append(f"🤖 {la}")
+    if link_parts:
+        lines.append("  ".join(link_parts))
 
-    user_text_m = re.search(r"\buser_text=(.+?)(?:\s+\w+=|\s+reply_text=|$)", msg)
+    lines.append("")
 
-    if not user_text_m:
+    # ── текст сообщения пользователя (msg.text) ──────────────────────
+    if current_text:
+        lines.append(f"📝 {_esc(current_text)}")
 
-        user_text_m = re.search(r"\buser_text=(.+)$", msg)
+    # ── контекст (reply_to) — курсив, укорочен ───────────────────────
+    if context_text:
+        ctx = context_text if len(context_text) <= 220 else context_text[:220] + "…"
+        lines.append(f"<i>{_esc(ctx)}</i>")
 
-    reply_text_m = re.search(r"\breply_text=(.+)$", msg)
+    # ── ответ бота (только для не-clarify типов) ─────────────────────
+    is_clarify = kind in ("clarify_prompt", "error_code_clarify_prompt")
+    if reply_text and not is_clarify:
+        first = reply_text.split(" · ")[0][:200]
+        lines.append("")
+        lines.append(f"🤖 <i>{_esc(first)}</i>")
 
-    if user_text_m:
-
-        lines.append(f"<b>Вопрос пользователя:</b>\n{_esc(user_text_m.group(1)[:LOG_MIRROR_TEXT_MAX])}")
-
-    elif qm := re.search(r"\bquery=(.+?)(?:\s+\w+=|$)", msg):
-
-        lines.append(f"<b>Вопрос пользователя:</b>\n{_esc(qm.group(1)[:LOG_MIRROR_TEXT_MAX])}")
-
-    if reply_text_m:
-
-        lines.append(f"<b>Ответ бота:</b>\n{_esc(reply_text_m.group(1)[:LOG_MIRROR_TEXT_MAX])}")
-
-    if sm := re.search(r"score=(\d+)", msg):
-
-        lines.append(f"Оценка вики: {sm.group(1)}")
-
-    if um := re.search(r"url=(\S+)", msg):
-
-        lines.append(f"Ссылка: {_esc(um.group(1))}")
-
-    if cm := re.search(r"\bcode=(\d+)\b", msg):
-
-        lines.append(f"Код ошибки: <code>{cm.group(1)}</code>")
-
-    if hm := re.search(r"hints=(\S+)", msg):
-
-        lines.append(f"Модель: {_esc(hm.group(1))}")
+    # ── итоговая строка: оценка · url · модель · код ─────────────────
+    tail: list[str] = []
+    if score_m:
+        tail.append(f"📊 {score_m.group(1)}")
+    if code_m:
+        tail.append(f"🔢 <code>{_esc(code_m.group(1))}</code>")
+    if url_m:
+        tail.append(f"🔗 {_esc(_short_wiki_url(url_m.group(1)))}")
+    if hints_m and hints_m.group(1) not in ("-", "None", "none"):
+        tail.append(f"🏷 {_esc(hints_m.group(1))}")
+    if tail:
+        lines.append("")
+        lines.append("  ".join(tail))
 
     return "\n".join(lines)
 

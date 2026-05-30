@@ -63,11 +63,14 @@ def test_bot_reply_shows_user_and_reply_text():
     record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
     out = format_log_for_telegram(record)
     assert out is not None
-    assert "Ответ бота" in out
-    assert "Вопрос пользователя:" in out
+    # новый формат: иконка ✅ + тип, без «Ответ бота» в заголовке
+    assert "✅" in out
+    assert "отправлена ссылка" in out
     assert "как смазать" in out
     assert "Уже есть в вики" in out
     assert "https://t.me/c/" in out
+    assert "📊" in out  # score
+    assert "80" in out
 
 
 def test_bot_reply_legacy_query_field():
