@@ -811,3 +811,32 @@ def test_competitor_migration_to_kobra_not_filtered():
     migrate = "у меня была creality, как настроить такое же качество на kobra s1?"
     assert not _is_competitor_showcase_request(migrate)
     assert not _is_conversational_chatter(migrate)
+
+
+# «Можешь показать качество печать креалти?» — просьба показать конкурента (лог 12:14).
+_CREALITY_SHOWCASE = "Можешь показать качество печать креалти?"
+
+
+def test_creality_spelling_detected():
+    # «креалти» — неточное написание Creality, должно распознаваться.
+    assert _mentions_competitor_printer("креалти")
+    assert _mentions_competitor_printer("криалити")
+    assert _mentions_competitor_printer("креалити")
+
+
+def test_competitor_showcase_request_is_chatter():
+    assert _is_competitor_showcase_request(_CREALITY_SHOWCASE)
+    assert _is_conversational_chatter(_CREALITY_SHOWCASE)
+    assert not _needs_model_clarification(_CREALITY_SHOWCASE)
+
+
+def test_competitor_showcase_variants():
+    assert _is_competitor_showcase_request("покажи качество печати creality")
+    assert _is_competitor_showcase_request("что скажешь о bambu lab?")
+
+
+def test_competitor_migration_to_kobra_not_filtered():
+    # Упомянут наш принтер — это реальный запрос о переходе/настройке.
+    migrate = "у меня была creality, как настроить такое же качество на kobra s1?"
+    assert not _is_competitor_showcase_request(migrate)
+    assert not _is_conversational_chatter(migrate)
