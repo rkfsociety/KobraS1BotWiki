@@ -258,7 +258,7 @@ def _topic_needs_printer_model(text: str) -> bool:
 
 
 
-        "стекл",
+        "стеклянн",
 
 
 
@@ -2619,6 +2619,37 @@ def _is_bare_competitor_printer_question(text: str) -> bool:
     return False
 
 
+
+def _is_thread_printing_tip(text: str) -> bool:
+    """Советы в треде без вопроса — не запрос к боту."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    tl = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|что\s+делать|не\s+работает|"
+        r"как\s+(?:настро|почин|исправ|сделать|убрать|решить|подключ|замен))\b",
+        tl,
+    ):
+        return False
+    if re.search(r"\b(?:ещё|также|тоже)\s+важно\b", tl):
+        return True
+    if re.search(r"\bя\s+бы\b", tl) and re.search(
+        r"\b(?:дал|дала|добавил|добавила|закрыл|закрыла|поставил|поставила|"
+        r"убрал|убрала|попробовал|попробовала|начал|начала|оставил|оставила|"
+        r"советовал|рекомендовал)\w*\b",
+        tl,
+    ):
+        return True
+    if re.search(r"\bв\s+общем-то\b", tl):
+        return True
+    if re.search(r"\bладно\b", tl) and re.search(r"\bспасибо\b", tl):
+        return True
+    if re.search(r"\bу\s+меня\s+(?:есть|стоит|имеется|лежат|лежит)\b", tl):
+        return True
+    return False
+
 def _is_non_wiki_chatter_message(text: str) -> bool:
     """Сообщения чата, на которые бот не отвечает из вики."""
     return (
@@ -2656,6 +2687,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_other_printer_maintenance_story(text)
         or _is_chat_meta_discussion(text)
         or _is_chat_past_incident_recollection(text)
+        or _is_thread_printing_tip(text)
     )
 
 
