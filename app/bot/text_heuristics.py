@@ -1555,9 +1555,16 @@ def _is_print_quality_meta_curiosity(text: str) -> bool:
         t,
     ):
         return False
+    # «Как они/он/она так печатают» — наблюдение над чужой печатью (мн. и ед. число)
     others_print = bool(
-        re.search(r"\b(?:как\s+они|они\s+так|у\s+них)\b", t)
+        re.search(r"\b(?:как\s+он\w*|как\s+она|как\s+они|они\s+так|у\s+них)\b", t)
         and re.search(r"\bпечата\w*\b", t)
+    )
+    # «Даже интересно как он первый слой без шайб печатает 😁» — ирония без вопроса
+    curious_other = bool(
+        re.search(r"\b(?:даже\s+)?интересно\s+как\b", t)
+        and re.search(r"\bпечата\w*\b", t)
+        and "?" not in text
     )
     not_like_3d = bool(
         re.search(r"\b(?:не\s+похож\w*|не\s+выглядит)\b", t)
@@ -1565,6 +1572,8 @@ def _is_print_quality_meta_curiosity(text: str) -> bool:
     )
     video_doubt = bool(re.search(r"\b(?:на\s+видео|в\s+ролике)\s+кажется\b", t))
     lingering = bool(re.search(r"\b(?:давно\s+)?возникает\s+вопрос\b", t))
+    if curious_other:
+        return True
     if others_print and (not_like_3d or video_doubt):
         return True
     if lingering and others_print and ("?" in text or video_doubt):
