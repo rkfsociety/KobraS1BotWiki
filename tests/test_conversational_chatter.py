@@ -3,12 +3,14 @@ from __future__ import annotations
 
 from app.bot.text_heuristics import (
     _is_bare_competitor_printer_question,
+    _is_competitor_showcase_request,
     _is_conversational_chatter,
     _is_conversational_skepticism,
     _is_generic_help_without_context,
     _is_printer_purchase_material_opinion,
     _is_technical_observation_sharing,
     _is_technical_opinion_sharing,
+    _mentions_competitor_printer,
     _message_has_help_intent,
     _needs_model_clarification,
     _topic_is_marketplace_commerce_intent,
@@ -780,3 +782,32 @@ def test_cad_software_opinion_from_log_is_chatter():
     assert _is_technical_opinion_sharing(_CAD_SOFTWARE_OPINION_MSG)
     assert _is_conversational_chatter(_CAD_SOFTWARE_OPINION_MSG)
     assert not _needs_model_clarification(_CAD_SOFTWARE_OPINION_MSG)
+
+
+# «Можешь показать качество печать креалти?» — просьба показать конкурента (лог 12:14).
+_CREALITY_SHOWCASE = "Можешь показать качество печать креалти?"
+
+
+def test_creality_spelling_detected():
+    # «креалти» — неточное написание Creality, должно распознаваться.
+    assert _mentions_competitor_printer("креалти")
+    assert _mentions_competitor_printer("криалити")
+    assert _mentions_competitor_printer("креалити")
+
+
+def test_competitor_showcase_request_is_chatter():
+    assert _is_competitor_showcase_request(_CREALITY_SHOWCASE)
+    assert _is_conversational_chatter(_CREALITY_SHOWCASE)
+    assert not _needs_model_clarification(_CREALITY_SHOWCASE)
+
+
+def test_competitor_showcase_variants():
+    assert _is_competitor_showcase_request("покажи качество печати creality")
+    assert _is_competitor_showcase_request("что скажешь о bambu lab?")
+
+
+def test_competitor_migration_to_kobra_not_filtered():
+    # Упомянут наш принтер — это реальный запрос о переходе/настройке.
+    migrate = "у меня была creality, как настроить такое же качество на kobra s1?"
+    assert not _is_competitor_showcase_request(migrate)
+    assert not _is_conversational_chatter(migrate)

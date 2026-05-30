@@ -2019,7 +2019,7 @@ def _mentions_competitor_printer(text: str) -> bool:
             r"\b(?:"
             r"bambu|бамбук|п2с|p2s|x1c|"
             r"prusa|пруса|"
-            r"creality|криалити|ender|"
+            r"creality|кр[еи]ал[иы]?т[иы]|ender|"
             r"flashforge|flashforg|"
             r"raise3d|qidi"
             r")\b",
@@ -2621,11 +2621,41 @@ def _is_bare_competitor_printer_question(text: str) -> bool:
         return True
     # Явный конкурент в очень коротком сообщении
     if re.search(
-        r"\b(?:bambu|бамбу|бамбук|p2s|п2с|x1c|x1\s*c|prusa|пруса|ender|creality|криалити|qidi)\b",
+        r"\b(?:bambu|бамбу|бамбук|p2s|п2с|x1c|x1\s*c|prusa|пруса|ender|"
+        r"creality|кр[еи]ал[иы]?т[иы]|qidi)\b",
         t,
     ):
         return True
     return False
+
+
+def _is_competitor_showcase_request(text: str) -> bool:
+    """«Можешь показать качество печати креалити?» — просьба показать конкурента, не вопрос к вики Anycubic."""
+    if not text or not text.strip():
+        return False
+    if not _mentions_competitor_printer(text):
+        return False
+    # Если упомянут и наш принтер (миграция/сравнение с Kobra) — не отсекаем.
+    if _printer_mentioned(text):
+        return False
+    if _is_error_code_query(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # Явная просьба настроить/починить/перейти — не отсекаем.
+    if re.search(
+        r"\bкак\s+(?:настро|откалибр|почин|исправ|сделать|убрать|подключ|замен|перейти|перенести)\b",
+        t,
+    ):
+        return False
+    # Просьба показать / продемонстрировать / сравнить конкурента.
+    showcase = bool(
+        re.search(
+            r"\b(?:покажи\w*|показать|показал\w*|продемонстр\w*|"
+            r"скинь\w*|скин\w*|можешь\s+показать|сравн\w*|что\s+скажешь\s+(?:о|про))\b",
+            t,
+        )
+    )
+    return showcase
 
 
 
@@ -2676,6 +2706,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_filament_tolerance_banter(text)
         or _is_vague_filament_thread_reference(text)
         or _is_bare_competitor_printer_question(text)
+        or _is_competitor_showcase_request(text)
         or _is_printer_comparison_opinion(text)
         or _is_printing_status_announcement(text)
         or _is_layer_profile_thread_opinion(text)
