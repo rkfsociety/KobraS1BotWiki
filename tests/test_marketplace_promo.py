@@ -10,8 +10,19 @@ _ALI_MSG = (
 )
 
 
+_AVITO_MSG = (
+    "https://www.avito.ru/tolyatti/orgtehnika_i_rashodniki/"
+    "ams_ace_ot_anycubic_kobra_s1_8071436627 · в тольятти появились аськи "
+    "по адекватной цене"
+)
+
+
 def test_marketplace_promo_detected():
     assert _is_marketplace_promo_message(_ALI_MSG)
+
+
+def test_avito_listing_detected():
+    assert _is_marketplace_promo_message(_AVITO_MSG)
 
 
 def test_marketplace_promo_not_a_question():

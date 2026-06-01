@@ -1423,7 +1423,9 @@ _MARKETPLACE_HOST_RE = re.compile(
 
     r"aliexpress|ali\.click|amazon\.|ozon\.|wildberries|market\.yandex|"
 
-    r"tmall|taobao|banggood|gearbest|joom\.|ebay\."
+    r"tmall|taobao|banggood|gearbest|joom\.|ebay\.|"
+
+    r"avito\.|youla\.|drom\.|farpost\."
 
     r")\b"
 
