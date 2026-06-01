@@ -1901,6 +1901,25 @@ def _is_sarcastic_thread_banter(text: str) -> bool:
     )
     if relay_claim and rhetorical_why_other and ace_multi:
         return True
+    # «Иначе нахрена они кастрировали новые модели на поддержку первой аськи?
+    #  Ведь технически это одинаковые устройства» — риторическая претензия к вендору.
+    vulgar_rhetoric = bool(
+        re.search(r"\b(?:нахрена|на\s*хрена|на\s*кой|какого\s+(?:хрена|ч[ёе]рта|лешего))\b", t)
+    )
+    castrate_slang = bool(re.search(r"\bкастрир\w*\b", t))
+    maker_decision = bool(
+        re.search(r"\bон[иа]\b", t)
+        and re.search(
+            r"\b(?:модел\w*|устройств\w*|аська\w*|аськ\w*|ace|поддержк\w*|прошивк\w*)\b",
+            t,
+        )
+    )
+    assertion_same = bool(
+        re.search(r"\bведь\b", t)
+        and re.search(r"\b(?:одинаков\w*|то\s+же\s+самое|так\s+же|идентичн\w*)\b", t)
+    )
+    if (vulgar_rhetoric or castrate_slang) and (maker_decision or assertion_same):
+        return True
     return False
 
 

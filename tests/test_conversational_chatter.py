@@ -848,3 +848,22 @@ def test_new_firmware_howto_not_news():
     assert not _is_product_news_announcement(
         "вышла новая прошивка для kobra s1, как обновить?"
     )
+
+
+# Риторическая претензия к производителю про совместимость ACE (лог 19:43).
+_ACE_VENDOR_RHETORIC = (
+    "Иначе нахрена они кастрировали новые модели на поддержку первой аськи? "
+    "Ведь технически это одинаковые устройства"
+)
+
+
+def test_ace_vendor_rhetoric_is_chatter():
+    assert _is_non_wiki_chatter_message(_ACE_VENDOR_RHETORIC)
+    assert _is_conversational_chatter(_ACE_VENDOR_RHETORIC)
+    assert not _needs_model_clarification(_ACE_VENDOR_RHETORIC)
+
+
+def test_ace_compat_real_question_not_filtered():
+    # Реальный вопрос про совместимость — отвечаем.
+    q = "первая аська подходит к kobra s1? как подключить?"
+    assert not _is_non_wiki_chatter_message(q)
