@@ -60,13 +60,13 @@ def _format_error_code_info(info: ErrorCodeInfo, *, lang: str) -> str:
     cause = tr(info.cause)
     fix = tr(info.fix)
 
-    parts: list[str] = [f"<b>{html.escape(_t(lang, 'err_header').format(code=code))}</b>"]
+    parts: list[str] = [f"🔧 <b>{html.escape(_t(lang, 'err_header').format(code=code))}</b>"]
     if title:
         parts.append(f"<b>{html.escape(title)}</b>")
     if cause:
-        parts.append(html.escape(_t(lang, "err_cause").format(text=cause)))
+        parts.append(f"⚠️ {html.escape(_t(lang, 'err_cause').format(text=cause))}")
     if fix:
-        parts.append(html.escape(_t(lang, "err_fix").format(text=fix)))
+        parts.append(f"✅ {html.escape(_t(lang, 'err_fix').format(text=fix))}")
     return "\n".join(parts).strip()
 
 

@@ -28,7 +28,7 @@ from app.bot.error_codes_wiki import (
 
 )
 
-from app.bot.i18n import _t
+from app.bot.i18n import _t, format_wiki_card
 
 from app.bot.reply_logging import log_bot_reply_for_message
 
@@ -433,18 +433,12 @@ async def _deliver_clarify_combined(
 
         url = best_doc.url
 
-        title = html.escape(best_doc.title)
-
-        reply = (
-
-            _t(lang, "found_in_wiki") + "\n"
-
-            f"• <b>{title}</b>\n"
-
-            f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
-
-            f"<i>{html.escape(_t(lang, 'match').format(score=best_score))}</i>"
-
+        reply = format_wiki_card(
+            lang=lang,
+            header_key="found_in_wiki",
+            title=best_doc.title,
+            url=url,
+            score=best_score,
         )
 
         sent = await msg.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False)
@@ -554,20 +548,14 @@ async def _deliver_clarify_combined(
 
     url = best_doc.url
 
-    title = html.escape(best_doc.title)
-
     lang = context.application.bot_data.get("last_user_lang") or "ru"
 
-    reply = (
-
-        _t(lang, "thanks_found_in_wiki") + "\n"
-
-        f"• <b>{title}</b>\n"
-
-        f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
-
-        f"<i>{html.escape(_t(lang, 'match').format(score=best_score))}</i>"
-
+    reply = format_wiki_card(
+        lang=lang,
+        header_key="thanks_found_in_wiki",
+        title=best_doc.title,
+        url=url,
+        score=best_score,
     )
 
     sent = await msg.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False)

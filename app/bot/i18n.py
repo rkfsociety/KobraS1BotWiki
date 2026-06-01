@@ -1,6 +1,7 @@
 """Язык ответа и строки UI."""
 from __future__ import annotations
 
+import html
 import re
 
 from telegram.ext import ContextTypes
@@ -28,31 +29,31 @@ def _detect_user_lang(*, text: str, user_lang_code: str | None) -> str:
 def _t(lang: str, key: str) -> str:
     ru = {
         "generic_help": (
-            "Могу помочь, но нужно чуть больше данных.\n"
+            "🤖 Могу помочь, но нужно чуть больше данных.\n"
             "Напиши, пожалуйста: модель принтера (например Kobra S1/Kobra 3) и что именно случилось "
             "(ошибка с кодом, что не работает, что хотите сделать)."
         ),
         "no_guide_for_model": (
-            "Извини, в вики не нашёл отдельной статьи по этому вопросу именно для твоей модели. "
+            "😕 Извини, в вики не нашёл отдельной статьи по этому вопросу именно для твоей модели. "
             "Похоже, такого гайда там ещё нет или он под другим названием — честно, подсказать ссылкой не могу."
         ),
         "found_in_wiki": "Нашёл в вики:",
         "thanks_found_in_wiki": "Спасибо за уточнение, нашёл в вики:",
-        "still_uncertain": "Спасибо! Всё ещё не могу уверенно найти статью. Попробуй добавить модель и/или код ошибки.",
+        "still_uncertain": "🤔 Спасибо! Всё ещё не могу уверенно найти статью. Попробуй добавить модель и/или код ошибки.",
         "error_code_clarify": (
-            "По коду <b>{code}</b> есть разные статьи для разных моделей ({variants}).\n"
+            "❓ По коду <b>{code}</b> есть разные статьи для разных моделей ({variants}).\n"
             "Уточни, пожалуйста, <b>модель принтера</b> (например: <b>Kobra S1</b> / <b>Kobra 3</b> / <b>Kobra 3 Max</b>).\n"
             "Ответь на это сообщение."
         ),
         "clarify_prompt": (
-            "Похоже, ответ есть в вики, но мне не хватает данных.\n"
+            "❓ Похоже, ответ есть в вики, но мне не хватает данных.\n"
             "Уточни, пожалуйста, <b>модель принтера</b> {hint} (например: <b>Kobra S1</b>) и/или <b>код ошибки</b>.\n"
-            "Ответь на это сообщение."
+            "↩️ Ответь на это сообщение."
         ),
         "clarify_prompt_no_error_code": (
-            "Похоже, ответ есть в вики, но мне не хватает данных.\n"
+            "❓ Похоже, ответ есть в вики, но мне не хватает данных.\n"
             "Уточни, пожалуйста, <b>модель принтера</b> {hint} (например: <b>Kobra S1</b>).\n"
-            "Ответь на это сообщение."
+            "↩️ Ответь на это сообщение."
         ),
         "err_header": "Ошибка {code}",
         "err_cause": "Причина: {text}",
@@ -79,7 +80,7 @@ def _t(lang: str, key: str) -> str:
         "error_no_better": "Понял. Попробовал поискать ещё раз — лучше не нашёл. Похоже, ответа нет.",
         "error_retry": "Попробовал ещё раз, вот что нашёл:",
         "fix_confirm": "Ок, вот правильная ссылка:",
-        "manual_qa_header": "<b>Ответ (добавлен вручную)</b>",
+        "manual_qa_header": "📝 <b>Ответ (добавлен вручную)</b>",
         "qaadd_usage": (
             "Использование: одно сообщение (данные пишутся в <code>data/manual_qa.json</code> в репозитории).\n"
             "<code>/qaadd</code> <i>вопрос или несколько через |||</i>\n"
@@ -115,31 +116,31 @@ def _t(lang: str, key: str) -> str:
     }
     en = {
         "generic_help": (
-            "I can help, but I need a bit more info.\n"
+            "🤖 I can help, but I need a bit more info.\n"
             "Please send: your printer model (e.g. Kobra S1 / Kobra 3) and what exactly happened "
             "(an error code, what is not working, what you’re trying to do)."
         ),
         "no_guide_for_model": (
-            "Sorry, I couldn’t find a dedicated wiki article for your exact printer model. "
+            "😕 Sorry, I couldn’t find a dedicated wiki article for your exact printer model. "
             "It looks like the guide doesn’t exist yet or it’s under a different name — I can’t link a reliable page."
         ),
         "found_in_wiki": "Found in the wiki:",
         "thanks_found_in_wiki": "Thanks! Found in the wiki:",
-        "still_uncertain": "Thanks! I still can’t confidently find the right article. Try adding your model and/or an error code.",
+        "still_uncertain": "🤔 Thanks! I still can’t confidently find the right article. Try adding your model and/or an error code.",
         "error_code_clarify": (
-            "For code <b>{code}</b> there are different articles for different models ({variants}).\n"
+            "❓ For code <b>{code}</b> there are different articles for different models ({variants}).\n"
             "Please specify your <b>printer model</b> (e.g. <b>Kobra S1</b> / <b>Kobra 3</b> / <b>Kobra 3 Max</b>).\n"
             "Reply to this message."
         ),
         "clarify_prompt": (
-            "It looks like the answer is in the wiki, but I’m missing some details.\n"
+            "❓ It looks like the answer is in the wiki, but I’m missing some details.\n"
             "Please specify your <b>printer model</b> {hint} (e.g. <b>Kobra S1</b>) and/or the <b>error code</b>.\n"
-            "Reply to this message."
+            "↩️ Reply to this message."
         ),
         "clarify_prompt_no_error_code": (
-            "It looks like the answer is in the wiki, but I’m missing some details.\n"
+            "❓ It looks like the answer is in the wiki, but I’m missing some details.\n"
             "Please specify your <b>printer model</b> {hint} (e.g. <b>Kobra S1</b>).\n"
-            "Reply to this message."
+            "↩️ Reply to this message."
         ),
         "err_header": "Error {code}",
         "err_cause": "Cause: {text}",
@@ -166,7 +167,7 @@ def _t(lang: str, key: str) -> str:
         "error_no_better": "Got it. I tried searching again, but couldn’t find a better result. Looks like there’s no answer.",
         "error_retry": "I tried again. Here’s what I found:",
         "fix_confirm": "OK, here is the correct link:",
-        "manual_qa_header": "<b>Manual answer</b>",
+        "manual_qa_header": "📝 <b>Manual answer</b>",
         "qaadd_usage": (
             "Usage: one message (stored in <code>data/manual_qa.json</code> in the repo).\n"
             "<code>/qaadd</code> <i>question (use ||| between several triggers)</i>\n"
@@ -199,6 +200,23 @@ def _t(lang: str, key: str) -> str:
     }
     table = ru if lang == "ru" else en
     return table.get(key, key)
+
+
+def format_wiki_card(*, lang: str, header_key: str, title: str, url: str, score: int) -> str:
+    """Единая «красивая» карточка ответа со ссылкой на статью вики.
+
+    Заголовок (header_key) + статья как кликабельная ссылка + точность совпадения.
+    Используется во всех ответах со ссылкой: основной поиск, /wiki, после уточнения модели и т.п.
+    """
+    header = _t(lang, header_key).rstrip(": ").strip()
+    safe_url = html.escape(url or "")
+    safe_title = html.escape((title or "").strip()) or safe_url
+    match_line = html.escape(_t(lang, "match").format(score=score))
+    return (
+        f"📚 <b>{html.escape(header)}</b>\n\n"
+        f"📄 <a href=\"{safe_url}\">{safe_title}</a>\n"
+        f"<i>🎯 {match_line}</i>"
+    )
 
 
 def _lang_from_message(*, context: ContextTypes.DEFAULT_TYPE, msg, text: str) -> str:

@@ -76,7 +76,7 @@ from app.bot.manual_qa import (
 
 from app.bot.ops_notify import notify_ops
 
-from app.bot.i18n import _detect_user_lang, _lang_from_message, _t
+from app.bot.i18n import _detect_user_lang, _lang_from_message, _t, format_wiki_card
 
 from app.bot.reply_logging import log_bot_reply_for_message
 
@@ -915,18 +915,12 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         return
 
-    title = html.escape(best_doc.title)
-
-    reply = (
-
-        _t(lang, "found_in_wiki") + "\n"
-
-        f"• <b>{title}</b>\n"
-
-        f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
-
-        f"<i>{html.escape(_t(lang, 'match').format(score=best_score))}</i>"
-
+    reply = format_wiki_card(
+        lang=lang,
+        header_key="found_in_wiki",
+        title=best_doc.title,
+        url=url,
+        score=best_score,
     )
 
     await reply_for_user(
@@ -1438,20 +1432,14 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         return
 
-    title = html.escape(best_doc.title)
-
     url = best_doc.url
 
-    retry_body = (
-
-        _t(lang, "error_retry") + "\n"
-
-        f"• <b>{title}</b>\n"
-
-        f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
-
-        f"<i>{html.escape(_t(lang, 'match').format(score=best_score))}</i>"
-
+    retry_body = format_wiki_card(
+        lang=lang,
+        header_key="error_retry",
+        title=best_doc.title,
+        url=url,
+        score=best_score,
     )
 
     sent = await msg.reply_text(
@@ -2868,20 +2856,12 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         return
 
-    title = html.escape(best_doc.title)
-
-    score = best_score
-
-    reply = (
-
-        _t(context.application.bot_data.get("last_user_lang") or "ru", "already_in_wiki") + "\n"
-
-        f"• <b>{title}</b>\n"
-
-        f"<a href=\"{html.escape(url)}\">{html.escape(url)}</a>\n"
-
-        f"<i>{html.escape(_t(context.application.bot_data.get('last_user_lang') or 'ru', 'match').format(score=score))}</i>"
-
+    reply = format_wiki_card(
+        lang=context.application.bot_data.get("last_user_lang") or "ru",
+        header_key="already_in_wiki",
+        title=best_doc.title,
+        url=url,
+        score=best_score,
     )
 
     sent = await reply_for_user(
