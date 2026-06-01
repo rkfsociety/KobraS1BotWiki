@@ -114,6 +114,13 @@ _KIND_RU: dict[str, str] = {
     "clarify_correction_uncertain": "не найдено (поправка модели)",
 }
 
+_TRIGGER_RU: dict[str, str] = {
+    "auto": "🎯 авто-вопрос (бот сам счёл это вопросом)",
+    "mention": "📣 упоминание @бота",
+    "reply": "↩️ ответ на сообщение бота",
+    "private": "👤 личка",
+}
+
 _KIND_ICON: dict[str, str] = {
     "wiki": "✅",
     "clarify_prompt": "❓",
@@ -295,6 +302,8 @@ def _format_bot_reply(msg: str) -> str | None:
     url_m = re.search(r"\burl=(\S+)", msg)
     hints_m = re.search(r"\bhints=(\S+)", msg)
     code_m = re.search(r"\bcode=(\d+)\b", msg)
+    trigger_m = re.search(r"\btrigger=(\S+)", msg)
+    model_m = re.search(r"\bmodel=(\S+)", msg)
 
     lines: list[str] = []
 
@@ -306,6 +315,11 @@ def _format_bot_reply(msg: str) -> str | None:
     if user_m:
         meta += f"  👤 <code>{_esc(user_m.group(1))}</code>"
     lines.append(meta)
+
+    # ── как сообщение попало к боту (важно для разбора ложных ответов) ──
+    if trigger_m:
+        trig = trigger_m.group(1)
+        lines.append(_TRIGGER_RU.get(trig, f"🎯 {_esc(trig)}"))
 
     # ── строка 3: ссылки на вопрос и ответ ──────────────────────────
     link_parts: list[str] = []
@@ -342,6 +356,8 @@ def _format_bot_reply(msg: str) -> str | None:
         tail.append(f"🔢 <code>{_esc(code_m.group(1))}</code>")
     if url_m:
         tail.append(f"🔗 {_esc(_short_wiki_url(url_m.group(1)))}")
+    if model_m and model_m.group(1) not in ("-", "None", "none"):
+        tail.append(f"🖨 {_esc(model_m.group(1))}")
     if hints_m and hints_m.group(1) not in ("-", "None", "none"):
         tail.append(f"🏷 {_esc(hints_m.group(1))}")
     if tail:

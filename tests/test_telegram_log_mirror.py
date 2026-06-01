@@ -73,6 +73,35 @@ def test_bot_reply_shows_user_and_reply_text():
     assert "80" in out
 
 
+def test_bot_reply_shows_trigger_and_model():
+    msg = (
+        "bot_reply kind=wiki chat=-1001 user=42 mid=123 message_id=456 "
+        "score=100 url=https://wiki.example/kobra-s1-combo/firmware-update-guide "
+        "trigger=auto model=kobra-s1-combo "
+        "user_text=есть ссылка на прошивку reply_text=Уже есть в вики"
+    )
+    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
+    out = format_log_for_telegram(record)
+    assert out is not None
+    # источник запроса показан человекочитаемо
+    assert "авто-вопрос" in out
+    # модель принтера видна в хвосте
+    assert "🖨" in out
+    assert "kobra-s1-combo" in out
+
+
+def test_bot_reply_mention_trigger_label():
+    msg = (
+        "bot_reply kind=wiki chat=-1001 user=42 mid=1 message_id=2 "
+        "score=90 url=https://wiki.example/x trigger=mention "
+        "user_text=@bot как смазать reply_text=ответ"
+    )
+    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
+    out = format_log_for_telegram(record)
+    assert out is not None
+    assert "упоминание" in out
+
+
 def test_bot_reply_legacy_query_field():
     msg = (
         "bot_reply kind=manual_qa_message chat=-1001 user=42 "

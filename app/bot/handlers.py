@@ -278,6 +278,23 @@ def _is_triggered_message(update: Update, *, bot_username: str | None, bot_id: i
 
     return False
 
+def _trigger_source(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Как сообщение попало к боту: лс / упоминание / reply-боту / авто-вопрос.
+
+    Используется в логах bot_reply, чтобы при разборе ложных срабатываний
+    было видно, ответил ли бот по своей инициативе (auto) или его позвали.
+    """
+    chat = update.effective_chat
+    if chat and chat.type == ChatType.PRIVATE:
+        return "private"
+    bot_username = context.application.bot_data.get("bot_username")
+    bot_id = context.application.bot_data.get("bot_id")
+    if _is_triggered_message(update, bot_username=bot_username, bot_id=bot_id):
+        return "mention"
+    if _reply_is_expected_by_bot(update, context):
+        return "reply"
+    return "auto"
+
 def _manual_qa_answer_to_html(answer: str) -> str:
 
     return "<br>".join(html.escape(line) for line in (answer or "").splitlines())
@@ -2874,7 +2891,12 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=False,
         log_kind="wiki",
-        log_extra={"score": best_score, "url": url},
+        log_extra={
+            "score": best_score,
+            "url": url,
+            "trigger": _trigger_source(update, context),
+            "model": "+".join(sorted(_model_slug_hints(text))) or None,
+        },
         log_user_id=msg.from_user.id if msg.from_user else None,
     )
 
