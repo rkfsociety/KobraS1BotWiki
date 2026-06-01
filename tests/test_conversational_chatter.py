@@ -7,7 +7,9 @@ from app.bot.text_heuristics import (
     _is_conversational_chatter,
     _is_conversational_skepticism,
     _is_generic_help_without_context,
+    _is_non_wiki_chatter_message,
     _is_printer_purchase_material_opinion,
+    _is_product_news_announcement,
     _is_technical_observation_sharing,
     _is_technical_opinion_sharing,
     _mentions_competitor_printer,
@@ -813,30 +815,36 @@ def test_competitor_migration_to_kobra_not_filtered():
     assert not _is_conversational_chatter(migrate)
 
 
-# «Можешь показать качество печать креалти?» — просьба показать конкурента (лог 12:14).
-_CREALITY_SHOWCASE = "Можешь показать качество печать креалти?"
+# Новостной пресс-релиз об анонсе сушилки Creality (лог 19:34).
+_CREALITY_NEWS = (
+    "Creality представила новую сушилку SpacePi X4S 🔥 · Creality продолжает "
+    "расширять линейку решений для 3D-печати и анонсировала новый филаментный "
+    "сушильный модуль — SpacePi X4S. Новинка рассчитана на стабильную работу "
+    "с современными материалами. Ключевые особенности: двухкамерная система "
+    "сушки с нагревом до 110°C, поддержка RFID-синхронизации. По заявлению "
+    "компании, устройство снижает риск дефектов во время печати. Creality "
+    "также намекнула, что ожидаются и другие новинки."
+)
 
 
-def test_creality_spelling_detected():
-    # «креалти» — неточное написание Creality, должно распознаваться.
-    assert _mentions_competitor_printer("креалти")
-    assert _mentions_competitor_printer("криалити")
-    assert _mentions_competitor_printer("креалити")
+def test_product_news_announcement_is_chatter():
+    assert _is_product_news_announcement(_CREALITY_NEWS)
+    assert _is_non_wiki_chatter_message(_CREALITY_NEWS)
 
 
-def test_competitor_showcase_request_is_chatter():
-    assert _is_competitor_showcase_request(_CREALITY_SHOWCASE)
-    assert _is_conversational_chatter(_CREALITY_SHOWCASE)
-    assert not _needs_model_clarification(_CREALITY_SHOWCASE)
+def test_product_news_short_anonce_detected():
+    assert _is_product_news_announcement(
+        "Anycubic анонсировала новую сушилку для филамента"
+    )
 
 
-def test_competitor_showcase_variants():
-    assert _is_competitor_showcase_request("покажи качество печати creality")
-    assert _is_competitor_showcase_request("что скажешь о bambu lab?")
+def test_filament_drying_question_not_news():
+    # Реальный вопрос про сушку — не отсекаем как новость.
+    assert not _is_product_news_announcement("как правильно сушить petg на kobra s1?")
 
 
-def test_competitor_migration_to_kobra_not_filtered():
-    # Упомянут наш принтер — это реальный запрос о переходе/настройке.
-    migrate = "у меня была creality, как настроить такое же качество на kobra s1?"
-    assert not _is_competitor_showcase_request(migrate)
-    assert not _is_conversational_chatter(migrate)
+def test_new_firmware_howto_not_news():
+    # «вышла новая прошивка, как обновить» — есть help-intent, не новость.
+    assert not _is_product_news_announcement(
+        "вышла новая прошивка для kobra s1, как обновить?"
+    )

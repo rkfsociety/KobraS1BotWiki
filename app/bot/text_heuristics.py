@@ -2660,6 +2660,42 @@ def _is_competitor_showcase_request(text: str) -> bool:
     return showcase
 
 
+def _is_product_news_announcement(text: str) -> bool:
+    """Новостной пресс-релиз об анонсе продукта («Creality представила сушилку SpacePi X4S») — не вопрос к вики."""
+    if not text or not text.strip():
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # Явная просьба что-то сделать с новинкой — не отсекаем.
+    if re.search(
+        r"\bкак\s+(?:настро|подключ|использ\w*|обнов|перейти|перенести|замен)\b",
+        t,
+    ):
+        return False
+    announce = bool(
+        re.search(
+            r"\b(?:представил\w*|анонсир\w*|презентов\w*|"
+            r"выпустил\w*|выпустит|выпуска\w*|релизн\w*)\b",
+            t,
+        )
+        or re.search(r"\bпредставл[её]н\w*\b", t)
+        or re.search(r"\bновинк\w*\b", t)
+    )
+    pr_speak = bool(
+        re.search(
+            r"\b(?:по\s+заявлению\s+компании|ключевые\s+особенност\w*|"
+            r"расширя\w*\s+линейк\w*|продолжает\s+расширя\w*|"
+            r"анонсирова\w*|намекнул\w*)\b",
+            t,
+        )
+    )
+    novelty = bool(
+        re.search(r"\b(?:новинк\w*|нов(?:ый|ую|ое|ые|ого|ой|ая))\b", t)
+        or re.search(r"\b(?:линейк\w*|модул\w*|устройств\w*)\b", t)
+    )
+    return announce and (pr_speak or novelty)
+
 
 def _is_thread_printing_tip(text: str) -> bool:
     """Советы в треде без вопроса — не запрос к боту."""
@@ -2709,6 +2745,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_vague_filament_thread_reference(text)
         or _is_bare_competitor_printer_question(text)
         or _is_competitor_showcase_request(text)
+        or _is_product_news_announcement(text)
         or _is_printer_comparison_opinion(text)
         or _is_printing_status_announcement(text)
         or _is_layer_profile_thread_opinion(text)
