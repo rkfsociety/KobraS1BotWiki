@@ -2746,6 +2746,41 @@ def _is_thread_printing_tip(text: str) -> bool:
         return True
     return False
 
+def _is_purchase_deliberation_banter(text: str) -> bool:
+    """«Думал про комбо-версию, но послушав Васю уже не уверен 😂» — раздумья о покупке.
+
+    Обсуждение, какую версию/модель брать — это болтовня, а не запрос к вики
+    (страницы сборки/инструкции тут отвечать не должны).
+    """
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # Явная просьба о помощи/инструкции — не трогаем.
+    if re.search(
+        r"\bкак\s+(?:настро|откалибр|почин|исправ|собрать|подключ|замен|обнов|прошить)\w*",
+        t,
+    ):
+        return False
+    purchase_ctx = bool(
+        re.search(
+            r"\b(?:комбо|combo|верси\w*|версию|обычн\w*\s+верс|"
+            r"брать|взять|куплю|купить|покупа\w*|заказ\w*|присматрива\w*)\b",
+            t,
+        )
+    )
+    deliberation = bool(
+        re.search(
+            r"\b(?:"
+            r"думал\s+про|думаю\s+про|подумыва\w*|"
+            r"не\s+увер\w*|сомнева\w*|склоня\w*|"
+            r"решаю|выбираю\s+между|колебл\w*|раздумыва\w*"
+            r")\b",
+            t,
+        )
+    )
+    return purchase_ctx and deliberation
+
+
 def _is_hardware_vs_settings_dilemma(text: str) -> bool:
     """«Это техничка или всё-таки настройки?» — диагностический спор в треде.
 
@@ -2813,6 +2848,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_chat_past_incident_recollection(text)
         or _is_thread_printing_tip(text)
         or _is_hardware_vs_settings_dilemma(text)
+        or _is_purchase_deliberation_banter(text)
     )
 
 

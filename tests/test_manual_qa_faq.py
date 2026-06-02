@@ -13,12 +13,18 @@ _CASES = [
     "как обновить прошивку на кобре",
     "первый слой не прилипает совсем",
     "как печатать в несколько цветов",
+    "сколько процентов заполнения ставить",
+    "почему тянет нити между деталями",
+    "когда нужны поддержки",
+    "что такое ironing",
+    "деталь ломается по слоям",
+    "petg намертво прилип к стеклу как снять",
 ]
 
 
 def test_faq_store_loads_nonempty():
     entries = load_manual_qa_store()
-    assert len(entries) >= 10
+    assert len(entries) >= 20
     for e in entries:
         assert isinstance(e.get("keys"), list) and e["keys"]
         assert isinstance(e.get("answer"), str) and e["answer"].strip()

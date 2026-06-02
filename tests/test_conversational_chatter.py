@@ -131,6 +131,20 @@ def test_hardware_vs_settings_dilemma_no_clarify():
     assert not _needs_model_clarification(_HW_VS_SETTINGS_DILEMMA)
 
 
+_COMBO_DELIBERATION = "Да я как-то думал про комбо версию . Но послушав Васю уже не уверен 😂😂😂😂"
+
+
+def test_combo_purchase_deliberation_is_chatter():
+    assert _is_conversational_chatter(_COMBO_DELIBERATION)
+    assert _is_non_wiki_chatter_message(_COMBO_DELIBERATION)
+    assert not _needs_model_clarification(_COMBO_DELIBERATION)
+
+
+def test_combo_assembly_howto_not_chatter():
+    # Реальный запрос по сборке комбо-версии — не болтовня.
+    assert not _is_non_wiki_chatter_message("как собрать комбо версию kobra s1?")
+
+
 def test_hardware_vs_settings_with_how_to_not_dilemma():
     # Явная просьба «как настроить» оставляет сообщение запросом помощи.
     assert not _is_hardware_vs_settings_dilemma(
