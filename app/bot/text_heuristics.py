@@ -3533,31 +3533,44 @@ def _topic_is_resonance_pa_tuning_intent(text: str | None) -> bool:
     if not text:
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
-    tuning = bool(
+    # Сильные сигналы — речь действительно про резонанс/затухающие колебания/шейпер.
+    strong = bool(
         re.search(
             r"\b(?:"
             r"резонанс|resonance|ringing|"
             r"колебан\w*|затуха\w*|"
-            r"\bpa\b|pressure\s*advance|"
-            r"input\s*shap|шейпер|shaper|"
-            r"вибрац|jerk|accel|"
-            r"layer\s*shift|сдвиг\s+сл"
+            r"input\s*shap|шейпер|shaper|виброкомпенс\w*|"
+            r"layer\s*shift|сдвиг\s+сл\w*"
             r")\b",
             t,
         )
     )
-    if not tuning:
+    # Слабые: голое упоминание PA / вибраций / jerk без слов резонанса.
+    weak = bool(re.search(r"\bpa\b|pressure\s*advance|\bвибрац\w*|\bjerk\b|\baccel\w*", t))
+    if not (strong or weak):
         return False
-    return bool(
-        "?" in text
-        or re.search(
+    explicit_ask = bool(
+        re.search(
             r"\b(?:"
-            r"вопрос|связан\w*|почему|подскаж\w*|помогите|"
-            r"что\s+это|не\s+влияет|автокалибр"
+            r"как\s+(?:настро|откалибр|калибр)\w*|настро\w*|калибр\w*|автокалибр\w*|"
+            r"не\s+влия\w*|почему|связан\w*|подскаж\w*|помогите|что\s+это\s+(?:такое|за)"
             r")\b",
             t,
         )
     )
+    if strong:
+        return bool("?" in text or explicit_ask)
+    # Болтовня-наблюдение к чужому фото («плохо видно, как-будто… тоже PA шалит?») —
+    # для голого PA одного «?» мало, нужен явный запрос настройки/калибровки.
+    observation = bool(
+        re.search(
+            r"\b(?:плохо\s+видно|как[\s-]?будто|какбудто|похоже\s+(?:на\s+то|что)|тоже\b)\b",
+            t,
+        )
+    )
+    if observation and not explicit_ask:
+        return False
+    return explicit_ask
 
 
 def _topic_is_slicer_feature_help_intent(text: str | None) -> bool:

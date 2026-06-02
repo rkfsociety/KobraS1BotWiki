@@ -45,3 +45,20 @@ def test_design_reply_present():
     assert expl
     assert "резонанс" in expl.lower() or "ringing" in expl.lower()
     assert "pa" in expl.lower() or "pressure" in expl.lower()
+
+
+# Болтовня-комментарий к чужому фото: голое «PA» + «?» без слов резонанса/настройки.
+_PHOTO_BANTER = (
+    "Кстати, тут конечно плохо видно, но прям как-будто иглой раскаленной сбоку "
+    "дырочку сделали. Тоже PA шалит?"
+)
+
+
+def test_photo_banter_pa_not_tuning_intent():
+    assert not _topic_is_resonance_pa_tuning_intent(_PHOTO_BANTER)
+    assert explain_resonance_pa_oscillations(_PHOTO_BANTER) is None
+
+
+def test_explicit_pa_calibration_still_intent():
+    assert _topic_is_resonance_pa_tuning_intent("как откалибровать PA?")
+    assert _topic_is_resonance_pa_tuning_intent("почему PA не влияет на результат?")
