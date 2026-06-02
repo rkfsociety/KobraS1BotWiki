@@ -710,7 +710,8 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     )
 
-    if not _needs_model_clarification(query) and await _try_reply_manual_qa(
+    # Точный ручной ответ (FAQ) важнее уточнения модели: куратор уже решил, что отвечать.
+    if await _try_reply_manual_qa(
 
         update,
 
@@ -2543,7 +2544,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         return
 
-    if not _needs_model_clarification(text) and await _try_reply_manual_qa(
+    # Точный ручной ответ (FAQ) важнее уточнения модели: куратор уже решил, что отвечать.
+    if await _try_reply_manual_qa(
 
         update,
 
