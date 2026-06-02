@@ -131,6 +131,18 @@ def test_hardware_vs_settings_dilemma_no_clarify():
     assert not _needs_model_clarification(_HW_VS_SETTINGS_DILEMMA)
 
 
+_PROBLEM_COMBO = "+ кривая тенза/незатянутая тенза и т.д. вместе с плавающим столом ядреная смесь"
+
+
+def test_problem_combo_banter_is_chatter():
+    assert _is_conversational_chatter(_PROBLEM_COMBO)
+    assert _is_non_wiki_chatter_message(_PROBLEM_COMBO)
+
+
+def test_tension_help_request_not_chatter():
+    assert not _is_conversational_chatter("ремень незатянут, как настроить натяжение?")
+
+
 _COMBO_DELIBERATION = "Да я как-то думал про комбо версию . Но послушав Васю уже не уверен 😂😂😂😂"
 
 

@@ -35,3 +35,15 @@ def test_design_reply_present():
     expl = explain_slicer_vertical_holes(_QUESTION)
     assert expl
     assert "капл" in expl.lower() or "teardrop" in expl.lower()
+
+
+# Дырки «в месте шва» после замены хотенда — под-экструзия/шов, не вертикальная стенка.
+_SEAM_HOLES = (
+    "Именно при тесте из слайсера где он пластинки печатает. А то заменил хотенд, "
+    "появились дырки на модели в месте шва. На старом хотенде на этом же gcode все было норм"
+)
+
+
+def test_seam_holes_after_hotend_swap_not_vertical_hole_intent():
+    assert not _topic_is_slicer_vertical_hole_intent(_SEAM_HOLES)
+    assert explain_slicer_vertical_holes(_SEAM_HOLES) is None

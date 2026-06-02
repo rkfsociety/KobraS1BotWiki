@@ -2746,6 +2746,32 @@ def _is_thread_printing_tip(text: str) -> bool:
         return True
     return False
 
+def _is_problem_combo_banter(text: str) -> bool:
+    """«+ кривая тенза/незатянутая тенза и т.д. вместе с плавающим столом ядрёная смесь».
+
+    Перечисление проблем с выводом «ядрёная/гремучая смесь» — это реплика-согласие
+    в треде, а не запрос к вики.
+    """
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж\w*|что\s+делать|как\s+(?:настро|откалибр|почин|исправ|убрать|решить))\w*",
+        t,
+    ):
+        return False
+    combo_idiom = bool(
+        re.search(r"\b(?:ядр[её]н\w*|гремуч\w*|адск\w*|весёл\w*|весел\w*|та\s+ещё)\s+смес\w*", t)
+        or re.search(r"\bвместе\b.{0,40}\bсмес\w*", t)
+    )
+    enumeration_plus = bool(
+        text.strip().startswith("+") and re.search(r"\bи\s*т\.?\s*д\.?", t)
+    )
+    return combo_idiom or enumeration_plus
+
+
 def _is_purchase_deliberation_banter(text: str) -> bool:
     """«Думал про комбо-версию, но послушав Васю уже не уверен 😂» — раздумья о покупке.
 
@@ -2849,6 +2875,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_thread_printing_tip(text)
         or _is_hardware_vs_settings_dilemma(text)
         or _is_purchase_deliberation_banter(text)
+        or _is_problem_combo_banter(text)
     )
 
 
@@ -3517,15 +3544,16 @@ def _topic_is_slicer_vertical_hole_intent(text: str | None) -> bool:
         if not re.search(r"\b(?:слайс\w*|slicer)\b", t) and "слайсер" not in t:
             return False
     slicer_ctx = bool(re.search(r"\b(?:слайсер\w*|slicer|нарезк\w*|слайс\w*)\b", t))
-    hole_ctx = bool(
-        re.search(r"\b(?:отверст\w*|дыр\w*|hole)\b", t)
-        or (re.search(r"\bстенк\w*\b", t) and re.search(r"\bвертикальн\w*\b", t))
-    )
-    fix_ctx = bool(
-        re.search(r"\b(?:сплющ\w*|деформ\w*|овал\w*|капл\w*|dogbone|teardrop)\b", t)
-        or re.search(r"\b(?:почин\w*|исправ\w*|модел\w*)\b", t)
-    )
-    return slicer_ctx and hole_ctx and fix_ctx
+    hole_ctx = bool(re.search(r"\b(?:отверст\w*|дыр\w*|hole)\b", t))
+    if not (slicer_ctx and hole_ctx):
+        return False
+    # Дырки «в месте шва» после замены хотенда — это под-экструзия/шов, не вертикальная стенка.
+    if re.search(r"\b(?:шв[ае]|шов\w*|в\s+месте\s+шва|пропуск\w*|недоэкструз\w*)\b", t):
+        return False
+    # Тема узкая: круглое отверстие в вертикальной стенке, которое деформируется/моделят каплей.
+    deform_ctx = bool(re.search(r"\b(?:сплющ\w*|деформ\w*|овал\w*|капл\w*|dogbone|teardrop)\b", t))
+    vertical_ctx = bool(re.search(r"\bвертикальн\w*\b", t) and re.search(r"\b(?:стенк\w*|стен\w*|wall)\b", t))
+    return deform_ctx or vertical_ctx
 
 
 def _topic_is_resonance_pa_tuning_intent(text: str | None) -> bool:
