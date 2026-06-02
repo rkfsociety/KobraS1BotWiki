@@ -2746,6 +2746,32 @@ def _is_thread_printing_tip(text: str) -> bool:
         return True
     return False
 
+def _is_hardware_vs_settings_dilemma(text: str) -> bool:
+    """«Это техничка или всё-таки настройки?» — диагностический спор в треде.
+
+    Пользователь уже сам провёл диагностику (обслужил, подкрутил, проверил) и
+    спрашивает у людей, железо это или софт. Уточнять модель тут бессмысленно —
+    вики-страница на такой вопрос «или/или» всё равно не ответит.
+    """
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # Явная просьба дать инструкцию — не отсекаем.
+    if re.search(
+        r"\bкак\s+(?:откалибр|настро|почин|исправ|сделать|убрать|решить|подключ|замен)\w*",
+        t,
+    ):
+        return False
+    hardware = bool(
+        re.search(r"\b(?:техничк\w*|желез\w*|механик\w*|аппаратн\w*|по\s+железу)\b", t)
+    )
+    settings = bool(
+        re.search(r"\b(?:настройк\w*|настрой\w*|софт\w*|программн\w*)\b", t)
+    )
+    dilemma = bool(re.search(r"\b(?:или|либо)\b", t))
+    return hardware and settings and dilemma
+
+
 def _is_non_wiki_chatter_message(text: str) -> bool:
     """Сообщения чата, на которые бот не отвечает из вики."""
     return (
@@ -2786,6 +2812,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_chat_meta_discussion(text)
         or _is_chat_past_incident_recollection(text)
         or _is_thread_printing_tip(text)
+        or _is_hardware_vs_settings_dilemma(text)
     )
 
 
