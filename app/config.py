@@ -6,6 +6,8 @@ import logging
 
 import os
 
+import re
+
 import shlex
 
 import sys
@@ -209,6 +211,12 @@ class Settings:
     reply_access_cache_seconds: int
 
     reply_review_mention: str
+
+    #: Эмодзи-реакции, которые считаем «ответ плохой» (см. NEGATIVE_REACTION_EMOJIS)
+    negative_reaction_emojis: frozenset[str]
+
+    #: Логировать негативную реакцию только если её поставил админ/разработчик (REACTION_LOG_ADMIN_ONLY)
+    reaction_log_admin_only: bool
 
 
 
@@ -438,6 +446,16 @@ def load_settings() -> Settings:
 
     reply_review_mention = (os.getenv("REPLY_REVIEW_MENTION") or "rkfsociety").strip()
 
+    raw_neg = os.getenv("NEGATIVE_REACTION_EMOJIS")
+    if raw_neg is None:
+        negative_reaction_emojis = frozenset({"💩", "👎"})
+    else:
+        negative_reaction_emojis = frozenset(
+            tok for tok in re.split(r"[\s,]+", raw_neg.strip()) if tok
+        )
+
+    reaction_log_admin_only = _get_bool("REACTION_LOG_ADMIN_ONLY", True)
+
 
 
     # Загрузка списка разрешённых chat_id и topic_id из переменных окружения
@@ -581,6 +599,10 @@ def load_settings() -> Settings:
         reply_access_cache_seconds=reply_access_cache_seconds,
 
         reply_review_mention=reply_review_mention,
+
+        negative_reaction_emojis=negative_reaction_emojis,
+
+        reaction_log_admin_only=reaction_log_admin_only,
 
     )
 

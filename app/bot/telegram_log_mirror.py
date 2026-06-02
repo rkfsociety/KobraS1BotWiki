@@ -164,6 +164,8 @@ _RE_SEEN = re.compile(
 
 _RE_BOT_REPLY = re.compile(r"^bot_reply kind=(?P<kind>\S+) chat=(?P<chat>-?\d+)")
 
+_RE_BOT_REACTION = re.compile(r"^bot_reaction emoji=(?P<emoji>\S+) chat=(?P<chat>-?\d+)")
+
 _RE_INDEX_PROGRESS = re.compile(
 
     r"^Индексирование \(постепенно\): (?P<done>\d+)/(?P<total>\d+) \(\+(?P<batch>\d+), всего в памяти: (?P<mem>\d+)\)$"
@@ -366,6 +368,54 @@ def _format_bot_reply(msg: str) -> str | None:
 
     return "\n".join(lines)
 
+def _format_bot_reaction(msg: str) -> str | None:
+    """Негативная реакция (💩/👎) на ответ бота — отметка для разбора плохих ответов."""
+    m = _RE_BOT_REACTION.match(msg)
+    if not m:
+        return None
+
+    emoji = m.group("emoji")
+    chat = m.group("chat")
+    kind_m = re.search(r"\bkind=(\S+)", msg)
+    user_m = re.search(r"\buser=(\d+)", msg)
+    thread_m = re.search(r"\bthread=(\d+)", msg)
+    bot_mid_m = re.search(r"\bmessage_id=(\d+)", msg)
+    incoming_mid_m = re.search(r"\bincoming_mid=(\d+)", msg)
+    thread = thread_m.group(1) if thread_m else None
+
+    ut_m = re.search(r"\buser_text=(.+?)(?=\s+reply_text=|$)", msg)
+    user_text = ut_m.group(1).strip() if ut_m else ""
+    rt_m = re.search(r"\breply_text=(.+)$", msg)
+    reply_text = rt_m.group(1).strip() if rt_m else ""
+
+    kind = kind_m.group(1) if kind_m else "?"
+    kind_ru = _KIND_RU.get(kind, kind.replace("_", " "))
+
+    lines: list[str] = [f"{emoji} <b>негативная реакция на ответ бота</b>"]
+
+    meta = f"💬 <code>{_esc(chat)}</code>"
+    if user_m:
+        meta += f"  👤 <code>{_esc(user_m.group(1))}</code>"
+    lines.append(meta)
+
+    link_parts: list[str] = []
+    if incoming_mid_m and (lq := _message_link_line(chat, incoming_mid_m.group(1), thread)):
+        link_parts.append(f"📩 {lq}")
+    if bot_mid_m and (la := _message_link_line(chat, bot_mid_m.group(1), thread)):
+        link_parts.append(f"🤖 {la}")
+    if link_parts:
+        lines.append("  ".join(link_parts))
+
+    lines.append("")
+    lines.append(f"🏷 тип ответа: <i>{_esc(kind_ru)}</i>")
+    if user_text:
+        lines.append(f"📝 {_esc(user_text[:LOG_MIRROR_TEXT_MAX])}")
+    if reply_text:
+        lines.append(f"🤖 <i>{_esc(reply_text.split(' · ')[0][:200])}</i>")
+
+    return "\n".join(lines)
+
+
 def format_log_for_telegram(record: logging.LogRecord, *, redact: str | None = None) -> str | None:
 
     name = record.name
@@ -454,6 +504,12 @@ def _format_body(msg: str, record: logging.LogRecord) -> str | None:
     if _is_skip_log(msg):
 
         return None
+
+    reaction = _format_bot_reaction(msg)
+
+    if reaction:
+
+        return reaction
 
     reply = _format_bot_reply(msg)
 

@@ -16,6 +16,7 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    MessageReactionHandler,
     TypeHandler,
     filters,
 )
@@ -41,6 +42,7 @@ from app.bot.handlers import (
     on_message,
 )
 from app.bot.manual_qa import load_manual_qa_store
+from app.bot.reactions import on_message_reaction
 from app.bot.ops_notify import notify_ops
 from app.bot.telegram_log_mirror import attach_telegram_log_mirror, flush_telegram_log_mirror
 from app.bot.stores import _load_clarify_store, _load_fix_store
@@ -163,6 +165,8 @@ def main() -> None:
     # Без & ~filters.COMMAND: на части апдейтов (пустой text/caption) комбинация ломалась на PTB 21 + Py 3.14.
     # Команды всё равно отсекаются в on_message по префиксу "/" и отдельными CommandHandler.
     app.add_handler(MessageHandler((filters.TEXT | filters.CAPTION), on_message))
+    # Реакции-эмодзи на сообщения бота (💩/👎 от админа → отметка в лог-зеркале)
+    app.add_handler(MessageReactionHandler(on_message_reaction))
     app.add_error_handler(on_error)
 
     async def _post_init(application: Application) -> None:
