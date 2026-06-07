@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -22,6 +23,69 @@ from app.bot.stores import _norm_text
 
 _MAX_ENTRIES = 250
 _MIN_SUBSTR_LEN = 6
+
+# Предложение → автоизвлечение коротких ключей: порог в словах
+_SENTENCE_WORD_THRESHOLD = 5
+
+_STOP_WORDS_RU: frozenset[str] = frozenset({
+    "а", "вот", "как", "его", "её", "не", "и", "в", "на", "по", "с", "к", "у",
+    "из", "от", "до", "за", "под", "над", "для", "без", "при", "про", "через",
+    "но", "или", "если", "чтобы", "что", "это", "я", "ты", "он", "она", "мы",
+    "вы", "они", "мне", "тебе", "ему", "ей", "нам", "вам", "им", "меня", "тебя",
+    "нас", "вас", "их", "мой", "твой", "наш", "ваш", "свой", "был", "была",
+    "было", "были", "есть", "быть", "же", "бы", "ли", "уже", "ещё", "только",
+    "вернее", "пока", "еще", "вроде", "просто", "вообще", "тоже", "тут",
+    "здесь", "там", "вдруг", "даже", "хоть", "ведь", "ну", "то", "со", "об",
+    "обо", "во", "ко", "чем", "тем", "кто", "где", "когда", "почему", "зачем",
+    "которые", "которых", "который", "которого", "которой", "которому",
+    "которым", "которое", "все", "всё", "всех", "всем", "нет", "да", "так",
+    "потому", "поэтому", "тогда", "теперь", "очень", "более", "менее", "самый",
+    "самые", "рядом", "среди", "вдоль", "перед", "между", "около",
+    "разобрав", "можно", "надо", "нужно", "хочу", "хочется", "помогите",
+    "помоги", "скажите", "скажи", "подскажите", "подскажи", "будет", "буду",
+    "те", "де", "ведь", "прям", "прямо",
+})
+
+
+def _words_clean(text: str) -> list[str]:
+    """Убирает пунктуацию и эмодзи, возвращает список слов в нижнем регистре."""
+    cleaned = re.sub(r"[^\w\s-]", " ", text.lower(), flags=re.UNICODE)
+    return [w for w in re.sub(r"\s+", " ", cleaned).strip().split() if w]
+
+
+def _extract_phrases(sentence: str) -> list[str]:
+    """Автоматически извлекает короткие ключевые фразы из длинного предложения.
+
+    Генерирует биграммы и триграммы из соседних содержательных слов
+    плюс одиночные длинные слова (>= 7 букв). Результат — не более 15 фраз.
+    """
+    words = _words_clean(sentence)
+    content = [
+        (i, w) for i, w in enumerate(words)
+        if w not in _STOP_WORDS_RU and len(w) >= 3
+    ]
+
+    seen: set[str] = set()
+    result: list[str] = []
+
+    def add(p: str) -> None:
+        if p and p not in seen:
+            seen.add(p)
+            result.append(p)
+
+    for k, (i_k, w_k) in enumerate(content):
+        if len(w_k) >= 7:
+            add(w_k)
+        if k + 1 < len(content):
+            i_k1, w_k1 = content[k + 1]
+            if i_k1 - i_k <= 3:
+                add(f"{w_k} {w_k1}")
+                if k + 2 < len(content):
+                    i_k2, w_k2 = content[k + 2]
+                    if i_k2 - i_k <= 5:
+                        add(f"{w_k} {w_k1} {w_k2}")
+
+    return result[:15]
 
 
 def _manual_qa_path() -> Path:
@@ -128,11 +192,24 @@ def try_git_push_manual_qa() -> tuple[bool, str]:
 
 
 def _normalize_keys(raw_keys: list[str]) -> list[str]:
+    """Нормализует список ключей.
+
+    Длинные предложения (> _SENTENCE_WORD_THRESHOLD слов) автоматически
+    разбиваются на короткие ключевые фразы, пригодные для substring-matching.
+    Короткие ключи сохраняются как есть.
+    """
     out: list[str] = []
     for k in raw_keys:
-        n = _norm_text(k)
-        if n and n not in out:
-            out.append(n)
+        words = k.split()
+        if len(words) > _SENTENCE_WORD_THRESHOLD:
+            for phrase in _extract_phrases(k):
+                n = _norm_text(phrase)
+                if n and n not in out:
+                    out.append(n)
+        else:
+            n = _norm_text(k)
+            if n and n not in out:
+                out.append(n)
     return out
 
 
