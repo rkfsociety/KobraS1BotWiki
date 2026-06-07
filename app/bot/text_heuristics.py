@@ -2208,6 +2208,38 @@ def _is_printer_comparison_opinion(text: str) -> bool:
     return False
 
 
+def _is_multicolor_experience_opinion(text: str) -> bool:
+    """«на иксе тише смена цвета, кобра 3 меняет цвета как калаш» — мнение/сравнение, не запрос к вики."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\bкак\s+(?:настро|сделать|включ|поменять|менять|переключ|откалибр|задать)\b", t
+    ):
+        return False
+    color_ctx = bool(
+        re.search(
+            r"\b(?:смен\w*\s+цвет\w*|мен\w*\s+цвет\w*|переключ\w*\s+цвет\w*|"
+            r"многоцвет\w*|многоцветн\w*)\b",
+            t,
+        )
+    )
+    if not color_ctx:
+        return False
+    opinion = bool(
+        re.search(
+            r"\b(?:нрав\w*|удобн\w*|неудобн\w*|тих\w*|тише|громк\w*|громче|"
+            r"бесит|раздража\w*|круто|класс\w*|норм\b|кайф\w*)\b",
+            t,
+        )
+        or re.search(r"\b(?:как[\s-]?будто|какбудто|словно|типа\s+как)\b", t)
+        or re.search(r"\bпротестир\w*\b", t)
+    )
+    return opinion
+
+
 def _is_joke_printer_model_clarify_reply(text: str | None) -> bool:
     """Шуточный ответ на «уточни модель» (фанфик Kobra X Max и т.п.) — не поиск в вики."""
     if not text or not text.strip():
@@ -2980,6 +3012,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_competitor_showcase_request(text)
         or _is_product_news_announcement(text)
         or _is_printer_comparison_opinion(text)
+        or _is_multicolor_experience_opinion(text)
         or _is_printing_status_announcement(text)
         or _is_layer_profile_thread_opinion(text)
         or _is_first_days_experience_sharing(text)
