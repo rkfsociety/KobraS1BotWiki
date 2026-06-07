@@ -83,6 +83,11 @@ def _telegram_api(token: str, method: str, params: dict[str, Any]) -> dict[str, 
         return json.load(r)
 
 
+def _sessions_file() -> Path:
+    from app.bot.git_autopull import project_repo_root
+    return project_repo_root() / ".cache" / "panel_sessions.json"
+
+
 class _PanelState:
     """Общее состояние панели: ссылка на бота, настройки, сессии."""
 
@@ -97,6 +102,35 @@ class _PanelState:
         # кэш админов группы: {"chat": int, "ids": set[int], "exp": float}
         self.admin_cache: dict[str, Any] = {}
         self.lock = threading.Lock()
+        self._load_sessions()
+
+    def _load_sessions(self) -> None:
+        """Загружает живые (не истёкшие) сессии с прошлого запуска."""
+        try:
+            p = _sessions_file()
+            if not p.exists():
+                return
+            raw = json.loads(p.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                return
+            now = time.time()
+            self.sessions = {
+                t: s for t, s in raw.items()
+                if isinstance(s, dict) and isinstance(s.get("exp"), (int, float)) and s["exp"] > now
+            }
+        except Exception:
+            pass
+
+    def _save_sessions_locked(self) -> None:
+        """Сохраняет текущие сессии на диск (вызывается под self.lock)."""
+        try:
+            p = _sessions_file()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_suffix(".tmp")
+            tmp.write_bytes(json.dumps(self.sessions, ensure_ascii=False).encode("utf-8"))
+            tmp.replace(p)
+        except Exception as exc:
+            logging.warning("panel: не удалось сохранить сессии: %s", exc)
 
     # --- сессии ---
     def new_session(self, user: str = "") -> tuple[str, str]:
@@ -106,6 +140,7 @@ class _PanelState:
         with self.lock:
             self.sessions[token] = {"exp": time.time() + ttl, "csrf": csrf, "user": user}
             self._gc_locked()
+            self._save_sessions_locked()
         return token, csrf
 
     def admin_ids(self, token: str, chat_id: int, *, ttl: int = 60) -> tuple[set[int] | None, str | None]:
@@ -147,6 +182,7 @@ class _PanelState:
             return
         with self.lock:
             self.sessions.pop(token, None)
+            self._save_sessions_locked()
 
     def _gc_locked(self) -> None:
         now = time.time()
