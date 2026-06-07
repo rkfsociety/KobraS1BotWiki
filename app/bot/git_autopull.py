@@ -16,6 +16,7 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
@@ -30,6 +31,54 @@ from app.bot.ops_notify import notify_ops
 def project_repo_root() -> Path:
     """Корень репозитория (родитель каталога app/)."""
     return Path(__file__).resolve().parents[2]
+
+
+def _manual_qa_file(repo: Path) -> Path:
+    return repo / "data" / "manual_qa.json"
+
+
+def _read_manual_qa_entries(repo: Path) -> list[dict]:
+    p = _manual_qa_file(repo)
+    if not p.exists():
+        return []
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        return [e for e in data if isinstance(e, dict)] if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _restore_manual_qa_after_reset(repo: Path, backup: list[dict]) -> int:
+    """После git reset --hard возвращает в файл ручные ответы из ``backup``, которых нет в версии с GitHub.
+
+    Защита от потери ответов, добавленных через панель, если их не успели запушить
+    (например, при сломанном доступе к GitHub). Сопоставление по паре (title, answer).
+    Возвращает число восстановленных записей.
+    """
+    if not backup:
+        return 0
+    current = _read_manual_qa_entries(repo)
+
+    def sig(e: dict) -> tuple[str, str]:
+        return (str(e.get("title", "")).strip(), str(e.get("answer", "")).strip())
+
+    have = {sig(e) for e in current}
+    missing = [
+        e for e in backup
+        if isinstance(e, dict) and e.get("answer") and sig(e) not in have
+    ]
+    if not missing:
+        return 0
+    merged = missing + current  # локальные (неотправленные) — наверх, как более новые
+    p = _manual_qa_file(repo)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as e:
+        logging.warning("git: не удалось восстановить ручные ответы после reset: %s", e)
+        return 0
+    logging.info("git: восстановлено ручных ответов после reset: %d", len(missing))
+    return len(missing)
 
 
 def git_sync_from_remote(
@@ -83,12 +132,18 @@ def git_sync_from_remote(
     if hard_reset:
         if before == remote_head and not had_dirty:
             return False, "уже актуально"
+        # Страховка: снимок ручных ответов, чтобы reset --hard не потерял неотправленные.
+        qa_backup = _read_manual_qa_entries(repo)
         rs = run(["git", "reset", "--hard", f"{remote}/{branch}"])
         if rs.returncode != 0:
             return False, f"git reset --hard: {rs.stderr.strip() or rs.stdout.strip()}"
         short = remote_head[:8]
+        restored = _restore_manual_qa_after_reset(repo, qa_backup)
         logging.info("git: reset --hard -> %s", short)
-        return True, f"reset --hard -> {short}"
+        msg = f"reset --hard -> {short}"
+        if restored:
+            msg += f" (восстановлено ручных ответов: {restored})"
+        return True, msg
 
     if before == remote_head:
         return False, "уже актуально"
