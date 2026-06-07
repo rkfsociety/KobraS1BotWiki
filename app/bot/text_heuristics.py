@@ -2833,10 +2833,89 @@ def _is_hardware_vs_settings_dilemma(text: str) -> bool:
     return hardware and settings and dilemma
 
 
+def _is_relay_to_peer_chatter(text: str) -> bool:
+    """«Скинь ему видосы · пусть поймёт · так ему и напиши» — указание переслать кому-то, не вопрос боту."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # «скинь/дай ссылку» — это всё-таки обращение к боту.
+    if re.search(r"\bссыл\w*", t):
+        return False
+    if re.search(
+        r"\b(?:помогите|подскаж\w*|как\s+(?:настро|откалибр|почин|исправ|сделать|убрать|замен))\b",
+        t,
+    ):
+        return False
+    pust_understand = bool(
+        re.search(
+            r"\bпусть\s+(?:он\s+|она\s+|они\s+)?(?:пойм[её]т|посмотр\w*|увид\w*|почита\w*|знает|поймут)\b",
+            t,
+        )
+    )
+    if pust_understand:
+        return True
+    relay = bool(
+        re.search(r"\b(?:скинь\w*|кинь\w*|перешл\w*|покажи\w*|напиши\w*|отправь\w*)\b", t)
+    )
+    third_party = bool(re.search(r"\b(?:ему|ей|им)\b", t))
+    media = bool(re.search(r"\b(?:видос\w*|видео|ролик\w*|скрин\w*)\b", t))
+    return relay and third_party and media
+
+
+def _is_money_worth_banter(text: str) -> bool:
+    """«в моих деньгах это как 2 кобры, а в ваших и с скидками 3» — болтовня о ценности, не вопрос."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж\w*|как\s+(?:купить|настро|замен|почин|собрать|подключ))\b", t
+    ):
+        return False
+    if re.search(r"\bсколько\s+стоит\b", t):
+        return False
+    money_worth = bool(
+        re.search(r"\bв\s+(?:моих|ваших|твоих|наших|его|её|ее|их)\s+деньг\w*\b", t)
+        or re.search(r"\bв\s+пересч[её]те\s+на\b", t)
+    )
+    if not money_worth:
+        return False
+    compare = bool(
+        re.search(r"\bкак\b", t)
+        or re.search(r"\bскидк\w*\b", t)
+        or re.search(r"\b(?:кобр\w*|kobra\w*|принтер\w*)\b", t)
+    )
+    return compare
+
+
+def _is_design_feature_car_sarcasm(text: str) -> bool:
+    """«а если у него дверь в машине кривая — тоже особенность конструкции?» — сарказм-аналогия, не вопрос."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж\w*|как\s+(?:настро|исправ|убрать|почин|замен))\b", t
+    ):
+        return False
+    design = bool(
+        re.search(r"\bособенност\w*\s+конструкци\w*\b", t)
+        or re.search(r"\bконструктивн\w*\s+особенност\w*\b", t)
+    )
+    if not design:
+        return False
+    sarcasm_frame = bool(re.search(r"\bтоже\b", t) or re.search(r"\b(?:а\s+)?если\b", t))
+    analogy = bool(
+        re.search(r"\b(?:машин\w*|авто\w*|тачк\w*|телефон\w*|холодильник\w*|чайник\w*)\b", t)
+    )
+    return sarcasm_frame and analogy
+
+
 def _is_non_wiki_chatter_message(text: str) -> bool:
     """Сообщения чата, на которые бот не отвечает из вики."""
     return (
         _topic_is_marketplace_commerce_intent(text)
+        or _is_relay_to_peer_chatter(text)
+        or _is_money_worth_banter(text)
+        or _is_design_feature_car_sarcasm(text)
         or _is_peer_claim_debate_relay(text)
         or _is_peer_social_printer_question(text)
         or _is_peer_diagnostic_interrogation(text)
