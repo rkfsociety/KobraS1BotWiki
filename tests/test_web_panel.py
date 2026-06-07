@@ -45,7 +45,12 @@ def panel(monkeypatch, tmp_path):
     # Изолируем файл ручных ответов, чтобы тесты не трогали data/manual_qa.json в репозитории.
     qa_file = tmp_path / "manual_qa.json"
     monkeypatch.setattr("app.bot.manual_qa._manual_qa_path", lambda: qa_file)
+    # Изолируем .env, чтобы тесты не трогали реальный файл в репозитории.
+    env_file = tmp_path / ".env"
+    env_file.write_bytes(b"MIN_SCORE=72\nQUESTIONS_ONLY=true\nWIKI_BASE_URL=https://w\n")
+    monkeypatch.setattr("app.web_panel._env_file_path", lambda: env_file)
     app = _StubApp()
+    app.bot_data["_test_env_file"] = env_file
     srv = start_web_panel(app, _StubSettings())
     assert srv is not None
     time.sleep(0.1)
@@ -413,3 +418,86 @@ def test_cmd_start_non_admin_denied():
     )
     asyncio.run(cmd_start(upd, ctx))
     assert get_code_status(app, code) == "denied"
+
+
+# ---------------- Настройки (.env) ----------------
+
+
+def _login_and_get_csrf(port: int, path: str) -> tuple[http.client.HTTPConnection, str, str]:
+    import re
+
+    c = _conn(port)
+    ck = _login(c)
+    c.request("GET", path, headers={"Cookie": ck})
+    r = c.getresponse()
+    page = r.read().decode("utf-8")
+    m = re.search(r'name="csrf" value="([^"]+)"', page)
+    assert m
+    return c, ck, m.group(1)
+
+
+def test_config_page_renders(panel):
+    _app, port = panel
+    c, ck, _csrf = _login_and_get_csrf(port, "/config")
+    c.request("GET", "/config", headers={"Cookie": ck})
+    r = c.getresponse()
+    body = r.read().decode("utf-8")
+    assert r.status == 200
+    assert "MIN_SCORE" in body
+    assert 'value="72"' in body  # текущее значение из .env
+
+
+def test_config_save_updates_env(panel):
+    from urllib.parse import urlencode
+
+    app, port = panel
+    env_file = app.bot_data["_test_env_file"]
+    c, ck, csrf = _login_and_get_csrf(port, "/config")
+    payload = urlencode({"csrf": csrf, "action": "save", "MIN_SCORE": "90", "QUESTIONS_ONLY": "true"})
+    c.request(
+        "POST", "/config/save", payload,
+        {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
+    )
+    r = c.getresponse()
+    assert r.status == 200
+    r.read()
+    text = env_file.read_text(encoding="utf-8")
+    assert "MIN_SCORE=90" in text
+    # токен бота не появляется и не трогается
+    assert "TELEGRAM_BOT_TOKEN" not in text
+
+
+def test_config_save_invalid_int_rejected(panel):
+    from urllib.parse import urlencode
+
+    app, port = panel
+    env_file = app.bot_data["_test_env_file"]
+    before = env_file.read_text(encoding="utf-8")
+    c, ck, csrf = _login_and_get_csrf(port, "/config")
+    payload = urlencode({"csrf": csrf, "action": "save", "MIN_SCORE": "abc"})
+    c.request(
+        "POST", "/config/save", payload,
+        {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
+    )
+    r = c.getresponse()
+    assert r.status == 400
+    r.read()
+    assert env_file.read_text(encoding="utf-8") == before  # ничего не записано
+
+
+def test_config_save_secret_blank_keeps_value(panel):
+    from urllib.parse import urlencode
+
+    app, port = panel
+    env_file = app.bot_data["_test_env_file"]
+    env_file.write_bytes(b"MIN_SCORE=72\nPANEL_PASSWORD=oldpass\n")
+    c, ck, csrf = _login_and_get_csrf(port, "/config")
+    # пустой пароль не должен затирать существующий
+    payload = urlencode({"csrf": csrf, "action": "save", "MIN_SCORE": "72", "PANEL_PASSWORD": ""})
+    c.request(
+        "POST", "/config/save", payload,
+        {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
+    )
+    r = c.getresponse()
+    r.read()
+    assert "PANEL_PASSWORD=oldpass" in env_file.read_text(encoding="utf-8")

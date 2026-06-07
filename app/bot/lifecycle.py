@@ -179,6 +179,8 @@ def main() -> None:
         me = await application.bot.get_me()
         application.bot_data["bot_username"] = me.username
         application.bot_data["bot_id"] = me.id
+        # Ссылка на основной event-loop — чтобы веб-панель могла запросить перезапуск.
+        application.bot_data["main_loop"] = asyncio.get_running_loop()
         # Каталог ошибок (fallback, если у кода нет отдельной страницы /error-codes/<code>-code)
         try:
             manual = _load_manual_error_codes()
