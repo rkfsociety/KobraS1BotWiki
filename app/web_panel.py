@@ -438,7 +438,14 @@ def _qa_list(state: _PanelState, csrf: str, flash: str = "") -> bytes:
             "</td></tr>"
         )
     table = (
-        "<table><tr><th>#</th><th>Заголовок / ключи</th><th>Ответ</th><th></th></tr>"
+        "<table>"
+        "<colgroup>"
+        '<col style="width:3%">'
+        '<col style="width:28%">'
+        '<col style="width:57%">'
+        '<col style="width:12%">'
+        "</colgroup>"
+        "<tr><th>#</th><th>Заголовок / ключи</th><th>Ответ</th><th></th></tr>"
         + ("".join(rows) or '<tr><td colspan=4 class=muted>Пока пусто</td></tr>')
         + "</table>"
     )
