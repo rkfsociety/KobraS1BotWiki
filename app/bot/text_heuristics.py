@@ -2571,6 +2571,53 @@ def _is_peer_diagnostic_interrogation(text: str) -> bool:
     return bool(_PEER_PAST_PARAM_NOUN_RE.search(t) and _PEER_PAST_QUERY_RE.search(t))
 
 
+_PEER_ACTION_PAST_RE = re.compile(
+    r"\b(?:"
+    r"ставил\w*|поставил\w*|"
+    r"замер\w*л\w*|замерял\w*|мерял\w*|мерил\w*|измерял\w*|измерил\w*|"
+    r"менял\w*|поменял\w*|сменил\w*|заменял\w*|заменил\w*|"
+    r"пробовал\w*|попробовал\w*|пытал\w*|"
+    r"обновлял\w*|обновил\w*|прошивал\w*|перепрошивал\w*|"
+    r"калибровал\w*|откалибровал\w*|"
+    r"проверял\w*|проверил\w*|"
+    r"смотрел\w*|глядел\w*|"
+    r"делал\w*|сделал\w*|"
+    r"брал\w*|заказывал\w*|заказал\w*|покупал\w*|"
+    r"чистил\w*|почистил\w*|сушил\w*|высушил\w*"
+    r")\b",
+    re.I | re.UNICODE,
+)
+
+
+def _is_peer_action_experience_question(text: str) -> bool:
+    """«А ты замерял резонанс?» / «Прошивку 2.7.2.7 ставили?» — спрашивают собеседников об их опыте, не бота."""
+    if not text or not text.strip() or "?" not in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # Явная просьба о помощи / инструкции / собственная проблема — это вопрос к боту.
+    if re.search(
+        r"\b(?:"
+        r"как\s+(?:настро|откалибр|калибр|почин|исправ|сделать|убрать|подключ|замен|поставить|ставить|выставить|задать|обнов|прошить|провер|измер)|"
+        r"что\s+делать|почему|зачем|"
+        r"нужн\w*\s+ли|стоит\s+ли|надо\s+ли|можно\s+ли|"
+        r"как(?:ую|ой|ая|ие|ое)\s+(?:\w+\s+){0,2}(?:ставить|выбрать|брать|прошив)|"
+        r"помогите|помоги|подскаж\w*|"
+        r"у\s+меня|не\s+могу|не\s+получ\w*|не\s+работает|не\s+знаю|не\s+пойму|не\s+понимаю"
+        r")\b",
+        t,
+    ):
+        return False
+    if not _PEER_ACTION_PAST_RE.search(t):
+        return False
+    # Явное обращение к собеседнику.
+    second_person = bool(
+        re.search(r"\b(?:а\s+ты|ты|вы|тебе|вам|у\s+тебя|у\s+вас|твой|тво[яёе]|ваш\w*)\b", t)
+    )
+    # Безличное короткое «X-ли?» — обращено к группе («ставили? пробовали?»).
+    bare_group = len(t.split()) <= 5
+    return second_person or bare_group
+
+
 def _is_filament_feed_test_probe(text: str) -> bool:
     """«Если дать подачу филамента, пластик идёт ровно?» — диагностический вопрос соседу, не к вики."""
     if not text or not text.strip() or "?" not in text:
@@ -2919,6 +2966,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_peer_claim_debate_relay(text)
         or _is_peer_social_printer_question(text)
         or _is_peer_diagnostic_interrogation(text)
+        or _is_peer_action_experience_question(text)
         or _is_filament_feed_test_probe(text)
         or _is_price_negotiation_chatter(text)
         or _is_price_hyperbole_banter(text)
