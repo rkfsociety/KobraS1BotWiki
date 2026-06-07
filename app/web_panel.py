@@ -774,16 +774,7 @@ _CONFIG_SECTIONS: list[tuple[str, list[tuple[str, str, str]]]] = [
         ("REPLY_REVIEW_MENTION", "Упоминание ревьюера в ответах", "str"),
         ("OPS_NOTIFY_CHAT_ID", "Служебный чат (логи/ошибки)", "str"),
     ]),
-    ("Веб-панель", [
-        ("PANEL_ENABLED", "Панель включена", "bool"),
-        ("PANEL_HOST", "Адрес (host)", "str"),
-        ("PANEL_PORT", "Порт", "int"),
-        ("PANEL_TG_LOGIN", "Вход через Telegram", "bool"),
-        ("PANEL_ADMIN_CHAT_ID", "Группа админов панели", "str"),
-        ("PANEL_USERNAME", "Логин (запасной вход)", "str"),
-        ("PANEL_PASSWORD", "Пароль (пусто = не менять)", "secret"),
-        ("PANEL_SESSION_TTL_SECONDS", "Срок сессии, с", "int"),
-    ]),
+    # Веб-панель намеренно скрыта из редактора — меняется только через .env на сервере.
 ]
 
 _TRUTHY = {"1", "true", "yes", "y", "on"}
