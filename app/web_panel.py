@@ -14,18 +14,22 @@
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import html
+import json
 import logging
 import os
 import secrets
 import threading
 import time
+import urllib.request
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 from app.bot.git_autopull import project_repo_root
 from app.bot.manual_qa import (
@@ -41,6 +45,36 @@ log = logging.getLogger(__name__)
 
 _COOKIE_NAME = "panel_session"
 
+# Поля, которые присылает Telegram Login Widget (порядок неважен — сортируем при проверке).
+_TG_FIELDS = ("id", "first_name", "last_name", "username", "photo_url", "auth_date", "hash")
+
+
+def _verify_telegram_auth(data: dict[str, str], bot_token: str, *, max_age: int = 86400) -> tuple[bool, str]:
+    """Проверка подписи данных от Telegram Login Widget (HMAC-SHA256 по sha256(token))."""
+    recv_hash = data.get("hash", "")
+    if not recv_hash:
+        return False, "нет подписи"
+    pairs = sorted(f"{k}={v}" for k, v in data.items() if k != "hash" and v != "")
+    data_check_string = "\n".join(pairs)
+    secret_key = hashlib.sha256(bot_token.encode("utf-8")).digest()
+    calc = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(calc, recv_hash):
+        return False, "подпись не совпала"
+    try:
+        auth_date = int(data.get("auth_date", "0"))
+    except ValueError:
+        auth_date = 0
+    if auth_date <= 0 or (time.time() - auth_date) > max_age:
+        return False, "данные входа устарели, попробуйте снова"
+    return True, ""
+
+
+def _telegram_api(token: str, method: str, params: dict[str, Any]) -> dict[str, Any]:
+    url = f"https://api.telegram.org/bot{token}/{method}?" + urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": "KobraPanel"})
+    with urllib.request.urlopen(req, timeout=10) as r:  # noqa: S310 (доверенный домен api.telegram.org)
+        return json.load(r)
+
 
 class _PanelState:
     """Общее состояние панели: ссылка на бота, настройки, сессии."""
@@ -49,21 +83,45 @@ class _PanelState:
         self.application = application
         self.settings = settings
         self.start_time = time.time()
-        # token -> {"exp": float, "csrf": str}
+        # token -> {"exp": float, "csrf": str, "user": str}
         self.sessions: dict[str, dict[str, Any]] = {}
         # ip -> [timestamps] неудачных попыток входа
         self.login_fails: dict[str, list[float]] = {}
+        # кэш админов группы: {"chat": int, "ids": set[int], "exp": float}
+        self.admin_cache: dict[str, Any] = {}
         self.lock = threading.Lock()
 
     # --- сессии ---
-    def new_session(self) -> tuple[str, str]:
+    def new_session(self, user: str = "") -> tuple[str, str]:
         token = secrets.token_urlsafe(32)
         csrf = secrets.token_urlsafe(16)
         ttl = max(60, int(getattr(self.settings, "panel_session_ttl_seconds", 86400)))
         with self.lock:
-            self.sessions[token] = {"exp": time.time() + ttl, "csrf": csrf}
+            self.sessions[token] = {"exp": time.time() + ttl, "csrf": csrf, "user": user}
             self._gc_locked()
         return token, csrf
+
+    def admin_ids(self, token: str, chat_id: int, *, ttl: int = 60) -> tuple[set[int] | None, str | None]:
+        """Множество user_id админов группы (с кэшем). Возвращает (ids, ошибка)."""
+        with self.lock:
+            c = self.admin_cache
+            if c and c.get("chat") == chat_id and c.get("exp", 0) > time.time():
+                return set(c["ids"]), None
+        try:
+            resp = _telegram_api(token, "getChatAdministrators", {"chat_id": chat_id})
+        except Exception as e:  # noqa: BLE001
+            return None, f"не удалось получить список админов: {e}"
+        if not resp.get("ok"):
+            return None, f"Telegram: {resp.get('description', 'ошибка')}"
+        ids: set[int] = set()
+        for m in resp.get("result", []):
+            u = m.get("user") or {}
+            uid = u.get("id")
+            if uid is not None and not u.get("is_bot"):
+                ids.add(int(uid))
+        with self.lock:
+            self.admin_cache = {"chat": chat_id, "ids": set(ids), "exp": time.time() + ttl}
+        return ids, None
 
     def get_session(self, token: str | None) -> dict[str, Any] | None:
         if not token:
@@ -187,15 +245,54 @@ def _layout(state: _PanelState, body: str, *, title: str = "Панель бот�
 
 def _login_page(state: _PanelState, *, error: str = "") -> bytes:
     err = f'<div class="flash err">{html.escape(error)}</div>' if error else ""
+    bd = state.application.bot_data if state.application else {}
+    bot_user = bd.get("bot_username")
+    st = state.settings
+    tg_enabled = bool(
+        getattr(st, "panel_tg_login", False)
+        and bot_user
+        and getattr(st, "panel_admin_chat_id", None)
+        and getattr(st, "telegram_bot_token", "")
+    )
+    pwd_enabled = bool(getattr(st, "panel_password", ""))
+
+    tg_block = ""
+    if tg_enabled:
+        tg_block = (
+            '<p class="muted">Доступ только у админов группы. Войдите своим Telegram:</p>'
+            '<div style="margin:12px 0">'
+            '<script async src="https://telegram.org/js/telegram-widget.js?22" '
+            f'data-telegram-login="{html.escape(str(bot_user))}" data-size="large" '
+            'data-onauth="onTgAuth(user)" data-request-access="write"></script>'
+            "</div>"
+            '<form id="tgform" method="post" action="/tg-auth"></form>'
+            "<script>function onTgAuth(u){var f=document.getElementById('tgform');"
+            "['id','first_name','last_name','username','photo_url','auth_date','hash']"
+            ".forEach(function(k){if(u[k]!==undefined&&u[k]!==null){"
+            "var i=document.createElement('input');i.type='hidden';i.name=k;i.value=u[k];"
+            "f.appendChild(i);}});f.submit();}</script>"
+        )
+
+    pwd_block = ""
+    if pwd_enabled:
+        sep = '<div class="muted" style="text-align:center;margin:14px 0">— или —</div>' if tg_block else ""
+        pwd_block = (
+            f"{sep}"
+            '<form method="post" action="/login">'
+            '<label>Логин</label><input type="text" name="username">'
+            '<label>Пароль</label><input type="password" name="password">'
+            '<div style="margin-top:16px"><button type="submit">Войти по паролю</button></div>'
+            "</form>"
+        )
+
+    if not tg_block and not pwd_block:
+        pwd_block = '<p class="muted">Способы входа не настроены (PANEL_TG_LOGIN / PANEL_PASSWORD).</p>'
+
     body = (
         '<div class="login-wrap"><div class="card">'
-        '<h2>Вход в панель</h2>'
-        f"{err}"
-        '<form method="post" action="/login">'
-        '<label>Логин</label><input type="text" name="username" autofocus>'
-        '<label>Пароль</label><input type="password" name="password">'
-        '<div style="margin-top:16px"><button type="submit">Войти</button></div>'
-        '</form></div></div>'
+        "<h2>Вход в панель</h2>"
+        f"{err}{tg_block}{pwd_block}"
+        "</div></div>"
     )
     page = (
         "<!doctype html><html lang=ru><head><meta charset=utf-8>"
@@ -483,6 +580,10 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 expire = f"{_COOKIE_NAME}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"
                 self._redirect("/login", cookie=expire)
                 return
+            if path == "/tg-auth":
+                # Telegram может отдавать данные и через GET (data-auth-url).
+                self._handle_tg_auth({k: (v[0] if v else "") for k, v in qs.items()})
+                return
 
             sess = self._require_auth()
             if sess is None:
@@ -517,6 +618,9 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
 
             if path == "/login":
                 self._handle_login()
+                return
+            if path == "/tg-auth":
+                self._handle_tg_auth(self._read_form())
                 return
 
             sess = self._require_auth()
@@ -558,11 +662,54 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 self._send(_login_page(state, error="Неверный логин или пароль."), status=401)
                 return
             state.clear_login_fails(ip)
-            token, _csrf = state.new_session()
+            token, _csrf = state.new_session(user=exp_user)
+            log.info("panel: вход по паролю с %s", ip)
+            self._redirect("/", cookie=self._session_cookie(token))
+
+        def _session_cookie(self, token: str) -> str:
             ttl = max(60, int(getattr(state.settings, "panel_session_ttl_seconds", 86400)))
-            cookie = f"{_COOKIE_NAME}={token}; Path=/; Max-Age={ttl}; HttpOnly; SameSite=Lax"
-            log.info("panel: вход выполнен с %s", ip)
-            self._redirect("/", cookie=cookie)
+            return f"{_COOKIE_NAME}={token}; Path=/; Max-Age={ttl}; HttpOnly; SameSite=Lax"
+
+        def _handle_tg_auth(self, data: dict[str, str]) -> None:
+            ip = self._client_ip()
+            st = state.settings
+            chat_id = getattr(st, "panel_admin_chat_id", None)
+            token_str = getattr(st, "telegram_bot_token", "")
+            if not getattr(st, "panel_tg_login", False) or not chat_id or not token_str:
+                self._send(_login_page(state, error="Вход через Telegram не настроен."), status=403)
+                return
+            if state.login_blocked(ip):
+                self._send(_login_page(state, error="Слишком много попыток. Подождите 5 минут."), status=429)
+                return
+            ok, why = _verify_telegram_auth(data, token_str)
+            if not ok:
+                state.record_login_fail(ip)
+                log.warning("panel: tg-вход отклонён (%s) с %s", why, ip)
+                self._send(_login_page(state, error=f"Telegram: {why}"), status=401)
+                return
+            try:
+                uid = int(data.get("id", "0") or 0)
+            except ValueError:
+                uid = 0
+            admin_ids, err = state.admin_ids(token_str, int(chat_id))
+            if err:
+                log.warning("panel: проверка админов не удалась: %s", err)
+                self._send(_login_page(state, error=err), status=502)
+                return
+            if uid not in (admin_ids or set()):
+                state.record_login_fail(ip)
+                log.warning("panel: tg-вход отклонён, не админ uid=%s", uid)
+                self._send(
+                    _login_page(state, error="Вы не администратор нужной группы — доступ запрещён."),
+                    status=403,
+                )
+                return
+            state.clear_login_fails(ip)
+            uname = data.get("username", "")
+            label = f"@{uname}" if uname else (data.get("first_name") or str(uid))
+            token, _csrf = state.new_session(user=label)
+            log.info("panel: tg-вход uid=%s %s с %s", uid, label, ip)
+            self._redirect("/", cookie=self._session_cookie(token))
 
         def _flash(self, ok: bool, msg: str) -> str:
             cls = "ok" if ok else "err"
@@ -661,8 +808,17 @@ def start_web_panel(application: Any, settings: Any) -> ThreadingHTTPServer | No
     """Запускает веб-панель в фоновом потоке. Возвращает сервер или None (если выключена)."""
     if not getattr(settings, "panel_enabled", False):
         return None
-    if not getattr(settings, "panel_password", ""):
-        log.warning("Веб-панель включена, но PANEL_PASSWORD не задан — панель не запущена.")
+    has_pwd = bool(getattr(settings, "panel_password", ""))
+    has_tg = bool(
+        getattr(settings, "panel_tg_login", False)
+        and getattr(settings, "panel_admin_chat_id", None)
+        and getattr(settings, "telegram_bot_token", "")
+    )
+    if not (has_pwd or has_tg):
+        log.warning(
+            "Веб-панель включена, но не настроен вход: задайте PANEL_PASSWORD "
+            "и/или оставьте PANEL_TG_LOGIN с PANEL_ADMIN_CHAT_ID. Панель не запущена."
+        )
         return None
 
     state = _PanelState(application, settings)

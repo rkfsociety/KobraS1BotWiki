@@ -234,6 +234,12 @@ class Settings:
     #: Срок жизни сессии входа, сек (PANEL_SESSION_TTL_SECONDS)
     panel_session_ttl_seconds: int
 
+    #: Вход через Telegram Login Widget (PANEL_TG_LOGIN). Нужен домен в @BotFather (/setdomain).
+    panel_tg_login: bool
+
+    #: Группа, чьи админы могут войти в панель (PANEL_ADMIN_CHAT_ID). None = TG-вход выключен.
+    panel_admin_chat_id: int | None
+
 
 
 
@@ -481,6 +487,18 @@ def load_settings() -> Settings:
     panel_port = _get_int("PANEL_PORT", 8080)
     panel_username = (os.getenv("PANEL_USERNAME") or "admin").strip() or "admin"
     panel_session_ttl_seconds = max(60, _get_int("PANEL_SESSION_TTL_SECONDS", 86400))
+    panel_tg_login = _get_bool("PANEL_TG_LOGIN", True)
+    raw_panel_chat = (os.getenv("PANEL_ADMIN_CHAT_ID") or "").strip()
+    if raw_panel_chat.lower() in ("0", "off", "false", "no", "-"):
+        panel_admin_chat_id = None
+    elif raw_panel_chat:
+        try:
+            panel_admin_chat_id = int(raw_panel_chat)
+        except ValueError:
+            logging.warning("Некорректный PANEL_ADMIN_CHAT_ID, TG-вход в панель выключен")
+            panel_admin_chat_id = None
+    else:
+        panel_admin_chat_id = -1003881305021
 
 
 
@@ -641,6 +659,10 @@ def load_settings() -> Settings:
         panel_password=panel_password,
 
         panel_session_ttl_seconds=panel_session_ttl_seconds,
+
+        panel_tg_login=panel_tg_login,
+
+        panel_admin_chat_id=panel_admin_chat_id,
 
     )
 
