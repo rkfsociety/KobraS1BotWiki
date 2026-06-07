@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import sys
+import threading
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -42,6 +43,7 @@ from app.bot.handlers import (
     on_message,
 )
 from app.bot.manual_qa import load_manual_qa_store
+from app.bot.panel_login import cmd_start
 from app.bot.reactions import on_message_reaction
 from app.bot.ops_notify import notify_ops
 from app.bot.telegram_log_mirror import attach_telegram_log_mirror, flush_telegram_log_mirror
@@ -145,6 +147,10 @@ def main() -> None:
         app.bot_data["manual_qa_entries"] = load_manual_qa_store()
     except Exception:
         app.bot_data["manual_qa_entries"] = []
+    # Стор одноразовых кодов входа в веб-панель (общий для бота и потока панели).
+    app.bot_data["panel_login_codes"] = {}
+    app.bot_data["panel_login_lock"] = threading.Lock()
+    app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CommandHandler("id", cmd_id))
     app.add_handler(CommandHandler("admincheck", cmd_admincheck))

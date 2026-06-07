@@ -32,6 +32,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
 from app.bot.git_autopull import project_repo_root
+from app.bot.panel_login import consume_authorized, create_login_code, get_code_status
 from app.bot.manual_qa import (
     add_manual_qa_entry,
     delete_manual_qa_by_index,
@@ -259,18 +260,10 @@ def _login_page(state: _PanelState, *, error: str = "") -> bytes:
     tg_block = ""
     if tg_enabled:
         tg_block = (
-            '<p class="muted">Доступ только у админов группы. Войдите своим Telegram:</p>'
-            '<div style="margin:12px 0">'
-            '<script async src="https://telegram.org/js/telegram-widget.js?22" '
-            f'data-telegram-login="{html.escape(str(bot_user))}" data-size="large" '
-            'data-onauth="onTgAuth(user)" data-request-access="write"></script>'
-            "</div>"
-            '<form id="tgform" method="post" action="/tg-auth"></form>'
-            "<script>function onTgAuth(u){var f=document.getElementById('tgform');"
-            "['id','first_name','last_name','username','photo_url','auth_date','hash']"
-            ".forEach(function(k){if(u[k]!==undefined&&u[k]!==null){"
-            "var i=document.createElement('input');i.type='hidden';i.name=k;i.value=u[k];"
-            "f.appendChild(i);}});f.submit();}</script>"
+            '<p class="muted">Доступ только у администраторов группы. Вход через бота — домен не нужен:</p>'
+            '<form method="post" action="/bot-login/new" style="margin:8px 0 4px">'
+            '<button type="submit">🔐 Войти через Telegram-бота</button>'
+            "</form>"
         )
 
     pwd_block = ""
@@ -298,6 +291,43 @@ def _login_page(state: _PanelState, *, error: str = "") -> bytes:
         "<!doctype html><html lang=ru><head><meta charset=utf-8>"
         '<meta name=viewport content="width=device-width, initial-scale=1">'
         f"<title>Вход</title><style>{_CSS}</style></head><body><main>{body}</main></body></html>"
+    )
+    return page.encode("utf-8")
+
+
+def _bot_login_wait_page(bot_user: str, code: str) -> bytes:
+    deep_link = f"https://t.me/{bot_user}?start={code}"
+    body = (
+        '<div class="login-wrap"><div class="card">'
+        "<h2>Вход через бота</h2>"
+        "<ol class=muted style='padding-left:18px;line-height:1.7'>"
+        "<li>Нажмите кнопку — откроется бот.</li>"
+        "<li>В боте нажмите <b>Start</b> (Запустить).</li>"
+        "<li>Вернитесь сюда — страница откроется сама.</li>"
+        "</ol>"
+        f'<a class="btn" href="{html.escape(deep_link)}" target="_blank" rel="noopener" '
+        'style="display:inline-block;margin:6px 0 12px">Открыть бота</a>'
+        '<p id="st" class="muted">Ожидание подтверждения…</p>'
+        '<p><a href="/login">← назад</a></p>'
+        "</div></div>"
+        "<script>"
+        f"var code={json.dumps(code)};"
+        "function poll(){fetch('/bot-login/status?code='+encodeURIComponent(code))"
+        ".then(function(r){return r.text()}).then(function(s){"
+        "var el=document.getElementById('st');"
+        "if(s==='authorized'){el.textContent='Готово, входим…';"
+        "location='/bot-login/finish?code='+encodeURIComponent(code);}"
+        "else if(s==='denied'){el.textContent='⛔ Отказано: вы не администратор группы.';}"
+        "else if(s==='expired'){el.textContent='Срок действия истёк. Обновите страницу и начните заново.';}"
+        "else{setTimeout(poll,2000);}"
+        "}).catch(function(){setTimeout(poll,3000);});}"
+        "setTimeout(poll,2000);"
+        "</script>"
+    )
+    page = (
+        "<!doctype html><html lang=ru><head><meta charset=utf-8>"
+        '<meta name=viewport content="width=device-width, initial-scale=1">'
+        f"<title>Вход через бота</title><style>{_CSS}</style></head><body><main>{body}</main></body></html>"
     )
     return page.encode("utf-8")
 
@@ -528,9 +558,16 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             data = parse_qs(raw, keep_blank_values=True)
             return {k: (v[0] if v else "") for k, v in data.items()}
 
-        def _send(self, body: bytes, *, status: int = 200, headers: dict[str, str] | None = None) -> None:
+        def _send(
+            self,
+            body: bytes,
+            *,
+            status: int = 200,
+            content_type: str = "text/html; charset=utf-8",
+            headers: dict[str, str] | None = None,
+        ) -> None:
             self.send_response(status)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(body)))
             self.send_header("X-Content-Type-Options", "nosniff")
             for k, v in (headers or {}).items():
@@ -584,6 +621,14 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 # Telegram может отдавать данные и через GET (data-auth-url).
                 self._handle_tg_auth({k: (v[0] if v else "") for k, v in qs.items()})
                 return
+            if path == "/bot-login/status":
+                code = (qs.get("code") or [""])[0]
+                status = get_code_status(state.application, code) if (state.application and code) else "expired"
+                self._send(status.encode("utf-8"), content_type="text/plain; charset=utf-8")
+                return
+            if path == "/bot-login/finish":
+                self._bot_login_finish((qs.get("code") or [""])[0])
+                return
 
             sess = self._require_auth()
             if sess is None:
@@ -621,6 +666,9 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 return
             if path == "/tg-auth":
                 self._handle_tg_auth(self._read_form())
+                return
+            if path == "/bot-login/new":
+                self._bot_login_new()
                 return
 
             sess = self._require_auth()
@@ -710,6 +758,49 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             token, _csrf = state.new_session(user=label)
             log.info("panel: tg-вход uid=%s %s с %s", uid, label, ip)
             self._redirect("/", cookie=self._session_cookie(token))
+
+        def _bot_login_new(self) -> None:
+            st = state.settings
+            bd = state.application.bot_data if state.application else {}
+            bot_user = bd.get("bot_username")
+            if not (getattr(st, "panel_tg_login", False) and getattr(st, "panel_admin_chat_id", None)):
+                self._send(_login_page(state, error="Вход через Telegram не настроен."), status=403)
+                return
+            if not bot_user:
+                self._send(_login_page(state, error="Бот ещё запускается, попробуйте через пару секунд."), status=503)
+                return
+            nonce = secrets.token_urlsafe(24)
+            code = create_login_code(state.application, nonce)
+            ttl = 600
+            cookie = f"panel_login_nonce={nonce}; Path=/; Max-Age={ttl}; HttpOnly; SameSite=Lax"
+            self._send(_bot_login_wait_page(str(bot_user), code), headers={"Set-Cookie": cookie})
+
+        def _bot_login_finish(self, code: str) -> None:
+            if not code or state.application is None:
+                self._send(_login_page(state, error="Не удалось завершить вход."), status=400)
+                return
+            cookie = SimpleCookie(self.headers.get("Cookie", ""))
+            nonce = cookie["panel_login_nonce"].value if "panel_login_nonce" in cookie else ""
+            info, err = consume_authorized(state.application, code, nonce)
+            if err or not info:
+                msg = {
+                    "denied": "Доступ запрещён: вы не администратор группы.",
+                    "expired": "Срок действия истёк, начните вход заново.",
+                    "nonce": "Вход нужно завершать в том же браузере, где он начат.",
+                    "pending": "Вход ещё не подтверждён в боте.",
+                    "consumed": "Эта ссылка входа уже использована.",
+                }.get(err or "", "Не удалось завершить вход.")
+                self._send(_login_page(state, error=msg), status=403)
+                return
+            token, _csrf = state.new_session(user=str(info.get("user") or ""))
+            clear_nonce = "panel_login_nonce=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"
+            self.send_response(HTTPStatus.SEE_OTHER)
+            self.send_header("Location", "/")
+            self.send_header("Set-Cookie", self._session_cookie(token))
+            self.send_header("Set-Cookie", clear_nonce)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            log.info("panel: вход через бота %s", info.get("user"))
 
         def _flash(self, ok: bool, msg: str) -> str:
             cls = "ok" if ok else "err"

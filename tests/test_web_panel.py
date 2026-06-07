@@ -265,3 +265,151 @@ def test_tg_auth_bad_signature_rejected(panel):
     r = c.getresponse()
     assert r.status == 401
     r.read()
+
+
+# ---------------- Вход через бота (без домена) ----------------
+
+
+def _start_bot_login(port: int) -> tuple[str, str]:
+    """POST /bot-login/new → (code, nonce_cookie)."""
+    import re
+
+    c = _conn(port)
+    c.request("POST", "/bot-login/new", "", {"Content-Type": "application/x-www-form-urlencoded"})
+    r = c.getresponse()
+    assert r.status == 200
+    cookie = r.getheader("Set-Cookie")
+    body = r.read().decode("utf-8")
+    assert cookie and "panel_login_nonce=" in cookie
+    m = re.search(r'var code=("[^"]+")', body)
+    assert m
+    import json as _j
+
+    code = _j.loads(m.group(1))
+    return code, cookie.split(";")[0]
+
+
+def test_bot_login_helpers_flow():
+    from app.bot.panel_login import consume_authorized, create_login_code, get_code_status
+
+    app = _StubApp()
+    code = create_login_code(app, "nonceAAA")
+    assert get_code_status(app, code) == "pending"
+    # неподтверждённый код нельзя использовать
+    info, err = consume_authorized(app, code, "nonceAAA")
+    assert info is None and err == "pending"
+    # бот подтвердил
+    app.bot_data["panel_login_codes"][code].update(status="authorized", uid=111, user="@adm")
+    assert get_code_status(app, code) == "authorized"
+    # неверный nonce — отказ
+    info, err = consume_authorized(app, code, "WRONG")
+    assert info is None and err == "nonce"
+    # верный nonce — успех, и повторно уже нельзя
+    info, err = consume_authorized(app, code, "nonceAAA")
+    assert info and info["uid"] == 111
+    info2, err2 = consume_authorized(app, code, "nonceAAA")
+    assert info2 is None and err2 == "consumed"
+
+
+def test_bot_login_full_http_flow(panel):
+    app, port = panel
+    code, nonce_ck = _start_bot_login(port)
+    # статус до подтверждения
+    c = _conn(port)
+    c.request("GET", f"/bot-login/status?code={code}")
+    r = c.getresponse()
+    assert r.read().decode() == "pending"
+    # эмулируем подтверждение ботом
+    app.bot_data["panel_login_codes"][code].update(status="authorized", uid=111, user="@adm")
+    c.request("GET", f"/bot-login/status?code={code}")
+    r = c.getresponse()
+    assert r.read().decode() == "authorized"
+    # finish без nonce-cookie → отказ
+    c.request("GET", f"/bot-login/finish?code={code}")
+    r = c.getresponse()
+    assert r.status == 403
+    r.read()
+    # finish с правильным nonce → сессия
+    code2, nonce_ck2 = _start_bot_login(port)
+    app.bot_data["panel_login_codes"][code2].update(status="authorized", uid=111, user="@adm")
+    c.request("GET", f"/bot-login/finish?code={code2}", headers={"Cookie": nonce_ck2})
+    r = c.getresponse()
+    assert r.status == 303
+    set_cookie = r.getheader("Set-Cookie")
+    r.read()
+    assert set_cookie and "panel_session=" in set_cookie
+    sess_ck = set_cookie.split(";")[0]
+    c.request("GET", "/", headers={"Cookie": sess_ck})
+    r = c.getresponse()
+    assert r.status == 200
+    r.read()
+
+
+def test_cmd_start_admin_authorizes_code():
+    import asyncio
+
+    from telegram.constants import ChatMemberStatus
+
+    from app.bot.panel_login import cmd_start, create_login_code, get_code_status
+
+    app = _StubApp()
+    app.bot_data["settings"] = _StubSettings()
+    code = create_login_code(app, "nonceX")
+
+    class _Msg:
+        def __init__(self):
+            self.replies = []
+
+        async def reply_text(self, text):
+            self.replies.append(text)
+
+    class _User:
+        id = 111
+        username = "adm"
+        full_name = "Adm"
+
+    class _Bot:
+        async def get_chat_member(self, chat_id, user_id):
+            return types.SimpleNamespace(status=ChatMemberStatus.ADMINISTRATOR)
+
+    msg = _Msg()
+    ctx = types.SimpleNamespace(
+        args=[code], application=types.SimpleNamespace(bot_data=app.bot_data), bot=_Bot()
+    )
+    upd = types.SimpleNamespace(effective_message=msg, effective_user=_User())
+    asyncio.run(cmd_start(upd, ctx))
+    assert get_code_status(app, code) == "authorized"
+    assert any("подтвержд" in t.lower() for t in msg.replies)
+
+
+def test_cmd_start_non_admin_denied():
+    import asyncio
+
+    from telegram.constants import ChatMemberStatus
+
+    from app.bot.panel_login import cmd_start, create_login_code, get_code_status
+
+    app = _StubApp()
+    app.bot_data["settings"] = _StubSettings()
+    code = create_login_code(app, "nonceY")
+
+    class _Msg:
+        def __init__(self):
+            self.replies = []
+
+        async def reply_text(self, text):
+            self.replies.append(text)
+
+    class _Bot:
+        async def get_chat_member(self, chat_id, user_id):
+            return types.SimpleNamespace(status=ChatMemberStatus.MEMBER)
+
+    msg = _Msg()
+    ctx = types.SimpleNamespace(
+        args=[code], application=types.SimpleNamespace(bot_data=app.bot_data), bot=_Bot()
+    )
+    upd = types.SimpleNamespace(
+        effective_message=msg, effective_user=types.SimpleNamespace(id=999, username="x", full_name="X")
+    )
+    asyncio.run(cmd_start(upd, ctx))
+    assert get_code_status(app, code) == "denied"
