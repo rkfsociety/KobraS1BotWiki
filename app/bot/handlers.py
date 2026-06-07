@@ -120,8 +120,6 @@ from app.bot.text_heuristics import (
 
     _model_slug_hints,
 
-    _needs_model_clarification,
-
 )
 
 from app.bot.wiki_ranking import (

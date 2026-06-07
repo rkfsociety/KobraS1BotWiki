@@ -218,6 +218,22 @@ class Settings:
     #: Логировать негативную реакцию только если её поставил админ/разработчик (REACTION_LOG_ADMIN_ONLY)
     reaction_log_admin_only: bool
 
+    #: Веб-панель администратора (PANEL_ENABLED). По умолчанию включается, если задан PANEL_PASSWORD.
+    panel_enabled: bool
+
+    #: Адрес и порт панели (PANEL_HOST / PANEL_PORT)
+    panel_host: str
+
+    panel_port: int
+
+    #: Логин и пароль входа (PANEL_USERNAME / PANEL_PASSWORD). Пустой пароль = панель не стартует.
+    panel_username: str
+
+    panel_password: str
+
+    #: Срок жизни сессии входа, сек (PANEL_SESSION_TTL_SECONDS)
+    panel_session_ttl_seconds: int
+
 
 
 
@@ -458,6 +474,16 @@ def load_settings() -> Settings:
 
 
 
+    # Веб-панель администратора
+    panel_password = (os.getenv("PANEL_PASSWORD") or "").strip()
+    panel_enabled = _get_bool("PANEL_ENABLED", bool(panel_password))
+    panel_host = (os.getenv("PANEL_HOST") or "0.0.0.0").strip() or "0.0.0.0"
+    panel_port = _get_int("PANEL_PORT", 8080)
+    panel_username = (os.getenv("PANEL_USERNAME") or "admin").strip() or "admin"
+    panel_session_ttl_seconds = max(60, _get_int("PANEL_SESSION_TTL_SECONDS", 86400))
+
+
+
     # Загрузка списка разрешённых chat_id и topic_id из переменных окружения
 
     # ALLOWED_CHAT_IDS: список ID чатов через запятую (например, "123456789,-987654321")
@@ -603,6 +629,18 @@ def load_settings() -> Settings:
         negative_reaction_emojis=negative_reaction_emojis,
 
         reaction_log_admin_only=reaction_log_admin_only,
+
+        panel_enabled=panel_enabled,
+
+        panel_host=panel_host,
+
+        panel_port=panel_port,
+
+        panel_username=panel_username,
+
+        panel_password=panel_password,
+
+        panel_session_ttl_seconds=panel_session_ttl_seconds,
 
     )
 

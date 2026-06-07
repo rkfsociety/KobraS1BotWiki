@@ -376,6 +376,17 @@ def main() -> None:
         )
 
     app.post_init = _post_init  # type: ignore[attr-defined]
+
+    # Веб-панель администратора (фоновый поток, тот же процесс). Включается через PANEL_*.
+    try:
+        from app.web_panel import start_web_panel
+
+        panel = start_web_panel(app, settings)
+        if panel is not None:
+            app.bot_data["web_panel"] = panel
+    except Exception as e:
+        logging.warning("Не удалось запустить веб-панель: %s", e)
+
     # Важно: после перезапуска не "догоняем" накопившиеся сообщения.
     # Telegram отдаёт накопленные updates при polling — drop_pending_updates их сбрасывает.
     app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
