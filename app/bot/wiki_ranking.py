@@ -44,6 +44,8 @@ from app.bot.text_heuristics import (
 
     _is_combo_ace_marketplace_chat,
 
+    _is_multicolor_flow_calibration_chat,
+
     _is_ace_unit_trade_banter,
 
     _is_other_printer_maintenance_story,
@@ -1039,6 +1041,11 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
     if _is_filament_tolerance_banter(question) and "filament-guide" in url.lower():
         return False
+
+    if _is_multicolor_flow_calibration_chat(question):
+        u = url.lower().replace("_", "-")
+        if "print-tpu" in u or "filament-guide" in u or "filament-and-resin" in u:
+            return False
 
     if _is_combo_ace_marketplace_chat(question) and "filament-replacement" in url.lower():
         return False

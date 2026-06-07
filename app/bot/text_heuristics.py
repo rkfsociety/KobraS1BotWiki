@@ -3502,11 +3502,46 @@ def _topic_is_filament_material_choice_intent(text: str | None) -> bool:
     return wants_choice or stock_nozzle_ctx
 
 
+def _is_multicolor_flow_calibration_chat(text: str | None) -> bool:
+    """Вопрос про работу авто-калибровки потока в многоцветной печати — в вики нет ответа.
+
+    Например: «будет ли калибровать поток для каждого пластика при многоцветной печати?».
+    Здесь «пластик» — обобщённо («для каждого пластика»), а не конкретный материал,
+    поэтому это не настройки слайсинга под PETG/TPU и не выбор филамента.
+    """
+    if not text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    has_flow_calib = bool(
+        (re.search(r"\bкалибр\w*", t) and re.search(r"\bпоток\w*", t))
+        or re.search(r"flow\s+calibrat", t)
+    )
+    if not has_flow_calib:
+        return False
+    multicolor = bool(
+        re.search(
+            r"\b(?:многоцвет\w*|много\s+цвет\w*|мультиколор|multi[\s-]?color|multicolor|"
+            r"разн\w*\s+цвет\w*|неск\w*\s+цвет\w*)\b",
+            t,
+        )
+    )
+    if not multicolor:
+        return False
+    # Конкретный материал в вопросе — это уже про настройки под него, не общий вопрос о фиче.
+    # Токены анкерим по границам слова, чтобы «пла» не цеплялось к «пластик».
+    specific_material = bool(
+        re.search(r"\b(?:тпу|tpu|петг|petg|пла|pla|abs|абс|nylon|нейлон)\b", t)
+    )
+    return not specific_material
+
+
 def _topic_is_filament_slicing_settings_intent(text: str | None) -> bool:
     """Параметры нарезки/печати под материал (PETG, TPU) — не уточнение модели принтера."""
     if not text:
         return False
     if _is_third_party_filament_brand_chat(text):
+        return False
+    if _is_multicolor_flow_calibration_chat(text):
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
     if _topic_is_marketplace_commerce_intent(text):
