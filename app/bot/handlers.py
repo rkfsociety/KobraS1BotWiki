@@ -80,6 +80,16 @@ from app.bot.i18n import _detect_user_lang, _lang_from_message, _t, format_wiki_
 
 from app.bot.reply_logging import add_to_recent_replies, log_bot_reply_for_message
 
+from app.bot.user_context import (
+
+    enrich_query as _enrich_ctx_query,
+
+    record_bot_answer as _record_bot_ans,
+
+    record_user_message as _record_user_msg,
+
+)
+
 from app.bot.telegram_log_mirror import LOG_MIRROR_TEXT_MAX
 
 from app.bot.decision_log import log_seen_message, log_skip
@@ -429,6 +439,20 @@ async def _try_reply_manual_qa(
         chat_id=chat_id,
 
     )
+
+    if uid is not None:
+
+        _record_bot_ans(
+
+            context.application.bot_data,
+
+            user_id=uid,
+
+            chat_id=chat_id,
+
+            answer_text=ans,
+
+        )
 
     if apply_rate_limit:
 
@@ -2406,6 +2430,20 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         return
 
+    # Контекст пользователя: запись сообщения + обогащение запроса контекстом диалога.
+
+    _ctx_uid = msg.from_user.id if msg.from_user else None
+
+    if _ctx_uid is not None:
+
+        _record_user_msg(context.application.bot_data, user_id=_ctx_uid, chat_id=chat_id, text=text)
+
+        _ctx_text = _enrich_ctx_query(context.application.bot_data, user_id=_ctx_uid, chat_id=chat_id, query=text)
+
+    else:
+
+        _ctx_text = text
+
     # Язык ответа: определяем по языку сообщения/пользователя.
 
     user_lang_code = msg.from_user.language_code if (msg.from_user and getattr(msg.from_user, "language_code", None)) else None
@@ -2678,11 +2716,11 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     else:
 
-        variants = expand_queries(text) if settings.ru_layer_enabled else [text]
+        variants = expand_queries(_ctx_text) if settings.ru_layer_enabled else [_ctx_text]
 
         best_doc, best_score = _search_best_with_model_bias(
 
-            index, variants, context_text=text, topic_for_keywords=text
+            index, variants, context_text=_ctx_text, topic_for_keywords=_ctx_text
 
         )
 
@@ -2925,6 +2963,22 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         chat_id=chat_id,
 
     )
+
+    if _ctx_uid is not None:
+
+        _record_bot_ans(
+
+            context.application.bot_data,
+
+            user_id=_ctx_uid,
+
+            chat_id=chat_id,
+
+            answer_text=best_doc.title,
+
+            url=url,
+
+        )
 
     # фиксируем отправку после успешного ответа
 
