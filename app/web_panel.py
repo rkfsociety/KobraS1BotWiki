@@ -1388,7 +1388,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             self._send(_fixes_list(state, self._csrf, flash=self._flash(existed, msg)))
 
         def _replies_flag(self, form: dict[str, str]) -> None:
-            """Отмечает ответ из ленты как ошибочный и сохраняет в bad_answers.json."""
+            """Отмечает ответ из ленты как ошибочный, удаляет из ленты и сохраняет в bad_answers.json."""
             try:
                 idx = int(form.get("i", "-1"))
             except ValueError:
@@ -1409,6 +1409,8 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 source=str(r.get("source", "")),
                 note=note,
             )
+            # Убираем из ленты — повторная отметка невозможна
+            replies.pop(idx)
             # пушим, если включено
             push_info = ""
             if getattr(state.settings, "manual_qa_git_push", False):
