@@ -295,7 +295,7 @@ def _trigger_source(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
 def _manual_qa_answer_to_html(answer: str) -> str:
 
-    return "<br>".join(html.escape(line) for line in (answer or "").splitlines())
+    return "\n".join(html.escape(line) for line in (answer or "").splitlines())
 
 async def _try_reply_manual_qa(
 
