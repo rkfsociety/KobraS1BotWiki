@@ -39,6 +39,12 @@ from app.bot.git_autopull import (
     schedule_restart_after_pull,
 )
 from app.bot.panel_login import consume_authorized, create_login_code, get_code_status
+from app.bot.bad_answers import (
+    delete_bad_answer,
+    flag_bad_answer,
+    load_bad_answers,
+    try_git_push_bad_answers,
+)
 from app.bot.manual_qa import (
     add_manual_qa_entry,
     delete_manual_qa_by_index,
@@ -256,6 +262,13 @@ pre.logs { background: #0b0d12; border: 1px solid #262b36; border-radius: 8px;
 .right { text-align: right; }
 form.inline-form { display: inline; }
 .login-wrap { max-width: 360px; margin: 80px auto; }
+.badge { display: inline-block; font-size: 11px; padding: 2px 6px; border-radius: 4px;
+  background: #1b2030; color: #9aa4b2; border: 1px solid #2c3340; white-space: nowrap; }
+.badge-faq { background: #14331f; color: #9be7b4; border-color: #1f6b3a; }
+.badge-wiki { background: #0f2040; color: #7ab8ff; border-color: #1a3a6b; }
+.badge-err { background: #3a1414; color: #f0a0a0; border-color: #6b1f1f; }
+td.q-cell { max-width: 280px; word-break: break-word; }
+td.a-cell { max-width: 320px; word-break: break-word; }
 """
 
 
@@ -403,6 +416,111 @@ def _fmt_uptime(seconds: float) -> str:
     return " ".join(parts)
 
 
+def _source_badge(source: str) -> str:
+    labels = {"manual_qa": ("FAQ", "badge-faq"), "wiki": ("Вики", "badge-wiki"), "error_code": ("Ошибка", "badge-err")}
+    label, cls = labels.get(source, (html.escape(source) or "?", ""))
+    return f'<span class="badge {cls}">{label}</span>'
+
+
+def _recent_replies_section(state: _PanelState, csrf: str) -> str:
+    """HTML-блок ленты последних ответов бота с кнопкой «Отметить ошибочным»."""
+    replies: list[dict] = (state.application.bot_data.get("recent_replies") or []) if state.application else []
+    if not replies:
+        return (
+            '<div class="card">'
+            '<h2>Последние ответы бота</h2>'
+            '<p class="muted">Ответов ещё нет — появятся после первого срабатывания бота в чате.</p>'
+            '</div>'
+        )
+    rows = []
+    for i, r in enumerate(replies[:30]):
+        ts = time.strftime("%d.%m %H:%M", time.localtime(float(r.get("ts", 0) or 0)))
+        q = html.escape(str(r.get("question", ""))[:300])
+        ans = str(r.get("answer", ""))
+        url = str(r.get("url", ""))
+        source = str(r.get("source", ""))
+        if url:
+            ans_cell = f'<a href="{html.escape(url)}" target=_blank rel=noopener>{html.escape(url[:90])}</a>'
+        else:
+            ans_cell = f'<span class=muted>{html.escape(ans[:250])}</span>'
+        rows.append(
+            "<tr>"
+            f'<td class=muted style="white-space:nowrap;font-size:12px">{html.escape(ts)}</td>'
+            f"<td>{_source_badge(source)}</td>"
+            f'<td class="q-cell">{q}</td>'
+            f'<td class="a-cell">{ans_cell}</td>'
+            "<td class=right>"
+            '<form class="inline-form" method="post" action="/replies/flag">'
+            f'<input type="hidden" name="csrf" value="{csrf}">'
+            f'<input type="hidden" name="i" value="{i}">'
+            '<button class="btn btn-sm btn-danger" type="submit" title="Отметить как ошибочный">⚑</button>'
+            "</form>"
+            "</td></tr>"
+        )
+    table = (
+        "<table>"
+        "<colgroup>"
+        '<col style="width:8%"><col style="width:7%"><col style="width:38%">'
+        '<col style="width:42%"><col style="width:5%">'
+        "</colgroup>"
+        "<tr><th>Время</th><th>Тип</th><th>Вопрос</th><th>Ответ / URL</th><th></th></tr>"
+        + "".join(rows)
+        + "</table>"
+    )
+    return f'<div class="card"><h2>Последние ответы бота</h2>{table}</div>'
+
+
+def _bad_answers_section(state: _PanelState, csrf: str) -> str:
+    """HTML-блок отмеченных ошибочных ответов с кнопкой удаления."""
+    entries = load_bad_answers()
+    if not entries:
+        return ""
+    rows = []
+    for i, e in enumerate(entries[:50]):
+        ts = time.strftime("%d.%m %H:%M", time.localtime(float(e.get("ts", 0) or 0)))
+        q = html.escape(str(e.get("question", ""))[:300])
+        ans = str(e.get("answer", ""))
+        url = str(e.get("url", ""))
+        source = str(e.get("source", ""))
+        note = html.escape(str(e.get("note", ""))[:200])
+        if url:
+            ans_cell = f'<a href="{html.escape(url)}" target=_blank rel=noopener>{html.escape(url[:90])}</a>'
+        else:
+            ans_cell = f'<span class=muted>{html.escape(ans[:250])}</span>'
+        note_block = f'<br><span class=muted style="font-size:12px">{note}</span>' if note else ""
+        rows.append(
+            "<tr>"
+            f'<td class=muted style="white-space:nowrap;font-size:12px">{html.escape(ts)}</td>'
+            f"<td>{_source_badge(source)}</td>"
+            f'<td class="q-cell">{q}</td>'
+            f'<td class="a-cell">{ans_cell}{note_block}</td>'
+            "<td class=right>"
+            '<form class="inline-form" method="post" action="/bad-answers/delete"'
+            " onsubmit=\"return confirm('Удалить запись?')\">"
+            f'<input type="hidden" name="csrf" value="{csrf}">'
+            f'<input type="hidden" name="i" value="{i}">'
+            '<button class="btn btn-sm" style="background:#374151" type="submit" title="Удалить после обработки">✓ Обработано</button>'
+            "</form>"
+            "</td></tr>"
+        )
+    table = (
+        "<table>"
+        "<colgroup>"
+        '<col style="width:8%"><col style="width:7%"><col style="width:37%">'
+        '<col style="width:40%"><col style="width:8%">'
+        "</colgroup>"
+        "<tr><th>Время</th><th>Тип</th><th>Вопрос</th><th>Ответ / URL</th><th></th></tr>"
+        + "".join(rows)
+        + "</table>"
+    )
+    return (
+        '<div class="card" style="border-color:#6b1f1f">'
+        f'<h2 style="color:#f0a0a0">⚑ Ошибочные ответы ({len(entries)})</h2>'
+        f"{table}"
+        "</div>"
+    )
+
+
 def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
     bd = state.application.bot_data if state.application else {}
     wix = bd.get("wiki_index")
@@ -440,9 +558,13 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
             ("PID", os.getpid()),
         ]
     )
+    recent_section = _recent_replies_section(state, csrf) if csrf else ""
+    bad_section = _bad_answers_section(state, csrf) if csrf else ""
     body = (
         "<h1>Дашборд</h1>"
         f'<div class="card"><div class="grid">{stats}</div></div>'
+        f"{bad_section}"
+        f"{recent_section}"
         '<div class="card kv"><h2>Конфигурация (только просмотр)</h2>'
         f"<table>{cfg_rows}</table>"
         '<p class="muted">Параметры задаются через переменные окружения / .env и применяются при запуске.</p>'
@@ -943,6 +1065,10 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 self._update_check()
             elif path == "/update/run":
                 self._update_run()
+            elif path == "/replies/flag":
+                self._replies_flag(form)
+            elif path == "/bad-answers/delete":
+                self._bad_answers_delete(form)
             else:
                 self._send(_layout(state, "<h1>404</h1>"), status=404)
 
@@ -1260,6 +1386,54 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 state.application.bot_data["fix_store"] = fixes
             msg = "Фикс удалён" if existed else "Такого фикса нет"
             self._send(_fixes_list(state, self._csrf, flash=self._flash(existed, msg)))
+
+        def _replies_flag(self, form: dict[str, str]) -> None:
+            """Отмечает ответ из ленты как ошибочный и сохраняет в bad_answers.json."""
+            try:
+                idx = int(form.get("i", "-1"))
+            except ValueError:
+                idx = -1
+            replies: list[dict] = (
+                (state.application.bot_data.get("recent_replies") or [])
+                if state.application else []
+            )
+            if idx < 0 or idx >= len(replies):
+                self._send(_dashboard(state, self._csrf, flash=self._flash(False, "Запись не найдена")))
+                return
+            r = replies[idx]
+            note = form.get("note", "").strip()
+            flag_bad_answer(
+                question=str(r.get("question", "")),
+                answer=str(r.get("answer", "")),
+                url=str(r.get("url", "")),
+                source=str(r.get("source", "")),
+                note=note,
+            )
+            # пушим, если включено
+            push_info = ""
+            if getattr(state.settings, "manual_qa_git_push", False):
+                try:
+                    pushed, pmsg = try_git_push_bad_answers()
+                    push_info = f" · git: {pmsg}" if pushed else f" · git ошибка: {pmsg}"
+                except Exception as e:  # noqa: BLE001
+                    push_info = f" · git исключение: {e}"
+            self._send(_dashboard(state, self._csrf,
+                                  flash=self._flash(True, f"Ответ отмечен как ошибочный{push_info}")))
+
+        def _bad_answers_delete(self, form: dict[str, str]) -> None:
+            """Удаляет обработанную запись из bad_answers.json."""
+            try:
+                idx = int(form.get("i", "-1"))
+            except ValueError:
+                idx = -1
+            ok, msg = delete_bad_answer(idx=idx)
+            if ok and getattr(state.settings, "manual_qa_git_push", False):
+                try:
+                    pushed, pmsg = try_git_push_bad_answers()
+                    msg += f" · git: {pmsg}" if pushed else f" · git ошибка: {pmsg}"
+                except Exception as e:  # noqa: BLE001
+                    msg += f" · git исключение: {e}"
+            self._send(_dashboard(state, self._csrf, flash=self._flash(ok, msg)))
 
     return Handler
 

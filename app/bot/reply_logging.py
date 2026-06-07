@@ -4,12 +4,43 @@ from __future__ import annotations
 import html as html_mod
 import logging
 import re
+import time
 
 from collections import OrderedDict
+from typing import Any
 
 from telegram import Message
 
 from app.bot.decision_log import LOG_MIRROR_TEXT_MAX, _msg_ids, incoming_text_for_log
+
+# --- буфер последних ответов (для дашборда веб-панели) ---
+_RECENT_REPLIES_KEY = "recent_replies"
+_RECENT_REPLIES_MAX = 50
+
+
+def add_to_recent_replies(
+    bot_data: dict[str, Any],
+    *,
+    question: str,
+    answer: str,
+    url: str,
+    source: str,
+    chat_id: int,
+) -> None:
+    """Добавляет запись о свежем ответе бота в буфер bot_data[recent_replies]."""
+    if not question.strip():
+        return
+    buf: list[dict[str, Any]] = bot_data.setdefault(_RECENT_REPLIES_KEY, [])
+    buf.insert(0, {
+        "ts": time.time(),
+        "question": question[:500],
+        "answer": answer[:1000],
+        "url": url,
+        "source": source,
+        "chat_id": chat_id,
+    })
+    if len(buf) > _RECENT_REPLIES_MAX:
+        del buf[_RECENT_REPLIES_MAX:]
 
 _TAG_RE = re.compile(r"<[^>]+>")
 

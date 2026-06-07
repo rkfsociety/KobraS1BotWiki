@@ -78,7 +78,7 @@ from app.bot.ops_notify import notify_ops
 
 from app.bot.i18n import _detect_user_lang, _lang_from_message, _t, format_wiki_card
 
-from app.bot.reply_logging import log_bot_reply_for_message
+from app.bot.reply_logging import add_to_recent_replies, log_bot_reply_for_message
 
 from app.bot.telegram_log_mirror import LOG_MIRROR_TEXT_MAX
 
@@ -411,6 +411,22 @@ async def _try_reply_manual_qa(
         query=query_text,
 
         url=None,
+
+    )
+
+    add_to_recent_replies(
+
+        context.application.bot_data,
+
+        question=query_text,
+
+        answer=ans,
+
+        url="",
+
+        source="manual_qa",
+
+        chat_id=chat_id,
 
     )
 
@@ -2891,6 +2907,22 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         query=text,
 
         url=url,
+
+    )
+
+    add_to_recent_replies(
+
+        context.application.bot_data,
+
+        question=text,
+
+        answer=best_doc.title,
+
+        url=url,
+
+        source="wiki",
+
+        chat_id=chat_id,
 
     )
 
