@@ -501,3 +501,77 @@ def test_config_save_secret_blank_keeps_value(panel):
     r = c.getresponse()
     r.read()
     assert "PANEL_PASSWORD=oldpass" in env_file.read_text(encoding="utf-8")
+
+
+# ---------------- Обновление из git (кнопки в хидере) ----------------
+
+
+def test_update_check_reports_available(panel, monkeypatch):
+    from urllib.parse import urlencode
+
+    _app, port = panel
+    monkeypatch.setattr(
+        "app.web_panel.git_ping_compare_with_remote",
+        lambda **k: ("a" * 40, "b" * 40, True, None),
+    )
+    c, ck, csrf = _login_and_get_csrf(port, "/")
+    c.request(
+        "POST", "/update/check", urlencode({"csrf": csrf}),
+        {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
+    )
+    r = c.getresponse()
+    body = r.read().decode("utf-8")
+    assert r.status == 200
+    assert "Есть обновление" in body
+
+
+def test_update_check_up_to_date(panel, monkeypatch):
+    from urllib.parse import urlencode
+
+    _app, port = panel
+    monkeypatch.setattr(
+        "app.web_panel.git_ping_compare_with_remote",
+        lambda **k: ("a" * 40, "a" * 40, False, None),
+    )
+    c, ck, csrf = _login_and_get_csrf(port, "/")
+    c.request(
+        "POST", "/update/check", urlencode({"csrf": csrf}),
+        {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
+    )
+    r = c.getresponse()
+    body = r.read().decode("utf-8")
+    assert r.status == 200
+    assert "последняя версия" in body
+
+
+def test_update_run_no_change(panel, monkeypatch):
+    from urllib.parse import urlencode
+
+    _app, port = panel
+    monkeypatch.setattr(
+        "app.web_panel.git_sync_from_remote", lambda **k: (False, "уже актуально")
+    )
+    c, ck, csrf = _login_and_get_csrf(port, "/")
+    c.request(
+        "POST", "/update/run", urlencode({"csrf": csrf}),
+        {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
+    )
+    r = c.getresponse()
+    body = r.read().decode("utf-8")
+    assert r.status == 200
+    assert "не требуется" in body
+
+
+def test_update_run_requires_csrf(panel):
+    from urllib.parse import urlencode
+
+    _app, port = panel
+    c = _conn(port)
+    ck = _login(c)
+    c.request(
+        "POST", "/update/run", urlencode({}),
+        {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
+    )
+    r = c.getresponse()
+    assert r.status == 400  # без csrf
+    r.read()

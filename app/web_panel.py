@@ -32,7 +32,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
-from app.bot.git_autopull import project_repo_root, schedule_restart_after_pull
+from app.bot.git_autopull import (
+    git_ping_compare_with_remote,
+    git_sync_from_remote,
+    project_repo_root,
+    schedule_restart_after_pull,
+)
 from app.bot.panel_login import consume_authorized, create_login_code, get_code_status
 from app.bot.manual_qa import (
     add_manual_qa_entry,
@@ -218,7 +223,7 @@ form.inline-form { display: inline; }
 """
 
 
-def _layout(state: _PanelState, body: str, *, title: str = "Панель бота", flash: str = "") -> bytes:
+def _layout(state: _PanelState, body: str, *, title: str = "Панель бота", flash: str = "", csrf: str = "") -> bytes:
     bot = state.application.bot_data.get("bot_username") if state.application else None
     nav = (
         '<nav>'
@@ -229,12 +234,26 @@ def _layout(state: _PanelState, body: str, *, title: str = "Панель бот�
         '<a href="/config">Настройки</a>'
         '</nav>'
     )
+    upd = ""
+    if csrf:
+        upd = (
+            '<form class="inline-form" method="post" action="/update/check">'
+            f'<input type="hidden" name="csrf" value="{csrf}">'
+            '<button class="btn btn-sm" style="background:#374151" type="submit" '
+            'title="git fetch и сравнение с GitHub">Проверить обновления</button></form> '
+            '<form class="inline-form" method="post" action="/update/run" '
+            "onsubmit=\"return confirm('Обновить бота из git и перезапустить?')\">"
+            f'<input type="hidden" name="csrf" value="{csrf}">'
+            '<button class="btn btn-sm" style="background:#b45309" type="submit" '
+            'title="git pull и перезапуск">Обновить</button></form>'
+        )
     head = (
         '<header>'
         f'<span class="brand">🤖 {html.escape("@" + bot) if bot else "Бот"}</span>'
         f'{nav}'
         '<span class="spacer"></span>'
-        '<a href="/logout">Выйти</a>'
+        f'{upd}'
+        '<a href="/logout" style="margin-left:14px">Выйти</a>'
         '</header>'
     )
     page = (
@@ -348,7 +367,7 @@ def _fmt_uptime(seconds: float) -> str:
     return " ".join(parts)
 
 
-def _dashboard(state: _PanelState, flash: str = "") -> bytes:
+def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
     bd = state.application.bot_data if state.application else {}
     wix = bd.get("wiki_index")
     idxr = bd.get("wiki_indexer")
@@ -393,7 +412,7 @@ def _dashboard(state: _PanelState, flash: str = "") -> bytes:
         '<p class="muted">Параметры задаются через переменные окружения / .env и применяются при запуске.</p>'
         "</div>"
     )
-    return _layout(state, body, title="Дашборд", flash=flash)
+    return _layout(state, body, title="Дашборд", flash=flash, csrf=csrf)
 
 
 def _qa_list(state: _PanelState, csrf: str, flash: str = "") -> bytes:
@@ -435,13 +454,13 @@ def _qa_list(state: _PanelState, csrf: str, flash: str = "") -> bytes:
         "</form></div>"
     )
     body = f"<h1>Ручные ответы</h1>{add_form}<div class=card>{table}</div>"
-    return _layout(state, body, title="Ручные ответы", flash=flash)
+    return _layout(state, body, title="Ручные ответы", flash=flash, csrf=csrf)
 
 
 def _qa_edit_page(state: _PanelState, idx: int, csrf: str, flash: str = "") -> bytes:
     entries = load_manual_qa_store()
     if idx < 0 or idx >= len(entries):
-        return _layout(state, "<h1>Запись не найдена</h1>", flash=flash)
+        return _layout(state, "<h1>Запись не найдена</h1>", flash=flash, csrf=csrf)
     e = entries[idx]
     keys = "\n".join(str(k) for k in (e.get("keys") or []))
     title = e.get("title") or ""
@@ -459,7 +478,7 @@ def _qa_edit_page(state: _PanelState, idx: int, csrf: str, flash: str = "") -> b
         '<a class="btn" style="background:#374151" href="/qa">Отмена</a></div>'
         "</form></div>"
     )
-    return _layout(state, body, title="Изменить ответ", flash=flash)
+    return _layout(state, body, title="Изменить ответ", flash=flash, csrf=csrf)
 
 
 def _fixes_list(state: _PanelState, csrf: str, flash: str = "") -> bytes:
@@ -494,7 +513,7 @@ def _fixes_list(state: _PanelState, csrf: str, flash: str = "") -> bytes:
         "</form></div>"
     )
     body = f"<h1>Фиксы ссылок</h1>{add_form}<div class=card>{table}</div>"
-    return _layout(state, body, title="Фиксы ссылок", flash=flash)
+    return _layout(state, body, title="Фиксы ссылок", flash=flash, csrf=csrf)
 
 
 def _tail_lines(path: Path, limit: int, needle: str = "") -> list[str]:
@@ -511,7 +530,7 @@ def _tail_lines(path: Path, limit: int, needle: str = "") -> list[str]:
     return [ln.rstrip("\n") for ln in lines[-limit:]]
 
 
-def _logs_page(state: _PanelState, query: str, limit: int, flash: str = "") -> bytes:
+def _logs_page(state: _PanelState, query: str, limit: int, csrf: str = "", flash: str = "") -> bytes:
     path = project_repo_root() / "logs" / "bot.log"
     lines = _tail_lines(path, limit, query)
     content = html.escape("\n".join(lines)) or "(пусто)"
@@ -527,7 +546,7 @@ def _logs_page(state: _PanelState, query: str, limit: int, flash: str = "") -> b
         f'<p class="muted">Файл: {html.escape(str(path))}</p>'
         f"<pre class=logs>{content}</pre></div>"
     )
-    return _layout(state, body, title="Логи", flash=flash)
+    return _layout(state, body, title="Логи", flash=flash, csrf=csrf)
 
 
 # ------------------------- Настройки (.env) -------------------------
@@ -709,7 +728,7 @@ def _config_page(state: _PanelState, csrf: str, flash: str = "") -> bytes:
         "onclick=\"return confirm('Сохранить и перезапустить бота?')\">Сохранить и перезапустить</button>"
         '</div></form>'
     )
-    return _layout(state, body, title="Настройки", flash=flash)
+    return _layout(state, body, title="Настройки", flash=flash, csrf=csrf)
 
 
 # ------------------------- HTTP handler -------------------------
@@ -819,7 +838,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 return
 
             if path == "/":
-                self._send(_dashboard(state))
+                self._send(_dashboard(state, self._csrf))
             elif path == "/qa":
                 self._send(_qa_list(state, self._csrf))
             elif path == "/qa/edit":
@@ -836,7 +855,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     n = max(1, min(2000, int((qs.get("n") or ["300"])[0])))
                 except ValueError:
                     n = 300
-                self._send(_logs_page(state, q, n))
+                self._send(_logs_page(state, q, n, self._csrf))
             elif path == "/config":
                 self._send(_config_page(state, self._csrf))
             else:
@@ -877,6 +896,10 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 self._fixes_delete(form)
             elif path == "/config/save":
                 self._config_save(form)
+            elif path == "/update/check":
+                self._update_check()
+            elif path == "/update/run":
+                self._update_run()
             else:
                 self._send(_layout(state, "<h1>404</h1>"), status=404)
 
@@ -993,6 +1016,50 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
         def _flash(self, ok: bool, msg: str) -> str:
             cls = "ok" if ok else "err"
             return f'<div class="flash {cls}">{html.escape(msg)}</div>'
+
+        def _git_params(self) -> tuple[str, str, bool]:
+            st = state.settings
+            return (
+                getattr(st, "git_autopull_remote", "origin") or "origin",
+                getattr(st, "git_autopull_branch", "master") or "master",
+                bool(getattr(st, "git_autopull_hard_reset", True)),
+            )
+
+        def _update_check(self) -> None:
+            remote, branch, _hard = self._git_params()
+            try:
+                local, rhash, avail, err = git_ping_compare_with_remote(
+                    repo=project_repo_root(), remote=remote, branch=branch
+                )
+            except Exception as e:  # noqa: BLE001
+                self._send(_dashboard(state, self._csrf, flash=self._flash(False, f"Ошибка проверки: {e}")))
+                return
+            if err:
+                msg, ok = f"Не удалось проверить: {err}", False
+            elif avail:
+                msg, ok = (
+                    f"Есть обновление: {(local or '')[:8]} → {(rhash or '')[:8]}. "
+                    "Нажмите «Обновить», чтобы применить.",
+                    True,
+                )
+            else:
+                msg, ok = "Установлена последняя версия.", True
+            self._send(_dashboard(state, self._csrf, flash=self._flash(ok, msg)))
+
+        def _update_run(self) -> None:
+            remote, branch, hard = self._git_params()
+            try:
+                updated, gmsg = git_sync_from_remote(
+                    repo=project_repo_root(), remote=remote, branch=branch, hard_reset=hard
+                )
+            except Exception as e:  # noqa: BLE001
+                self._send(_dashboard(state, self._csrf, flash=self._flash(False, f"Ошибка обновления: {e}")))
+                return
+            if not updated:
+                self._send(_dashboard(state, self._csrf, flash=self._flash(True, f"Обновление не требуется: {gmsg}")))
+                return
+            ok, rmsg = self._trigger_restart()
+            self._send(_dashboard(state, self._csrf, flash=self._flash(ok, f"Обновлено: {gmsg}. {rmsg}")))
 
         def _trigger_restart(self) -> tuple[bool, str]:
             app = state.application
