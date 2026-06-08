@@ -1,5 +1,13 @@
 [
   {
+    "question": "а ещё вопрос, почему принтер при цветной печати отдельно печатает как квадрат(?) из разных цветов в углу?",
+    "answer": "Multi-color Printing Guide | Anycubic Wiki",
+    "url": "https://wiki.anycubic.com/en/software-and-app/anycubicslicer/multi-color-printing",
+    "source": "wiki",
+    "note": "",
+    "ts": 1780934003.584734
+  },
+  {
     "question": "Без башни никак. Как он будет смывать цвет прошлый?",
     "answer": "FDM-Kobra 3 Combo-ACE Pro Filament Replacement Guide | Anycubic Wiki",
     "url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-3-combo/ace-pro-filament-replacement-guide",
