@@ -1,5 +1,13 @@
 [
   {
+    "question": "Верхнюю крышку ( там где посадочные ее в принтере ) проклеить",
+    "answer": "FDM-Kobra 3 Combo-ACE Pro Filament Replacement Guide | Anycubic Wiki",
+    "url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-3-combo/ace-pro-filament-replacement-guide",
+    "source": "wiki",
+    "note": "",
+    "ts": 1780934011.4014952
+  },
+  {
     "question": "а ещё вопрос, почему принтер при цветной печати отдельно печатает как квадрат(?) из разных цветов в углу?",
     "answer": "Multi-color Printing Guide | Anycubic Wiki",
     "url": "https://wiki.anycubic.com/en/software-and-app/anycubicslicer/multi-color-printing",
