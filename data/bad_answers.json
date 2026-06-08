@@ -1,5 +1,13 @@
 [
   {
+    "question": "тикет на сайте совместно с переводчиком составить и всё. Если что не так, то попросят добавить инфы",
+    "answer": "Vyper:Replace the nozzle | Anycubic Wiki",
+    "url": "https://wiki.anycubic.com/en/fdm-3d-printer/vyper/vyper-replace-the-nozzle",
+    "source": "wiki",
+    "note": "",
+    "ts": 1780934032.6403766
+  },
+  {
     "question": "А зачем он",
     "answer": "FDM-Kobra 3 Combo-ACE Pro Filament Replacement Guide | Anycubic Wiki",
     "url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-3-combo/ace-pro-filament-replacement-guide",
