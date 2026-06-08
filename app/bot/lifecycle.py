@@ -43,6 +43,7 @@ from app.bot.handlers import (
     on_message,
 )
 from app.bot.manual_qa import load_manual_qa_store
+from app.bot.reply_logging import load_recent_replies
 from app.bot.panel_login import cmd_start
 from app.bot.reactions import on_message_reaction
 from app.bot.ops_notify import notify_ops
@@ -179,6 +180,11 @@ def main() -> None:
         me = await application.bot.get_me()
         application.bot_data["bot_username"] = me.username
         application.bot_data["bot_id"] = me.id
+        # Восстанавливаем ленту последних ответов после перезапуска
+        try:
+            load_recent_replies(application.bot_data)
+        except Exception as _e:
+            logging.warning("Не удалось загрузить recent_replies: %s", _e)
         # Ссылка на основной event-loop — чтобы веб-панель могла запросить перезапуск.
         application.bot_data["main_loop"] = asyncio.get_running_loop()
         # Каталог ошибок (fallback, если у кода нет отдельной страницы /error-codes/<code>-code)

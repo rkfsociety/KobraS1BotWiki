@@ -45,6 +45,7 @@ from app.bot.bad_answers import (
     load_bad_answers,
     try_git_push_bad_answers,
 )
+from app.bot.reply_logging import save_recent_replies
 from app.bot.manual_qa import (
     add_manual_qa_entry,
     delete_manual_qa_by_index,
@@ -1405,8 +1406,10 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 source=str(r.get("source", "")),
                 note=note,
             )
-            # Убираем из ленты — повторная отметка невозможна
+            # Убираем из ленты — повторная отметка невозможна, сохраняем на диск
             replies.pop(idx)
+            if state.application is not None:
+                save_recent_replies(state.application.bot_data)
             # пушим, если включено
             push_info = ""
             if getattr(state.settings, "manual_qa_git_push", False):

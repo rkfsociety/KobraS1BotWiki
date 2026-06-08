@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import html as html_mod
+import json
 import logging
 import re
+import threading
 import time
 
 from collections import OrderedDict
+from pathlib import Path
 from typing import Any
 
 from telegram import Message
@@ -16,6 +19,47 @@ from app.bot.decision_log import LOG_MIRROR_TEXT_MAX, _msg_ids, incoming_text_fo
 # --- буфер последних ответов (для дашборда веб-панели) ---
 _RECENT_REPLIES_KEY = "recent_replies"
 _RECENT_REPLIES_MAX = 50
+_REPLIES_SAVE_LOCK = threading.Lock()
+
+
+def _replies_path() -> Path:
+    from app.bot.git_autopull import project_repo_root
+    return project_repo_root() / ".cache" / "recent_replies.json"
+
+
+def load_recent_replies(bot_data: dict[str, Any]) -> None:
+    """Загружает ленту последних ответов с диска при старте бота."""
+    try:
+        p = _replies_path()
+        if not p.exists():
+            return
+        raw = json.loads(p.read_text(encoding="utf-8"))
+        if not isinstance(raw, list):
+            return
+        existing: list[dict] = bot_data.setdefault(_RECENT_REPLIES_KEY, [])
+        existing_ts: set = {m.get("ts") for m in existing}
+        for item in raw:
+            if isinstance(item, dict) and item.get("ts") not in existing_ts:
+                existing.append(item)
+        existing.sort(key=lambda m: float(m.get("ts", 0)), reverse=True)
+        del existing[_RECENT_REPLIES_MAX:]
+        logging.info("recent_replies: загружено %d записей с диска", len(existing))
+    except Exception as exc:
+        logging.warning("recent_replies: ошибка загрузки — %s", exc)
+
+
+def save_recent_replies(bot_data: dict[str, Any]) -> None:
+    """Атомарно сохраняет ленту последних ответов на диск."""
+    with _REPLIES_SAVE_LOCK:
+        try:
+            p = _replies_path()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            buf = list(bot_data.get(_RECENT_REPLIES_KEY) or [])
+            tmp = p.with_suffix(".tmp")
+            tmp.write_bytes(json.dumps(buf, ensure_ascii=False).encode("utf-8"))
+            tmp.replace(p)
+        except Exception as exc:
+            logging.warning("recent_replies: ошибка сохранения — %s", exc)
 
 
 def add_to_recent_replies(
@@ -27,7 +71,7 @@ def add_to_recent_replies(
     source: str,
     chat_id: int,
 ) -> None:
-    """Добавляет запись о свежем ответе бота в буфер bot_data[recent_replies]."""
+    """Добавляет запись о свежем ответе бота в буфер bot_data[recent_replies] и сохраняет на диск."""
     if not question.strip():
         return
     buf: list[dict[str, Any]] = bot_data.setdefault(_RECENT_REPLIES_KEY, [])
@@ -41,6 +85,7 @@ def add_to_recent_replies(
     })
     if len(buf) > _RECENT_REPLIES_MAX:
         del buf[_RECENT_REPLIES_MAX:]
+    save_recent_replies(bot_data)
 
 _TAG_RE = re.compile(r"<[^>]+>")
 
