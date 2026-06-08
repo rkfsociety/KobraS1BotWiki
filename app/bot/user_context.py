@@ -215,6 +215,11 @@ def enrich_query(
     Если контекст не нужен или не найден — возвращает query без изменений.
     """
     _ensure_loaded(bot_data)
+    # Если в запросе нет реальных слов (только числа/символы — «35?», «40%?»),
+    # обогащение только навредит: добавит слова из контекста и заставит бота
+    # ответить на бессмысленный числовой фрагмент.
+    if not _words(query):
+        return query
     needs_ctx = _has_anaphora(query) or len(query.split()) <= _SHORT_WORDS
     if not needs_ctx:
         return query

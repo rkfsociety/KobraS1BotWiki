@@ -2540,6 +2540,19 @@ def _is_peer_social_printer_question(text: str) -> bool:
         return True
     if social_topic and second_person:
         return True
+    # «Я так понял кобра x у вас есть?» — вопрос о наличии принтера у собеседника
+    owns_question = bool(
+        re.search(r"\b(?:у\s+(?:вас|тебя))\s+(?:есть|имеется|нет|была|был|было)\b", t)
+        and not re.search(r"\b(?:инструкц|гайд|ссылк|вики|проблем|ошибк)\b", t)
+    )
+    if owns_question and printer_ctx:
+        return True
+    # «Икса ещё одного возьмёшь с аськой?» — вопрос о покупке принтера к собеседнику
+    buy_question = bool(
+        re.search(r"\b(?:возьм[её]шь|возьм[её]те|берёшь|берешь|купишь|купите|закажешь|закажете)\b", t)
+    )
+    if buy_question and printer_ctx:
+        return True
     return False
 
 
@@ -2988,6 +3001,197 @@ def _is_design_feature_car_sarcasm(text: str) -> bool:
     return sarcasm_frame and analogy
 
 
+def _is_pure_numeric_or_symbol_message(text: str) -> bool:
+    """Сообщение без реальных слов — только цифры и символы (35?, 40%?).
+
+    Такие «ответы» в треде — числа с вопросительным знаком, проценты — не вопросы к боту.
+    """
+    if not text or not text.strip():
+        return False
+    # Если в тексте нет ни одной последовательности из ≥2 букв — это не слово
+    words = re.findall(r"[а-яёa-z]{2,}", text.lower())
+    return not words
+
+
+def _is_offbeat_social_banter(text: str) -> bool:
+    """Болтовня без темы 3D-печати: сон, алкоголь, запрещённые вещества.
+
+    «Кто хочет спать — тот спит», «Картофельную водку?», «Лсд эт вроде не печать» — не вопросы к боту.
+    """
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\b(?:помогите|подскаж|как\s+(?:настро|исправ|почин|сделать))\b", t):
+        return False
+    has_print_ctx = bool(
+        re.search(
+            r"\b(?:принтер|печат|слайсер|сопло|экструдер|пластик|смол|кобра|kobra|"
+            r"прошивк|калибр|слой|температур|сопл)\w*\b",
+            t,
+        )
+        or _printer_mentioned(text)
+    )
+    # Алкоголь / спиртное
+    alcohol = bool(
+        re.search(
+            r"\b(?:водк\w*|пив\w*|виск\w*|самогон\w*|алкоголь|коньяк\w*|бухло\w*|бухать|"
+            r"ром\b|джин\b|вин[оа]\b|шампанск\w*)\w*\b",
+            t,
+        )
+    )
+    # Сон / засыпание (социальное)
+    sleep_chat = bool(
+        re.search(
+            r"\b(?:кто\s+хочет\s+спать|хочет\s+спать|хочу\s+спать|пора\s+спать|"
+            r"иду\s+спать|пошёл\s+спать|пошел\s+спать|ляг\w*\s+спать)\b",
+            t,
+        )
+    )
+    # Наркотики / запрещённые вещества без контекста принтера
+    drugs = bool(
+        re.search(r"\b(?:лсд|lsd|марихуан\w*|наркотик\w*)\b", t)
+        and not has_print_ctx
+    )
+    if alcohol and not has_print_ctx:
+        return True
+    if sleep_chat:
+        return True
+    if drugs:
+        return True
+    return False
+
+
+def _is_bare_rhetorical_context_question(text: str) -> bool:
+    """Короткий анафорический/риторический вопрос без темы 3D-печати — реплика в треде, не вопрос к боту.
+
+    Примеры: «А как это связано?», «А зачем он?», «А зачем продавать?».
+    Такие фразы осмысленны только в контексте предыдущих реплик чата.
+    """
+    if not text or not text.strip():
+        return False
+    raw = text.strip()
+    if "?" not in raw:
+        return False
+    t = re.sub(r"\s+", " ", raw.lower()).strip()
+    word_count = len(t.split())
+    if word_count > 7:
+        return False
+    if re.search(
+        r"\b(?:помогите|подскаж|как\s+(?:настро|исправ|сделать|убрать|решить|починить|подключ|замен))\b",
+        t,
+    ):
+        return False
+    has_print_ctx = bool(
+        re.search(
+            r"\b(?:принтер|печат|слайсер|сопло|экструдер|пластик|смол|кобра|kobra|ace|аська|"
+            r"прошивк|калибр|слой|температур|сопл|платформ|стол\b|филамент|катушк)\w*\b",
+            t,
+        )
+        or _printer_mentioned(raw)
+    )
+    if has_print_ctx:
+        return False
+    # «А зачем X?» или «Зачем X?» — короткий вопрос без 3D-контекста
+    if re.match(r"^(?:а\s+)?зачем\b", t) and word_count <= 5:
+        return True
+    # «А как это связано?», «А что это?» с анафорой
+    anaphora = bool(
+        re.search(r"\b(?:это|этот|эта|эти|оно|он|она|они|его|её|ее|им|их|тот|та|те|то|там|тут)\b", t)
+    )
+    if re.match(r"^(?:а\s+)?(?:как|что|куда|откуда)\b", t) and anaphora and word_count <= 6:
+        return True
+    return False
+
+
+def _is_personal_chat_action_reference(text: str) -> bool:
+    """«Я тут где-то скидывал/спрашивал» — ссылка на своё прошлое действие в чате, не вопрос к боту."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if "?" in text and re.search(r"\b(?:как\s+найти|где\s+(?:найти|посмотреть))\b", t):
+        return False
+    personal = bool(re.search(r"\b(?:я|мы)\b", t))
+    past_action = bool(
+        re.search(
+            r"\b(?:скидывал\w*|скидал\w*|поделил\w*|писал\w*|спрашивал\w*|слал\w*|"
+            r"отправлял\w*|постил\w*|кидал\w*|кинул\w*)\b",
+            t,
+        )
+    )
+    place_ref = bool(re.search(r"\b(?:тут|здесь|там|где[\s-]?то|сюда|выше|раньше)\b", t))
+    return personal and past_action and place_ref
+
+
+def _is_unrelated_pc_hardware_banter(text: str) -> bool:
+    """Болтовня о ПК-компонентах (проц, CPU, GPU) без контекста 3D-печати.
+
+    «Андрюхе что проц впадлу менять» — разговор про компьютер, не про принтер.
+    """
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\b(?:помогите|подскаж|что\s+делать)\b", t):
+        return False
+    has_print_ctx = bool(
+        re.search(
+            r"\b(?:принтер|печат|слайсер|кобра|kobra|прошивк|калибр|слой)\w*\b",
+            t,
+        )
+        or _printer_mentioned(text)
+    )
+    if has_print_ctx:
+        return False
+    pc_hw = bool(
+        re.search(
+            r"\b(?:проц\w*|процессор\w*|cpu|gpu|видеокарт\w*|оперативк\w*|"
+            r"ram\b|hdd\b|ssd\b|ноутбук\w*|laptop)\b",
+            t,
+        )
+    )
+    return pc_hw
+
+
+def _is_casual_advice_in_thread(text: str) -> bool:
+    """Бытовой совет/рекомендация в треде без запроса к боту (утверждение, не вопрос).
+
+    Примеры: «Верхнюю крышку проклеить», «Можно же почистить», «тикет на сайте составить».
+    """
+    if not text or not text.strip() or "?" in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\b(?:помогите|подскаж|не\s+работает|что\s+делать)\b", t):
+        return False
+    # «Можно (же) <глагол обслуживания>» — пассивная рекомендация
+    if re.search(
+        r"\bможно\s+(?:же\s+)?(?:почистить|промыть|продуть|проклеить|зафиксировать|"
+        r"поправить|заменить|смазать|прочистить|перепрошить|откалибровать|подтянуть)\b",
+        t,
+    ):
+        return True
+    # Тикет в поддержку — совет-наблюдение, не вопрос
+    if re.search(r"\bтикет\b", t) and re.search(
+        r"\b(?:на\s+сайте|составить|создать|отправить|заполнить|написать)\b", t
+    ):
+        return True
+    # Глагол обслуживания в инфинитиве без вопросительного слова — совет
+    if re.search(
+        r"\b(?:проклеить|промыть|продуть|прочистить|протереть|смазать|накатить|перепрошить)\b",
+        t,
+    ):
+        return True
+    return False
+
+
+def _is_multicolor_tower_rhetoric(text: str) -> bool:
+    """«Без башни никак» — риторическое объяснение нужности Prime Tower, не запрос к вики."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\b(?:помогите|подскаж\w*|как\s+(?:отключ|убрать|настро))\b", t):
+        return False
+    return bool(re.search(r"\bбез\s+башн\w*\s+никак\b", t))
+
+
 def _is_non_wiki_chatter_message(text: str) -> bool:
     """Сообщения чата, на которые бот не отвечает из вики."""
     return (
@@ -3036,6 +3240,13 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_hardware_vs_settings_dilemma(text)
         or _is_purchase_deliberation_banter(text)
         or _is_problem_combo_banter(text)
+        or _is_pure_numeric_or_symbol_message(text)
+        or _is_offbeat_social_banter(text)
+        or _is_bare_rhetorical_context_question(text)
+        or _is_personal_chat_action_reference(text)
+        or _is_unrelated_pc_hardware_banter(text)
+        or _is_casual_advice_in_thread(text)
+        or _is_multicolor_tower_rhetoric(text)
     )
 
 
