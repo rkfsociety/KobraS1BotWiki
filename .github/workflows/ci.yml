@@ -23,7 +23,7 @@ jobs:
         run: ruff check app tests
 
       - name: Bandit
-        run: bandit -r app -c bandit.yaml
+        run: bandit -r app -c .github/bandit.yaml
 
   audit:
     runs-on: ubuntu-latest

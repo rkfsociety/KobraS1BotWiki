@@ -1,7 +1,8 @@
 @echo off
 setlocal EnableDelayedExpansion
 
-cd /d "%~dp0"
+REM Переходим в корень проекта (родитель deploy/)
+cd /d "%~dp0.."
 
 set "LOCK=.cache\bot.lock"
 set "CMDLOCK=.cache\cmd.lock"
@@ -14,10 +15,8 @@ if not exist "%LOCK%" (
 set /p PID=<"%LOCK%"
 echo Stopping bot pid=%PID% ...
 
-REM Сначала убиваем python (на всякий случай)
 taskkill /F /T /PID %PID% >nul 2>&1
 
-REM Теперь закрываем само окно cmd (его PID мы сохранили при старте)
 if exist "%CMDLOCK%" (
   echo Found cmd lock file: %CMDLOCK%
 )
@@ -30,7 +29,6 @@ if exist "%CMDLOCK%" (
   del "%CMDLOCK%" >nul 2>&1
 )
 
-REM Фоллбек: если cmd.lock не было, пробуем закрыть по заголовку окна
 taskkill /F /T /FI "WINDOWTITLE eq WikiLinkBot" >nul 2>&1
 
 del "%LOCK%" >nul 2>&1

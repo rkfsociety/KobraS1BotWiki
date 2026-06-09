@@ -2,8 +2,9 @@
 
 set -e
 
-# Переходим в директорию скрипта
-cd "$(dirname "$0")"
+# Переходим в корень проекта (родитель deploy/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
 
 # BOT_SCREEN_NAME из .env (напр. 511.bot) или из окружения
 if [[ -f .env ]]; then
@@ -28,7 +29,7 @@ fi
 
 echo "Starting bot in screen session '$SCREEN_NAME'..."
 
-# Интерпретатор: локальное venv, если есть (после: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt)
+# Интерпретатор: локальное venv, если есть
 if [ -x ".venv/bin/python" ]; then
     PYTHON=".venv/bin/python"
 elif command -v python3 >/dev/null 2>&1; then
@@ -49,14 +50,11 @@ if screen -list 2>/dev/null | grep -qE "[0-9]+\.${SCREEN_NAME}[[:space:]]"; then
     echo "[ERROR] Сессия screen '$SCREEN_NAME' уже существует."
     echo "Подключиться к логам: screen -r $SCREEN_NAME"
     echo "Если вы root, а бот от другого пользователя (systemd User=): sudo -u <пользователь> screen -r $SCREEN_NAME"
-    echo "Остановить бота: ./stop-bot.sh"
+    echo "Остановить бота: ./deploy/stop-bot.sh"
     exit 1
 fi
 
-# Создаем директорию .cache если не существует
-if [ ! -d ".cache" ]; then
-    mkdir -p ".cache"
-fi
+mkdir -p .cache
 
 # Отсоединённая сессия: можно закрывать PuTTY, бот продолжит работу
 screen -dmS "$SCREEN_NAME" env PYTHONUNBUFFERED=1 "$PYTHON" -m app.bot
@@ -68,6 +66,6 @@ echo "Started (detached). Сессия: $SCREEN_NAME"
 echo "Подключиться к выводу в терминале: screen -r $SCREEN_NAME"
 echo "Если вы root, а screen у другого пользователя: sudo -u <пользователь> screen -r $SCREEN_NAME"
 echo "Отключиться от screen без остановки бота: Ctrl+A, затем D"
-echo "Остановить бота: ./stop-bot.sh"
-echo "Проверка «жив ли» и автозапуск: ./ensure-bot.sh (удобно в cron)"
+echo "Остановить бота: ./deploy/stop-bot.sh"
+echo "Проверка «жив ли» и автозапуск: ./deploy/ensure-bot.sh (удобно в cron)"
 echo "Done."

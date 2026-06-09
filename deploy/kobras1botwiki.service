@@ -18,7 +18,7 @@
 #   sudo -u anycubicwikibot screen -ls
 #
 # Без root (альтернатива): crontab -e
-#   @reboot sleep 30 && cd /ПУТЬ/KobraS1BotWiki && ./ensure-bot.sh >>.cache/ensure.log 2>&1
+#   @reboot sleep 30 && cd /ПУТЬ/KobraS1BotWiki && ./deploy/ensure-bot.sh >>.cache/ensure.log 2>&1
 #   (sleep даёт сети подняться; при необходимости увеличьте)
 
 [Unit]
@@ -32,7 +32,7 @@ RemainAfterExit=yes
 User=anycubicwikibot
 Group=anycubicwikibot
 WorkingDirectory=/home/anycubicwikibot/KobraS1BotWiki
-ExecStart=/home/anycubicwikibot/KobraS1BotWiki/ensure-bot.sh
+ExecStart=/home/anycubicwikibot/KobraS1BotWiki/deploy/ensure-bot.sh
 StandardOutput=journal
 StandardError=journal
 

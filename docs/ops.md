@@ -5,10 +5,10 @@
 | Команда | Платформа |
 |---------|----------|
 | `python -m app.bot` | Любая (foreground) |
-| `start-bot.cmd` / `stop-bot.cmd` / `restart-bot.cmd` | Windows |
-| `./start-bot.sh` / `./stop-bot.sh` / `./restart-bot.sh` | Linux/macOS |
+| `deploy\start-bot.cmd` / `stop-bot.cmd` / `restart-bot.cmd` | Windows |
+| `./deploy/start-bot.sh` / `./deploy/stop-bot.sh` / `./deploy/restart-bot.sh` | Linux/macOS |
 
-Если бот запущен через `ensure-bot.sh` в **screen**, вывод идёт в screen и в `logs/bot.log`, а не в `journalctl`.
+Если бот запущен через `deploy/ensure-bot.sh` в **screen**, вывод идёт в screen и в `logs/bot.log`, а не в `journalctl`.
 
 ## Логи
 

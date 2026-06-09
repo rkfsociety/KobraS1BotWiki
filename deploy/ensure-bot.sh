@@ -1,13 +1,16 @@
 #!/bin/bash
-# Проверка: запущен ли бот; если нет — очистка screen/lock и ./start-bot.sh
+# Проверка: запущен ли бот; если нет — очистка screen/lock и ./deploy/start-bot.sh
 #
 # Пример cron (каждые 5 минут):
-#   */5 * * * * cd /home/USER/KobraS1BotWiki && ./ensure-bot.sh >>.cache/ensure.log 2>&1
+#   */5 * * * * cd /home/USER/KobraS1BotWiki && ./deploy/ensure-bot.sh >>.cache/ensure.log 2>&1
 #
 # Имя сессии screen как у start-bot.sh: переменная BOT_SCREEN_NAME (по умолчанию kobras1botwiki).
 
 set -e
-cd "$(dirname "$0")"
+
+# Переходим в корень проекта (родитель deploy/)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
 
 if [[ -f .env ]]; then
     line=$(grep -E '^BOT_SCREEN_NAME=' .env 2>/dev/null | tail -1 || true)
@@ -66,5 +69,5 @@ fi
 
 rm -f "$LOCK_FILE"
 
-./start-bot.sh
+"$SCRIPT_DIR/start-bot.sh"
 echo "ensure-bot: запуск выполнен."

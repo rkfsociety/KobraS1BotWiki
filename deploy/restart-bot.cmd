@@ -1,7 +1,8 @@
 @echo off
 setlocal
 
-cd /d "%~dp0"
+REM Переходим в корень проекта (родитель deploy/)
+cd /d "%~dp0.."
 
 echo Restarting bot...
 call "%~dp0stop-bot.cmd"
