@@ -1,5 +1,13 @@
 [
   {
+    "question": "Так цвета пластиков меняются поставьте в асе в том порядке что они стоят в бамбу слайсере",
+    "answer": "Resin 3D Printing: Parameters selection and setting during slicing | Anycubic Wiki",
+    "url": "https://wiki.anycubic.com/en/filament-and-resin/parameters-selection",
+    "source": "wiki",
+    "note": "",
+    "ts": 1781026052.5720727
+  },
+  {
     "question": "А 3мф можно вставить в слайсер аникубик? Я просто ещё дилетант 😁😁",
     "answer": "Anycubic Slicer Next slicing software quick start guide | Anycubic Wiki",
     "url": "https://wiki.anycubic.com/en/software-and-app/new-page-anycubic-slicer-beta(orca-version)/anycubic-slicer-next-slicing-software-quick-start-guide",
