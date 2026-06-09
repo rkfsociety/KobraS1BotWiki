@@ -80,6 +80,7 @@ from app.bot.i18n import _detect_user_lang, _lang_from_message, _t, format_wiki_
 
 from app.bot.missed_questions import add_missed_question
 from app.bot.reply_logging import add_to_recent_replies, log_bot_reply_for_message
+from app.bot.bot_stats import record_answer as record_bot_stat
 
 from app.bot.user_context import (
 
@@ -439,6 +440,13 @@ async def _try_reply_manual_qa(
 
         chat_id=chat_id,
 
+    )
+
+    record_bot_stat(
+        context.application.bot_data,
+        url="",
+        question=query_text,
+        source="manual_qa",
     )
 
     if uid is not None:
@@ -2974,6 +2982,13 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         chat_id=chat_id,
 
+    )
+
+    record_bot_stat(
+        context.application.bot_data,
+        url=url,
+        question=text,
+        source="wiki",
     )
 
     if _ctx_uid is not None:

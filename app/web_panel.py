@@ -59,6 +59,7 @@ from app.bot.manual_qa import (
     try_git_push_manual_qa,
 )
 from app.bot.stores import _load_fix_store, _norm_text, _save_fix_store
+from app.bot.bot_stats import get_top_wiki_pages, get_top_questions, get_hourly_activity
 
 log = logging.getLogger(__name__)
 
@@ -601,6 +602,13 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
     except Exception:
         index_done = False
 
+    # Статистика ответов
+    stats_data = bd.get("bot_stats", {})
+    total_answers = stats_data.get("total_answers", 0)
+    top_wiki_pages = get_top_wiki_pages(bd)
+    top_questions = get_top_questions(bd)
+    hourly_activity = get_hourly_activity(bd)
+
     def stat(n: Any, label: str) -> str:
         return f'<div class="stat"><div class="n">{html.escape(str(n))}</div><div class="l">{html.escape(label)}</div></div>'
 
@@ -610,6 +618,7 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
         + stat(len(qa), "ручных ответов")
         + stat(len(fixes), "фиксов ссылок")
         + stat(len(codes), "кодов ошибок")
+        + stat(total_answers, "всего ответов бота")
         + stat(_fmt_uptime(time.time() - state.start_time), "аптайм панели")
     )
     st = state.settings
@@ -633,9 +642,11 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
     recent_section = _recent_replies_section(state, csrf) if csrf else ""
     bad_section = _bad_answers_section(state, csrf) if csrf else ""
     missed_section = _missed_questions_section(csrf) if csrf else ""
+    stats_section = _stats_section(top_wiki_pages, top_questions, hourly_activity)
     body = (
         "<h1>Дашборд</h1>"
         f'<div class="card"><div class="grid">{stats}</div></div>'
+        f"{stats_section}"
         f"{bad_section}"
         f"{missed_section}"
         f"{recent_section}"
@@ -645,6 +656,66 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
         "</div>"
     )
     return _layout(state, body, title="Дашборд", flash=flash, csrf=csrf)
+
+
+def _stats_section(top_wiki_pages: list[tuple[str, int]], top_questions: list[tuple[str, int]], hourly_activity: list[int]) -> str:
+    """HTML-блок статистики: топ вики-страниц, топ вопросов, активность по часам."""
+    # Топ вики-страниц
+    wiki_rows = ""
+    if top_wiki_pages:
+        for url, count in top_wiki_pages[:10]:
+            short_url = url.split("/")[-1][:60] if url else "—"
+            wiki_rows += f"<tr><td><a href=\"{html.escape(url)}\" target=_blank rel=noopener>{html.escape(short_url)}</a></td><td class=right>{count}</td></tr>"
+    else:
+        wiki_rows = '<tr><td colspan=2 class=muted>Нет данных</td></tr>'
+    
+    # Топ вопросов
+    q_rows = ""
+    if top_questions:
+        for q, count in top_questions[:10]:
+            q_rows += f"<tr><td class=q-cell>{html.escape(q[:150])}</td><td class=right>{count}</td></tr>"
+    else:
+        q_rows = '<tr><td colspan=2 class=muted>Нет данных</td></tr>'
+    
+    # Активность по часам — простая гистограмма текстом
+    hourly_html = ""
+    max_count = max(hourly_activity) if hourly_activity else 1
+    if max_count == 0:
+        max_count = 1
+    for h in range(24):
+        count = hourly_activity[h] if h < len(hourly_activity) else 0
+        bar_len = int((count / max_count) * 20) if max_count > 0 else 0
+        bar = "█" * bar_len + "░" * (20 - bar_len)
+        hourly_html += f"<div style='font-size:11px;margin:2px 0'><span style='display:inline-block;width:24px;color:#9aa4b2'>{h:02d}:00</span> <span style='color:#5aa9ff'>{bar}</span> <span class=muted>{count}</span></div>"
+    
+    return (
+        '<div class="card">'
+        '<h2>Статистика ответов</h2>'
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px">'
+        # Топ вики-страниц
+        '<div>'
+        '<h3 style="margin-top:0;font-size:15px;color:#fff">📄 Топ страниц вики</h3>'
+        '<table>'
+        '<tr><th>Страница</th><th class=right>Ответов</th></tr>'
+        f"{wiki_rows}"
+        '</table>'
+        '</div>'
+        # Топ вопросов
+        '<div>'
+        '<h3 style="margin-top:0;font-size:15px;color:#fff">❓ Топ вопросов</h3>'
+        '<table>'
+        '<tr><th>Вопрос</th><th class=right>Раз</th></tr>'
+        f"{q_rows}"
+        '</table>'
+        '</div>'
+        # Активность по часам
+        '<div>'
+        '<h3 style="margin-top:0;font-size:15px;color:#fff">🕐 Активность по часам</h3>'
+        f'{hourly_html}'
+        '</div>'
+        '</div>'
+        '</div>'
+    )
 
 
 def _qa_list(state: _PanelState, csrf: str, flash: str = "") -> bytes:
