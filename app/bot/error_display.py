@@ -13,7 +13,7 @@ from app.translate_ru import Translator
 
 def _load_manual_error_codes() -> dict[str, ErrorCodeInfo]:
     try:
-        path = Path("wiki/error-codes-manual.json")
+        path = Path("data/error-codes-manual.json")
         if not path.exists():
             return {}
         raw = json.loads(path.read_text(encoding="utf-8"))

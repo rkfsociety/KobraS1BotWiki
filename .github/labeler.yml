@@ -11,7 +11,7 @@ tests:
 wiki:
   - changed-files:
       - any-glob-to-any-file:
-          - wiki/**
+          - docs/**
           - "**/*.md"
 
 ci:
