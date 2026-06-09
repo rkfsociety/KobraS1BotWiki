@@ -57,7 +57,7 @@ class SitemapMonitor:
 
             # Проверяем изменения
             if new_hash != old_hash:
-                reason = f"Sitemap изменился (хеш: {old_hash[:8] if old_hash else 'новый'}… → {new_hash[:8]}…)"
+                reason = f"Sitemap изменился (хеш: {old_hash[:8] if old_hash else 'нет'}… → {new_hash[:8]}…)"
                 self._state["hash"] = new_hash
                 self._state["url_count"] = new_url_count
                 self._state["timestamp"] = time.time()
@@ -89,7 +89,7 @@ class WikiReindexer:
         """
         Args:
             indexer: Экземпляр WebWikiIndexer.
-            notify_callback: Async функция для уведомлений (message: str).
+            notify_callback: Async функция для уведомлений (application, message).
         """
         self.indexer = indexer
         self.notify_callback = notify_callback
@@ -119,9 +119,9 @@ class WikiReindexer:
 
         try:
             # Очищаем состояние: сбрасываем next_idx и удаляем флаг done_notified
-            self.indexer._state.next_idx = 0  # noqa: SLF001
-            self.indexer._state.done_notified = False  # noqa: SLF001
-            self.indexer._state.urls = []  # noqa: SLF001
+            self.indexer._state.next_idx = 0
+            self.indexer._state.done_notified = False
+            self.indexer._state.urls = []
             self.indexer._save_state()
 
             # Перезагружаем список URL из sitemap
@@ -134,7 +134,7 @@ class WikiReindexer:
                 base_url=self.indexer.base_url,
             )
 
-            self.indexer._state.urls = new_urls  # noqa: SLF001
+            self.indexer._state.urls = new_urls
             self.indexer._save_state()
 
             msg = f"✅ Переиндексация начата: {len(new_urls)} страниц в очереди. {reason}"
@@ -144,7 +144,7 @@ class WikiReindexer:
                 try:
                     await self.notify_callback(msg)
                 except Exception as e:
-                    logging.warning("Не удалось отправить уведомление о переиндексации: %s", e)
+                    logging.warning("Не удалось отправить уведомление: %s", e)
 
             return True
 
