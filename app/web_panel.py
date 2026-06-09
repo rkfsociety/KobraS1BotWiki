@@ -476,13 +476,21 @@ def _recent_replies_section(state: _PanelState, csrf: str) -> str:
     return f'<div class="card"><h2>Последние ответы бота</h2>{table}</div>'
 
 
-def _bad_answers_section(state: _PanelState, csrf: str) -> str:
-    """HTML-блок отмеченных ошибочных ответов с кнопкой удаления."""
+def _bad_answers_section(state: _PanelState, csrf: str, page: int = 1, per_page: int = 50) -> str:
+    """HTML-блок отмеченных ошибочных ответов с кнопкой удаления и пагинацией."""
     entries = load_bad_answers()
     if not entries:
         return ""
+    
+    total = len(entries)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(page, total_pages))
+    offset = (page - 1) * per_page
+    page_entries = entries[offset:offset + per_page]
+    
     rows = []
-    for i, e in enumerate(entries[:50]):
+    for i, e in enumerate(page_entries):
+        global_idx = offset + i
         ts = time.strftime("%d.%m %H:%M", time.localtime(float(e.get("ts", 0) or 0)))
         q = html.escape(str(e.get("question", ""))[:300])
         ans = str(e.get("answer", ""))
@@ -504,7 +512,8 @@ def _bad_answers_section(state: _PanelState, csrf: str) -> str:
             '<form class="inline-form" method="post" action="/bad-answers/delete"'
             " onsubmit=\"return confirm('Удалить запись?')\">"
             f'<input type="hidden" name="csrf" value="{csrf}">'
-            f'<input type="hidden" name="i" value="{i}">'
+            f'<input type="hidden" name="i" value="{global_idx}">'
+            f'<input type="hidden" name="page" value="{page}">'
             '<button class="btn btn-sm" style="background:#374151" type="submit" title="Удалить после обработки">✓ Обработано</button>'
             "</form>"
             "</td></tr>"
@@ -519,10 +528,33 @@ def _bad_answers_section(state: _PanelState, csrf: str) -> str:
         + "".join(rows)
         + "</table>"
     )
+    
+    # Пагинация
+    pagination_parts = []
+    pagination_parts.append('<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">')
+    pagination_parts.append(f'<span class=muted>Записей: {total}</span>')
+    pagination_parts.append('<div style="display:flex;gap:8px;align-items:center">')
+    
+    if page > 1:
+        pagination_parts.append(f'<a class="btn btn-sm" href="/?page={page - 1}">&larr; Назад</a>')
+    else:
+        pagination_parts.append('<span class=muted style="font-size:12px">&larr; Назад</span>')
+    
+    pagination_parts.append(f'<span class=muted style="font-size:13px">Стр. {page} из {total_pages}</span>')
+    
+    if page < total_pages:
+        pagination_parts.append(f'<a class="btn btn-sm" href="/?page={page + 1}">Вперёд &rarr;</a>')
+    else:
+        pagination_parts.append('<span class=muted style="font-size:12px">Вперёд &rarr;</span>')
+    
+    pagination_parts.append('</div></div>')
+    pagination_html = "".join(pagination_parts)
+    
     return (
         '<div class="card" style="border-color:#6b1f1f">'
         f'<h2 style="color:#f0a0a0">⚑ Ошибочные ответы ({len(entries)})</h2>'
         f"{table}"
+        f"{pagination_html}"
         "</div>"
     )
 
@@ -588,7 +620,7 @@ def _missed_questions_section(csrf: str) -> str:
     )
 
 
-def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
+def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", page: int = 1) -> bytes:
     bd = state.application.bot_data if state.application else {}
     wix = bd.get("wiki_index")
     idxr = bd.get("wiki_indexer")
@@ -631,7 +663,7 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
         for k, v, desc in _CFG_DESCRIPTIONS
     )
     recent_section = _recent_replies_section(state, csrf) if csrf else ""
-    bad_section = _bad_answers_section(state, csrf) if csrf else ""
+    bad_section = _bad_answers_section(state, csrf, page=page) if csrf else ""
     missed_section = _missed_questions_section(csrf) if csrf else ""
     body = (
         "<h1>Дашборд</h1>"
@@ -1068,7 +1100,11 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 return
 
             if path == "/":
-                self._send(_dashboard(state, self._csrf))
+                try:
+                    page_num = max(1, int((qs.get("page") or ["1"])[0]))
+                except ValueError:
+                    page_num = 1
+                self._send(_dashboard(state, self._csrf, page=page_num))
             elif path == "/qa":
                 self._send(_qa_list(state, self._csrf))
             elif path == "/qa/edit":
@@ -1499,6 +1535,10 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 idx = int(form.get("i", "-1"))
             except ValueError:
                 idx = -1
+            try:
+                page_num = max(1, int(form.get("page", "1")))
+            except ValueError:
+                page_num = 1
             ok, msg = delete_bad_answer(idx=idx)
             if ok and getattr(state.settings, "manual_qa_git_push", False):
                 try:
@@ -1506,7 +1546,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     msg += f" · git: {pmsg}" if pushed else f" · git ошибка: {pmsg}"
                 except Exception as e:  # noqa: BLE001
                     msg += f" · git исключение: {e}"
-            self._send(_dashboard(state, self._csrf, flash=self._flash(ok, msg)))
+            self._send(_dashboard(state, self._csrf, flash=self._flash(ok, msg), page=page_num))
 
         def _missed_questions_delete(self, form: dict[str, str]) -> None:
             """Удаляет одну запись из missed_questions.json."""
