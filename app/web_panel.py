@@ -60,6 +60,7 @@ from app.bot.manual_qa import (
 )
 from app.bot.stores import _load_fix_store, _norm_text, _save_fix_store
 from app.bot.bot_stats import get_top_wiki_pages, get_top_questions, get_hourly_activity
+from app.bot.wiki_reindex_handler import handle_reindex_webhook
 
 log = logging.getLogger(__name__)
 
@@ -1226,6 +1227,9 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             if path == "/bot-login/new":
                 self._bot_login_new()
                 return
+            if path == "/api/webhook/reindex":
+                self._reindex_webhook()
+                return
 
             sess = self._require_auth()
             if sess is None:
@@ -1263,6 +1267,18 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 self._send(_layout(state, "<h1>404</h1>"), status=404)
 
         # --- обработчики действий ---
+        def _reindex_webhook(self) -> None:
+            length = int(self.headers.get("Content-Length") or 0)
+            raw = self.rfile.read(length) if length else b"{}"
+            try:
+                body = json.loads(raw)
+            except Exception:
+                body = {}
+            application = state.application if hasattr(state, "application") else None
+            status_code, resp = handle_reindex_webhook(body, application)
+            payload = json.dumps(resp, ensure_ascii=False).encode("utf-8")
+            self._send(payload, status=status_code, content_type="application/json; charset=utf-8")
+
         def _handle_login(self) -> None:
             ip = self._client_ip()
             if state.login_blocked(ip):

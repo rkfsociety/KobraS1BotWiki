@@ -43,10 +43,10 @@ class SitemapMonitor:
             (has_changes, reason) — True если обнаружены изменения, строка с причиной.
         """
         try:
-            client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
-            response = await client.get(self.sitemap_url, headers={"User-Agent": "WikiBot/1.0"})
-            response.raise_for_status()
-            content = response.text
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                response = await client.get(self.sitemap_url, headers={"User-Agent": "WikiBot/1.0"})
+                response.raise_for_status()
+                content = response.text
 
             # Вычисляем хеш контента sitemap
             new_hash = hashlib.sha256(content.encode()).hexdigest()
