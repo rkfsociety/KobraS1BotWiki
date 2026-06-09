@@ -1,5 +1,13 @@
 [
   {
+    "question": "Всем привет. А может кто-то подсказать как перенести надписи с модели maker world в слайсер Anycubic ?))",
+    "answer": "Anycubic Slicer Next slicing software quick start guide | Anycubic Wiki",
+    "url": "https://wiki.anycubic.com/en/software-and-app/new-page-anycubic-slicer-beta(orca-version)/anycubic-slicer-next-slicing-software-quick-start-guide",
+    "source": "wiki",
+    "note": "",
+    "ts": 1781026055.786598
+  },
+  {
     "question": "Так цвета пластиков меняются поставьте в асе в том порядке что они стоят в бамбу слайсере",
     "answer": "Resin 3D Printing: Parameters selection and setting during slicing | Anycubic Wiki",
     "url": "https://wiki.anycubic.com/en/filament-and-resin/parameters-selection",
