@@ -1,5 +1,13 @@
 [
   {
+    "question": "может кто то может посоветовать ремонт в москве? надежного мастера\nбоюсь, что я сама не смогу его починить",
+    "answer": "Vyper:Replace the nozzle | Anycubic Wiki",
+    "url": "https://wiki.anycubic.com/en/fdm-3d-printer/vyper/vyper-replace-the-nozzle",
+    "source": "wiki",
+    "note": "",
+    "ts": 1781026036.1645951
+  },
+  {
     "question": "По длинне оригинала?",
     "answer": "Kobra S1 Extruder Module Replacement Guide | Anycubic Wiki",
     "url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-s1-combo/extruder-module-replacement-guide",
