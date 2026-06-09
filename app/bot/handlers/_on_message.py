@@ -50,6 +50,7 @@ from app.error_codes_catalog import ErrorCodeInfo
 from app.ru_layer import expand_queries
 from app.web_wiki_index import WebWikiIndex
 
+from app.bot.bot_stats import record_answer as _record_stat
 from ._utils import _is_triggered_message, _trigger_source, _try_reply_manual_qa
 
 
@@ -528,6 +529,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         source="wiki",
         chat_id=chat_id,
     )
+
+    _record_stat(context.application.bot_data, url=url, question=text, source="wiki")
 
     if _ctx_uid is not None:
         _record_bot_ans(

@@ -44,6 +44,7 @@ from app.bot.handlers import (
 )
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.reply_logging import load_recent_replies
+from app.bot.bot_stats import load_bot_stats
 from app.bot.panel_login import cmd_start
 from app.bot.reactions import on_message_reaction
 from app.bot.ops_notify import notify_ops
@@ -185,6 +186,10 @@ def main() -> None:
             load_recent_replies(application.bot_data)
         except Exception as _e:
             logging.warning("Не удалось загрузить recent_replies: %s", _e)
+        try:
+            load_bot_stats(application.bot_data)
+        except Exception as _e:
+            logging.warning("Не удалось загрузить bot_stats: %s", _e)
         # Ссылка на основной event-loop — чтобы веб-панель могла запросить перезапуск.
         application.bot_data["main_loop"] = asyncio.get_running_loop()
         # Каталог ошибок (fallback, если у кода нет отдельной страницы /error-codes/<code>-code)

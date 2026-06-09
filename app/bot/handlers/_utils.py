@@ -12,6 +12,7 @@ from telegram.constants import ChatType, MessageEntityType, ParseMode
 from telegram.ext import ContextTypes
 
 from app.bot.admin_access import user_exempt_from_wiki_reply_spam_limits, user_has_admin_command_access
+from app.bot.bot_stats import record_answer as _record_stat
 from app.bot.clarify import _reply_is_expected_by_bot
 from app.bot.decision_log import log_skip
 from app.bot.ephemeral import schedule_delete_slash_command_and_reply
@@ -179,6 +180,8 @@ async def _try_reply_manual_qa(
         source="manual_qa",
         chat_id=chat_id,
     )
+
+    _record_stat(context.application.bot_data, url="", question=query_text, source="manual_qa")
 
     if uid is not None:
         _record_bot_ans(
