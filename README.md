@@ -41,4 +41,4 @@ python -m app.bot
 
 ### Технический долг
 - [x] Разбить `text_heuristics.py` (4300+ строк) на подмодули по темам → пакет `app/bot/heuristics/`
-- [ ] Разбить `handlers.py` (3000+ строк) на подмодули
+- [x] Разбить `handlers.py` (3000+ строк) на подмодули → пакет `app/bot/handlers/`
