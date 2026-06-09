@@ -1749,6 +1749,12 @@ def _is_technical_observation_sharing(text: str) -> bool:
     )
     if thread_past_action:
         return True
+    # «меня удивляет / поражает как по-разному...» — наблюдение, не запрос к вики
+    wonder = bool(
+        re.search(r"\b(?:меня\s+)?(?:удивляет|поражает|удивил|поразил)\s+как\b", t)
+    )
+    if wonder:
+        return True
     return False
 
 
@@ -1993,15 +1999,22 @@ def _is_printing_status_announcement(text: str) -> bool:
         return False
     printing_action = bool(
         re.search(
-            r"\b(?:запускаю|запустил|начинаю|начал|печатаю|пошл[ао]\s+печать|калибрую)\b",
+            r"\b(?:запускаю|запустил|запустился|запустилась|начинаю|начал|печатаю|пошл[ао]\s+печать|калибрую)\b",
             t,
         )
     )
-    layer_ctx = bool(re.search(r"\b(?:первый\s+слой|слой|печат|калибр)\b", t))
+    layer_ctx = bool(re.search(r"\b(?:первый\s+слой|слой|печат|калибр|многоцвет)\b", t))
     casual_start = bool(re.search(r"^(?:ну\s+что|ну\s*,|поехали|погнали)\b", t))
+    # «посмотрим на что способна / что из этого выйдет» — эмоциональный старт, не вопрос к боту
+    lets_see = bool(
+        re.search(r"\b(?:посмотрим|поглядим|интересно\s+что\s+(?:получится|выйдет|будет))\b", t)
+        and re.search(r"\b(?:способн\w*|получится|выйдет|будет|эта\s+лошадк\w*)\b", t)
+    )
     if printing_action and layer_ctx:
         return True
     if casual_start and (printing_action or layer_ctx):
+        return True
+    if printing_action and lets_see:
         return True
     return False
 
@@ -2237,7 +2250,14 @@ def _is_multicolor_experience_opinion(text: str) -> bool:
         or re.search(r"\b(?:как[\s-]?будто|какбудто|словно|типа\s+как)\b", t)
         or re.search(r"\bпротестир\w*\b", t)
     )
-    return opinion
+    if opinion:
+        return True
+    # «отхода меньше/скорость быстрей чем а1/bambu» — сравнение с конкурентом, не запрос к вики
+    competitor_cmp = bool(
+        re.search(r"\b(?:а1\b|a1\b|бамбу|bambu|p2s|п2с)\b", t)
+        and re.search(r"\b(?:меньше|больше|быстрей|быстрее|медленней|медленнее)\b", t)
+    )
+    return competitor_cmp
 
 
 def _is_joke_printer_model_clarify_reply(text: str | None) -> bool:
@@ -2552,6 +2572,13 @@ def _is_peer_social_printer_question(text: str) -> bool:
         re.search(r"\b(?:возьм[её]шь|возьм[её]те|берёшь|берешь|купишь|купите|закажешь|закажете)\b", t)
     )
     if buy_question and printer_ctx:
+        return True
+    # «и она теперь многоцветная?» — вопрос о состоянии принтера у собеседника
+    state_change = bool(
+        re.search(r"\b(?:и|а|ну)\s+(?:он[ао]?|их)\s+теперь\b", t)
+        or (re.search(r"\bтеперь\b", t) and re.search(r"\b(?:многоцвет\w*|работает|пашет|включ\w*|стала)\b", t))
+    )
+    if state_change and printer_ctx:
         return True
     return False
 
@@ -3100,6 +3127,12 @@ def _is_bare_rhetorical_context_question(text: str) -> bool:
     )
     if re.match(r"^(?:а\s+)?(?:как|что|куда|откуда)\b", t) and anaphora and word_count <= 6:
         return True
+    # «По длинне оригинала?», «За сколько взял?» — короткий уточняющий фрагмент с предлога
+    starts_with_prep = bool(
+        re.match(r"^(?:по|из|за|с\b|в\b|на|при|от|до|для|у\b)\b", t)
+    )
+    if starts_with_prep and word_count <= 4:
+        return True
     return False
 
 
@@ -3179,7 +3212,34 @@ def _is_casual_advice_in_thread(text: str) -> bool:
         t,
     ):
         return True
+    # Повелительное наклонение «поставьте/переставьте/загрузите X в Y» — совет в треде
+    if re.search(
+        r"\b(?:поставьте|переставьте|загрузите|переставь|поменяйте|поменяй)\b",
+        t,
+    ) and not re.search(r"\b(?:помогите|подскаж)\b", t):
+        return True
     return False
+
+
+def _is_print_task_planning_statement(text: str) -> bool:
+    """«Надо напечатать X для К3 потому что лоточков не хватает» — объявление задачи в чате, не вопрос к боту."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\b(?:помогите|подскаж|как\s+(?:настро|сделать|убрать|печатать))\b", t):
+        return False
+    # «надо/нужно напечатать X» — объявление задачи (не «как напечатать?»)
+    task = bool(
+        re.search(r"\b(?:надо|нужно)\s+(?:\w+\s+){0,5}напечатать\b", t)
+        or re.search(r"\bхочу\s+(?:\w+\s+){0,4}напечатать\b", t)
+    )
+    # С явным обоснованием или целью — точнее соответствует паттерну
+    reason = bool(
+        re.search(r"\bпотому\s+что\b", t)
+        or re.search(r"\bдля\s+(?:многоцвет|к3|кобр|s1|принтер)\w*\b", t)
+        or re.search(r"\bне\s+хватает\b", t)
+    )
+    return task and reason
 
 
 def _is_multicolor_tower_rhetoric(text: str) -> bool:
@@ -3247,6 +3307,8 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_unrelated_pc_hardware_banter(text)
         or _is_casual_advice_in_thread(text)
         or _is_multicolor_tower_rhetoric(text)
+        or _is_geo_social_only_request(text)
+        or _is_print_task_planning_statement(text)
     )
 
 
