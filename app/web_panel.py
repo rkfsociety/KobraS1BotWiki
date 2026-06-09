@@ -45,6 +45,11 @@ from app.bot.bad_answers import (
     load_bad_answers,
     try_git_push_bad_answers,
 )
+from app.bot.missed_questions import (
+    clear_missed_questions,
+    delete_missed_question,
+    load_missed_questions,
+)
 from app.bot.reply_logging import save_recent_replies
 from app.bot.manual_qa import (
     add_manual_qa_entry,
@@ -522,6 +527,67 @@ def _bad_answers_section(state: _PanelState, csrf: str) -> str:
     )
 
 
+def _missed_questions_section(csrf: str) -> str:
+    """HTML-блок вопросов без ответа с кнопкой удаления и очистки всего списка."""
+    entries = load_missed_questions()
+    if not entries:
+        return ""
+    rows = []
+    for i, e in enumerate(entries[:100]):
+        ts = time.strftime("%d.%m %H:%M", time.localtime(float(e.get("ts", 0) or 0)))
+        q = html.escape(str(e.get("text", ""))[:300])
+        score = e.get("score")
+        score_str = f"{score:.0f}" if score is not None else "—"
+        url = str(e.get("best_url", "") or "")
+        count = int(e.get("count", 1))
+        url_cell = (
+            f'<a href="{html.escape(url)}" target=_blank rel=noopener style="font-size:12px">{html.escape(url[:70])}</a>'
+            if url else '<span class=muted>—</span>'
+        )
+        count_badge = (
+            f' <span style="background:#374151;border-radius:4px;padding:1px 5px;font-size:11px">{count}×</span>'
+            if count > 1 else ""
+        )
+        rows.append(
+            "<tr>"
+            f'<td class=muted style="white-space:nowrap;font-size:12px">{html.escape(ts)}</td>'
+            f'<td class=muted style="text-align:center">{html.escape(score_str)}</td>'
+            f'<td class="q-cell">{q}{count_badge}</td>'
+            f'<td class="a-cell">{url_cell}</td>'
+            "<td class=right>"
+            '<form class="inline-form" method="post" action="/missed-questions/delete">'
+            f'<input type="hidden" name="csrf" value="{csrf}">'
+            f'<input type="hidden" name="i" value="{i}">'
+            '<button class="btn btn-sm" style="background:#374151" type="submit" title="Удалить запись">✓</button>'
+            "</form>"
+            "</td></tr>"
+        )
+    table = (
+        "<table>"
+        "<colgroup>"
+        '<col style="width:9%"><col style="width:5%"><col style="width:46%">'
+        '<col style="width:33%"><col style="width:7%">'
+        "</colgroup>"
+        "<tr><th>Время</th><th>Score</th><th>Вопрос</th><th>Лучший URL</th><th></th></tr>"
+        + "".join(rows)
+        + "</table>"
+    )
+    clear_btn = (
+        '<form class="inline-form" method="post" action="/missed-questions/clear"'
+        " onsubmit=\"return confirm('Очистить весь список?')\" style='margin-top:8px'>"
+        f'<input type="hidden" name="csrf" value="{csrf}">'
+        '<button class="btn btn-sm" style="background:#374151" type="submit">🗑 Очистить всё</button>'
+        "</form>"
+    )
+    return (
+        '<div class="card" style="border-color:#1f4a6b">'
+        f'<h2 style="color:#a0c8f0">❓ Вопросы без ответа ({len(entries)})</h2>'
+        f"{table}"
+        f"{clear_btn}"
+        "</div>"
+    )
+
+
 def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
     bd = state.application.bot_data if state.application else {}
     wix = bd.get("wiki_index")
@@ -566,10 +632,12 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
     )
     recent_section = _recent_replies_section(state, csrf) if csrf else ""
     bad_section = _bad_answers_section(state, csrf) if csrf else ""
+    missed_section = _missed_questions_section(csrf) if csrf else ""
     body = (
         "<h1>Дашборд</h1>"
         f'<div class="card"><div class="grid">{stats}</div></div>'
         f"{bad_section}"
+        f"{missed_section}"
         f"{recent_section}"
         '<div class="card kv"><h2>Конфигурация (только просмотр)</h2>'
         f"<table>{cfg_rows}</table>"
@@ -1066,6 +1134,10 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 self._replies_flag(form)
             elif path == "/bad-answers/delete":
                 self._bad_answers_delete(form)
+            elif path == "/missed-questions/delete":
+                self._missed_questions_delete(form)
+            elif path == "/missed-questions/clear":
+                self._missed_questions_clear(form)
             else:
                 self._send(_layout(state, "<h1>404</h1>"), status=404)
 
@@ -1435,6 +1507,21 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 except Exception as e:  # noqa: BLE001
                     msg += f" · git исключение: {e}"
             self._send(_dashboard(state, self._csrf, flash=self._flash(ok, msg)))
+
+        def _missed_questions_delete(self, form: dict[str, str]) -> None:
+            """Удаляет одну запись из missed_questions.json."""
+            try:
+                idx = int(form.get("i", "-1"))
+            except ValueError:
+                idx = -1
+            ok, msg = delete_missed_question(idx=idx)
+            self._send(_dashboard(state, self._csrf, flash=self._flash(ok, msg)))
+
+        def _missed_questions_clear(self, form: dict[str, str]) -> None:  # noqa: ARG002
+            """Очищает весь список missed_questions.json."""
+            count = clear_missed_questions()
+            self._send(_dashboard(state, self._csrf,
+                                  flash=self._flash(True, f"Удалено {count} записей")))
 
     return Handler
 

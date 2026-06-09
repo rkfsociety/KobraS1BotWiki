@@ -78,6 +78,7 @@ from app.bot.ops_notify import notify_ops
 
 from app.bot.i18n import _detect_user_lang, _lang_from_message, _t, format_wiki_card
 
+from app.bot.missed_questions import add_missed_question
 from app.bot.reply_logging import add_to_recent_replies, log_bot_reply_for_message
 
 from app.bot.user_context import (
@@ -2726,6 +2727,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     if not best_doc:
 
+        if not is_err:
+
+            add_missed_question(text=text, score=None, best_url=None, chat_id=chat_id)
+
         if settings.log_decisions:
 
             if is_err and code:
@@ -2775,6 +2780,13 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         if clarify_low in ("sent", "blocked"):
 
             return
+
+        add_missed_question(
+            text=text,
+            score=best_score,
+            best_url=best_doc.url if best_doc else None,
+            chat_id=chat_id,
+        )
 
         if settings.log_decisions:
 
