@@ -429,18 +429,28 @@ def _source_badge(source: str) -> str:
     return f'<span class="badge {cls}">{label}</span>'
 
 
-def _recent_replies_section(state: _PanelState, csrf: str) -> str:
-    """HTML-блок ленты последних ответов бота с кнопкой «Отметить ошибочным»."""
+_REPLIES_PER_PAGE = 25
+
+
+def _recent_replies_section(state: _PanelState, csrf: str, page: int = 1) -> str:
+    """HTML-блок ленты последних ответов бота с кнопкой «Отметить ошибочным» и пагинацией."""
     replies: list[dict] = (state.application.bot_data.get("recent_replies") or []) if state.application else []
     if not replies:
         return (
-            '<div class="card">'
+            '<div class="card" id="recent-replies">'
             '<h2>Последние ответы бота</h2>'
             '<p class="muted">Ответов ещё нет — появятся после первого срабатывания бота в чате.</p>'
             '</div>'
         )
+    total = len(replies)
+    total_pages = max(1, (total + _REPLIES_PER_PAGE - 1) // _REPLIES_PER_PAGE)
+    page = max(1, min(page, total_pages))
+    offset = (page - 1) * _REPLIES_PER_PAGE
+    page_replies = replies[offset : offset + _REPLIES_PER_PAGE]
+
     rows = []
-    for i, r in enumerate(replies[:30]):
+    for local_i, r in enumerate(page_replies):
+        global_idx = offset + local_i
         ts = time.strftime("%d.%m %H:%M", time.localtime(float(r.get("ts", 0) or 0)))
         q = html.escape(str(r.get("question", ""))[:300])
         ans = str(r.get("answer", ""))
@@ -459,7 +469,8 @@ def _recent_replies_section(state: _PanelState, csrf: str) -> str:
             "<td class=right>"
             '<form class="inline-form" method="post" action="/replies/flag">'
             f'<input type="hidden" name="csrf" value="{csrf}">'
-            f'<input type="hidden" name="i" value="{i}">'
+            f'<input type="hidden" name="i" value="{global_idx}">'
+            f'<input type="hidden" name="replies_page" value="{page}">'
             '<button class="btn btn-sm btn-danger" type="submit" title="Отметить как ошибочный">⚑</button>'
             "</form>"
             "</td></tr>"
@@ -474,7 +485,34 @@ def _recent_replies_section(state: _PanelState, csrf: str) -> str:
         + "".join(rows)
         + "</table>"
     )
-    return f'<div class="card"><h2>Последние ответы бота</h2>{table}</div>'
+
+    pag_prev = (
+        f'<a class="btn btn-sm" href="/?replies_page={page - 1}#recent-replies">&larr; Назад</a>'
+        if page > 1
+        else '<span class=muted style="font-size:12px">&larr; Назад</span>'
+    )
+    pag_next = (
+        f'<a class="btn btn-sm" href="/?replies_page={page + 1}#recent-replies">Вперёд &rarr;</a>'
+        if page < total_pages
+        else '<span class=muted style="font-size:12px">Вперёд &rarr;</span>'
+    )
+    pagination = (
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">'
+        f'<span class=muted>Записей: {total}</span>'
+        f'<div style="display:flex;gap:8px;align-items:center">'
+        f"{pag_prev}"
+        f'<span class=muted style="font-size:13px">Стр. {page} из {total_pages}</span>'
+        f"{pag_next}"
+        "</div></div>"
+    )
+
+    return (
+        '<div class="card" id="recent-replies">'
+        f'<h2>Последние ответы бота ({total})</h2>'
+        f"{table}"
+        f"{pagination}"
+        "</div>"
+    )
 
 
 def _bad_answers_section(state: _PanelState, csrf: str) -> str:
@@ -589,7 +627,7 @@ def _missed_questions_section(csrf: str) -> str:
     )
 
 
-def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
+def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page: int = 1) -> bytes:
     bd = state.application.bot_data if state.application else {}
     wix = bd.get("wiki_index")
     idxr = bd.get("wiki_indexer")
@@ -638,7 +676,7 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "") -> bytes:
         f"</tr>"
         for k, v, desc in _CFG_DESCRIPTIONS
     )
-    recent_section = _recent_replies_section(state, csrf) if csrf else ""
+    recent_section = _recent_replies_section(state, csrf, page=replies_page) if csrf else ""
     bad_section = _bad_answers_section(state, csrf) if csrf else ""
     missed_section = _missed_questions_section(csrf) if csrf else ""
     bot_stats_section = _bot_stats_section(top_wiki_pages, top_questions, hourly_activity)
@@ -1147,7 +1185,11 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 return
 
             if path == "/":
-                self._send(_dashboard(state, self._csrf))
+                try:
+                    replies_page = max(1, int((qs.get("replies_page") or ["1"])[0]))
+                except ValueError:
+                    replies_page = 1
+                self._send(_dashboard(state, self._csrf, replies_page=replies_page))
             elif path == "/qa":
                 self._send(_qa_list(state, self._csrf))
             elif path == "/qa/edit":
@@ -1541,12 +1583,17 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 idx = int(form.get("i", "-1"))
             except ValueError:
                 idx = -1
+            try:
+                replies_page = max(1, int(form.get("replies_page", "1")))
+            except ValueError:
+                replies_page = 1
             replies: list[dict] = (
                 (state.application.bot_data.get("recent_replies") or [])
                 if state.application else []
             )
             if idx < 0 or idx >= len(replies):
-                self._send(_dashboard(state, self._csrf, flash=self._flash(False, "Запись не найдена")))
+                self._send(_dashboard(state, self._csrf, flash=self._flash(False, "Запись не найдена"),
+                                      replies_page=replies_page))
                 return
             r = replies[idx]
             note = form.get("note", "").strip()
@@ -1570,7 +1617,8 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 except Exception as e:  # noqa: BLE001
                     push_info = f" · git исключение: {e}"
             self._send(_dashboard(state, self._csrf,
-                                  flash=self._flash(True, f"Ответ отмечен как ошибочный{push_info}")))
+                                  flash=self._flash(True, f"Ответ отмечен как ошибочный{push_info}"),
+                                  replies_page=replies_page))
 
         def _bad_answers_delete(self, form: dict[str, str]) -> None:
             """Удаляет обработанную запись из bad_answers.json."""
