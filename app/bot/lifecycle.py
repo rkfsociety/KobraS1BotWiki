@@ -50,10 +50,12 @@ from app.bot.reactions import on_message_reaction
 from app.bot.ops_notify import notify_ops
 from app.bot.telegram_log_mirror import attach_telegram_log_mirror, flush_telegram_log_mirror
 from app.bot.stores import _load_clarify_store, _load_fix_store
+from app.bot.wiki_reindex import SitemapMonitor, WikiReindexer
 from app.config import Settings, load_settings
 from app.error_codes_catalog import ensure_error_codes_catalog, merge_manual_overrides
 from app.resource_limits import apply_posix_virtual_memory_limit_mb
 from app.web_wiki_index import WebWikiIndex, WebWikiIndexer
+
 
 def main() -> None:
     log_dir = Path("logs")
@@ -208,6 +210,35 @@ def main() -> None:
             application.bot_data["fix_store"] = _load_fix_store()
         except Exception as e:
             logging.warning("Не удалось загрузить fix-store: %s", e)
+        # Инициализируем мониторинг и переиндексацию вики
+        try:
+            sitemap_monitor = SitemapMonitor(
+                sitemap_url=settings.wiki_sitemap_url,
+                cache_dir=Path(settings.cache_path).parent,
+            )
+
+            async def notify_reindex(msg: str) -> None:
+                """Отправляет уведомление о переиндексации в служебный чат."""
+                if settings.ops_notify_chat_id:
+                    try:
+                        await application.bot.send_message(
+                            chat_id=settings.ops_notify_chat_id,
+                            text=msg,
+                        )
+                    except Exception as e:
+                        logging.warning("Не удалось отправить уведомление переиндексации: %s", e)
+
+            wiki_reindexer = WikiReindexer(
+                indexer=application.bot_data["wiki_indexer"],
+                notify_callback=notify_reindex,
+            )
+
+            application.bot_data["sitemap_monitor"] = sitemap_monitor
+            application.bot_data["wiki_reindexer"] = wiki_reindexer
+
+            logging.info("Мониторинг sitemap инициализирован")
+        except Exception as e:
+            logging.warning("Не удалось инициализировать мониторинг вики: %s", e)
         try:
             wix = application.bot_data.get("wiki_index")
             nd = wix.doc_count if wix is not None else "?"
@@ -246,7 +277,7 @@ def main() -> None:
         idxr: WebWikiIndexer = app.bot_data["wiki_indexer"]
         st = app.bot_data["settings"]
         if idxr.is_done():
-            # Если уже всё скачано — попробуем один раз отправить уведомление (если включено).
+            # Если уже всё скачано — попытаемся один раз отправить уведомление (если включено).
             if (
                 st.notify_on_index_done
                 and st.notify_chat_id is not None
@@ -336,6 +367,20 @@ def main() -> None:
             )
             logging.info("Автоподстройка: шаг %.1fs -> новый интервал %ss", dt, int(round(new)))
 
+    async def _check_wiki_updates(context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Периодически проверяет sitemap на изменения."""
+        _ = context
+        monitor = app.bot_data.get("sitemap_monitor")
+        reindexer = app.bot_data.get("wiki_reindexer")
+
+        if not monitor or not reindexer:
+            return
+
+        try:
+            await reindexer.reindex_if_needed(monitor, force=False)
+        except Exception as e:
+            logging.error("Ошибка при проверке обновлений вики: %s", e)
+
     # Периодически докачиваем новые страницы, прогресс сохраняется в .cache/
     app.bot_data["index_interval_current"] = float(settings.index_interval_seconds)
     app.bot_data["index_job"] = app.job_queue.run_repeating(
@@ -344,6 +389,17 @@ def main() -> None:
         first=1,
         name="index_step",
     )
+
+    # Проверка обновлений вики по sitemap
+    wiki_check_interval = getattr(settings, "wiki_check_interval_seconds", 3600)
+    if wiki_check_interval > 0:
+        app.bot_data["wiki_check_job"] = app.job_queue.run_repeating(
+            _check_wiki_updates,
+            interval=wiki_check_interval,
+            first=min(300, wiki_check_interval),
+            name="check_wiki_updates",
+        )
+        logging.info("Автопроверка обновлений вики: каждые %s секунд", wiki_check_interval)
 
     async def _git_autopull_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         application = context.application
