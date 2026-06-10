@@ -1,38 +1,46 @@
-# KobraS1BotWiki — автозапуск после перезагрузки сервера (systemd)
+# KobraS1BotWiki — systemd-сервис (полноценное управление процессом)
 #
-# Перед включением отредактируйте User, Group, WorkingDirectory и ExecStart
-# под свой Unix-пользователь и путь к клону репозитория (где лежат .env и .venv).
+# Перед установкой отредактируйте User, Group, WorkingDirectory и ExecStart
+# под своего Unix-пользователя и путь к клону репозитория (где лежат .env и .venv).
 #
 # Установка:
 #   sudo cp deploy/kobras1botwiki.service /etc/systemd/system/
 #   sudo nano /etc/systemd/system/kobras1botwiki.service   # проверьте пути
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable kobras1botwiki.service
-#   sudo systemctl start kobras1botwiki.service
+#   sudo systemctl enable --now kobras1botwiki.service
+#
+# Управление:
+#   sudo systemctl restart kobras1botwiki.service   # перезапуск
+#   sudo systemctl stop kobras1botwiki.service       # остановка
+#   systemctl status kobras1botwiki.service          # статус
 #
 # Логи:
-#   journalctl -u kobras1botwiki.service -n 50 --no-pager
+#   journalctl -u kobras1botwiki.service -f          # живой поток
+#   tail -f logs/bot.log                             # файловый лог бота
 #
-# Консоль бота в screen принадлежит пользователю из User= (не root). Под root:
-#   sudo -u anycubicwikibot screen -r kobras1botwiki
-#   sudo -u anycubicwikibot screen -ls
+# Перезапуск из веб-панели (кнопка «Обновить») использует GIT_RESTART_COMMAND из .env:
+#   GIT_RESTART_COMMAND=sudo systemctl restart --no-block kobras1botwiki.service
+# Для этого пользователю бота нужен точечный sudo (NOPASSWD) на эту команду —
+# см. /etc/sudoers.d/<пользователь>. Флаг --no-block обязателен: команда
+# выполняется изнутри cgroup сервиса, и без него процесс убьёт сам себя до завершения.
 #
-# Без root (альтернатива): crontab -e
-#   @reboot sleep 30 && cd /ПУТЬ/KobraS1BotWiki && ./deploy/ensure-bot.sh >>.cache/ensure.log 2>&1
-#   (sleep даёт сети подняться; при необходимости увеличьте)
+# Restart=always означает, что systemd сам поднимет бота при падении —
+# отдельный cron/ensure-bot и screen больше не нужны.
 
 [Unit]
-Description=KobraS1BotWiki Telegram bot (ensure-bot + screen)
+Description=KobraS1BotWiki Telegram bot
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=oneshot
-RemainAfterExit=yes
+Type=simple
 User=anycubicwikibot
 Group=anycubicwikibot
 WorkingDirectory=/home/anycubicwikibot/KobraS1BotWiki
-ExecStart=/home/anycubicwikibot/KobraS1BotWiki/deploy/ensure-bot.sh
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/anycubicwikibot/KobraS1BotWiki/.venv/bin/python -m app.bot
+Restart=always
+RestartSec=5
 StandardOutput=journal
 StandardError=journal
 
