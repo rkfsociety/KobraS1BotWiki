@@ -76,6 +76,13 @@ log = logging.getLogger(__name__)
 
 _COOKIE_NAME = "panel_session"
 
+
+def _read_proc_metrics() -> tuple[float, float]:
+    """CPU% (с прошлого вызова) и RSS в МБ процесса бота. Бросает, если psutil недоступен."""
+    cpu = _PROC.cpu_percent()
+    rss_mb = _PROC.memory_info().rss / 1024 / 1024
+    return cpu, rss_mb
+
 # Поля, которые присылает Telegram Login Widget (порядок неважен — сортируем при проверке).
 _TG_FIELDS = ("id", "first_name", "last_name", "username", "photo_url", "auth_date", "hash")
 
@@ -317,14 +324,14 @@ def _layout(state: _PanelState, body: str, *, title: str = "Панель бот�
         )
     if _PROC is not None:
         try:
-            cpu = _PROC.cpu_percent()
-            rss_mb = _PROC.memory_info().rss / 1024 / 1024
-            sys_metrics = (
-                f'<span style="font-size:12px;color:#6b7280;margin-right:12px" title="CPU / RAM процесса бота">'
-                f'CPU {cpu:.1f}% · RAM {rss_mb:.0f} MB</span>'
-            )
+            cpu, rss_mb = _read_proc_metrics()
+            metrics_text = f"CPU {cpu:.1f}% · RAM {rss_mb:.0f} MB"
         except Exception:
-            sys_metrics = ""
+            metrics_text = "—"
+        sys_metrics = (
+            '<span id="sys-metrics" style="font-size:12px;color:#6b7280;margin-right:12px" '
+            f'title="CPU / RAM процесса бота">{html.escape(metrics_text)}</span>'
+        )
     else:
         sys_metrics = ""
     ver = get_bot_version()
@@ -340,11 +347,21 @@ def _layout(state: _PanelState, body: str, *, title: str = "Панель бот�
         '<a href="/logout" style="margin-left:14px">Выйти</a>'
         '</header>'
     )
+    metrics_script = (
+        "<script>"
+        "(function(){var el=document.getElementById('sys-metrics');if(!el)return;"
+        "function tick(){fetch('/api/metrics',{cache:'no-store'})"
+        ".then(function(r){return r.ok?r.json():null}).then(function(d){"
+        "if(d){el.textContent='CPU '+d.cpu.toFixed(1)+'% \\u00b7 RAM '+Math.round(d.ram)+' MB';}})"
+        ".catch(function(){});}"
+        "setInterval(tick,3000);})();"
+        "</script>"
+    ) if _PROC is not None else ""
     page = (
         "<!doctype html><html lang=ru><head><meta charset=utf-8>"
         '<meta name=viewport content="width=device-width, initial-scale=1">'
         f"<title>{html.escape(title)}</title><style>{_CSS}</style></head><body>"
-        f"{head}<main>{flash}{body}</main></body></html>"
+        f"{head}<main>{flash}{body}</main>{metrics_script}</body></html>"
     )
     return page.encode("utf-8")
 
@@ -1345,6 +1362,10 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             if sess is None:
                 return
 
+            if path == "/api/metrics":
+                self._metrics_json()
+                return
+
             if path == "/":
                 try:
                     replies_page = max(1, int((qs.get("replies_page") or ["1"])[0]))
@@ -1445,6 +1466,14 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 "bot_username": bd.get("bot_username"),
             }, ensure_ascii=False).encode("utf-8")
             self._send(payload, status=status_code, content_type="application/json; charset=utf-8")
+
+        def _metrics_json(self) -> None:
+            try:
+                cpu, rss_mb = _read_proc_metrics()
+                payload = json.dumps({"cpu": cpu, "ram": rss_mb}).encode("utf-8")
+            except Exception:
+                payload = json.dumps({"cpu": 0.0, "ram": 0.0}).encode("utf-8")
+            self._send(payload, content_type="application/json; charset=utf-8")
 
         def _reindex_webhook(self) -> None:
             length = int(self.headers.get("Content-Length") or 0)
