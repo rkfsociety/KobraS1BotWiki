@@ -215,6 +215,25 @@ class _PanelState:
             self.sessions.pop(token, None)
             self._save_sessions_locked()
 
+    def set_flash(self, token: str | None, flash_html: str) -> None:
+        """Сохранить flash-сообщение в сессии (для паттерна Post-Redirect-Get)."""
+        if not token:
+            return
+        with self.lock:
+            s = self.sessions.get(token)
+            if s is not None:
+                s["flash"] = flash_html
+
+    def pop_flash(self, token: str | None) -> str:
+        """Достать и удалить flash-сообщение из сессии (показывается один раз)."""
+        if not token:
+            return ""
+        with self.lock:
+            s = self.sessions.get(token)
+            if s is None:
+                return ""
+            return s.pop("flash", "") or ""
+
     def _gc_locked(self) -> None:
         now = time.time()
         dead = [t for t, s in self.sessions.items() if s["exp"] < now]
@@ -859,9 +878,9 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
         "<h1>Дашборд</h1>"
         f'<div class="card"><div class="grid">{stats}</div></div>'
         f"{bot_stats_section}"
+        f"{recent_section}"
         f"{bad_section}"
         f"{missed_section}"
-        f"{recent_section}"
         '<div class="card kv"><h2>Конфигурация (только просмотр)</h2>'
         f"<table>{cfg_rows}</table>"
         '<p class="muted">Параметры задаются через переменные окружения / .env и применяются при запуске.</p>'
@@ -1312,13 +1331,22 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             self.end_headers()
 
         def _require_auth(self) -> dict[str, Any] | None:
-            _token, sess = self._session()
+            token, sess = self._session()
             if sess is None:
                 self._redirect("/login")
                 return None
             # csrf токен текущей сессии — на этом запросе (инстанс Handler создаётся на каждый запрос)
             self._csrf = sess["csrf"]
+            self._token = token
             return sess
+
+        def _flash_redirect(self, location: str, ok: bool, msg: str) -> None:
+            """Post-Redirect-Get: сохранить flash в сессии и сделать редирект (F5 безопасен)."""
+            state.set_flash(getattr(self, "_token", None), self._flash(ok, msg))
+            self._redirect(location)
+
+        def _pop_flash(self) -> str:
+            return state.pop_flash(getattr(self, "_token", None))
 
         def _check_csrf(self, form: dict[str, str], sess: dict[str, Any]) -> bool:
             return secrets.compare_digest(form.get("csrf", ""), sess.get("csrf", ""))
@@ -1371,17 +1399,17 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     replies_page = max(1, int((qs.get("replies_page") or ["1"])[0]))
                 except ValueError:
                     replies_page = 1
-                self._send(_dashboard(state, self._csrf, replies_page=replies_page))
+                self._send(_dashboard(state, self._csrf, flash=self._pop_flash(), replies_page=replies_page))
             elif path == "/qa":
-                self._send(_qa_list(state, self._csrf))
+                self._send(_qa_list(state, self._csrf, flash=self._pop_flash()))
             elif path == "/qa/edit":
                 try:
                     idx = int((qs.get("i") or ["-1"])[0])
                 except ValueError:
                     idx = -1
-                self._send(_qa_edit_page(state, idx, self._csrf))
+                self._send(_qa_edit_page(state, idx, self._csrf, flash=self._pop_flash()))
             elif path == "/fixes":
-                self._send(_fixes_list(state, self._csrf))
+                self._send(_fixes_list(state, self._csrf, flash=self._pop_flash()))
             elif path == "/logs":
                 q = (qs.get("q") or [""])[0]
                 try:
@@ -1390,10 +1418,10 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     n = 300
                 self._send(_logs_page(state, q, n, self._csrf))
             elif path == "/config":
-                self._send(_config_page(state, self._csrf))
+                self._send(_config_page(state, self._csrf, flash=self._pop_flash()))
             elif path == "/missed":
                 sort = (qs.get("sort") or ["count"])[0]
-                self._send(_missed_page(state, self._csrf, sort=sort))
+                self._send(_missed_page(state, self._csrf, flash=self._pop_flash(), sort=sort))
             else:
                 self._send(_layout(state, "<h1>404</h1><p>Страница не найдена.</p>"), status=404)
 
@@ -1615,7 +1643,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     repo=project_repo_root(), remote=remote, branch=branch
                 )
             except Exception as e:  # noqa: BLE001
-                self._send(_dashboard(state, self._csrf, flash=self._flash(False, f"Ошибка проверки: {e}")))
+                self._flash_redirect("/", False, f"Ошибка проверки: {e}")
                 return
             if err:
                 msg, ok = f"Не удалось проверить: {err}", False
@@ -1627,7 +1655,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 )
             else:
                 msg, ok = "Установлена последняя версия.", True
-            self._send(_dashboard(state, self._csrf, flash=self._flash(ok, msg)))
+            self._flash_redirect("/", ok, msg)
 
         def _update_run(self) -> None:
             remote, branch, hard = self._git_params()
@@ -1636,16 +1664,16 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     repo=project_repo_root(), remote=remote, branch=branch, hard_reset=hard
                 )
             except Exception as e:  # noqa: BLE001
-                self._send(_dashboard(state, self._csrf, flash=self._flash(False, f"Ошибка обновления: {e}")))
+                self._flash_redirect("/", False, f"Ошибка обновления: {e}")
                 return
             if not updated:
-                self._send(_dashboard(state, self._csrf, flash=self._flash(True, f"Обновление не требуется: {gmsg}")))
+                self._flash_redirect("/", True, f"Обновление не требуется: {gmsg}")
                 return
             ok, rmsg = self._trigger_restart()
             if ok:
                 self._send(_update_wait_page(f"Обновлено: {gmsg}. {rmsg}"))
             else:
-                self._send(_dashboard(state, self._csrf, flash=self._flash(False, f"Обновлено: {gmsg}. {rmsg}")))
+                self._flash_redirect("/", False, f"Обновлено: {gmsg}. {rmsg}")
 
         def _trigger_restart(self) -> tuple[bool, str]:
             app = state.application
@@ -1690,33 +1718,23 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     if new != cur:
                         updates[key] = new
             if errors:
-                self._send(_config_page(state, self._csrf, flash=self._flash(False, "; ".join(errors))), status=400)
+                self._flash_redirect("/config", False, "; ".join(errors))
                 return
             if not updates:
-                self._send(_config_page(state, self._csrf, flash=self._flash(True, "Изменений нет")))
+                self._flash_redirect("/config", True, "Изменений нет")
                 return
             try:
                 _write_env_values(_env_file_path(), updates)
             except Exception as e:  # noqa: BLE001
-                self._send(_config_page(state, self._csrf, flash=self._flash(False, f"Ошибка записи .env: {e}")))
+                self._flash_redirect("/config", False, f"Ошибка записи .env: {e}")
                 return
             log.info("panel: обновлён .env (%d ключей)", len(updates))
             changed = ", ".join(sorted(updates))
             if form.get("action") == "save_restart":
                 ok, msg = self._trigger_restart()
-                self._send(
-                    _config_page(
-                        state, self._csrf,
-                        flash=self._flash(ok, f"Сохранено ({changed}). {msg}"),
-                    )
-                )
+                self._flash_redirect("/config", ok, f"Сохранено ({changed}). {msg}")
                 return
-            self._send(
-                _config_page(
-                    state, self._csrf,
-                    flash=self._flash(True, f"Сохранено ({changed}). Применится после перезапуска."),
-                )
-            )
+            self._flash_redirect("/config", True, f"Сохранено ({changed}). Применится после перезапуска.")
 
         def _push_qa_if_enabled(self) -> str:
             if not getattr(state.settings, "manual_qa_git_push", False):
@@ -1745,7 +1763,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             if ok:
                 self._refresh_qa_live()
                 msg += self._push_qa_if_enabled()
-            self._send(_qa_list(state, self._csrf, flash=self._flash(ok, msg)))
+            self._flash_redirect("/qa", ok, msg)
 
         def _qa_edit(self, form: dict[str, str]) -> None:
             try:
@@ -1754,7 +1772,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 idx = -1
             entries = load_manual_qa_store()
             if idx < 0 or idx >= len(entries):
-                self._send(_qa_list(state, self._csrf, flash=self._flash(False, "Запись не найдена")))
+                self._flash_redirect("/qa", False, "Запись не найдена")
                 return
             keys = [_norm_text(ln) for ln in form.get("keys", "").splitlines() if ln.strip()]
             keys = [k for k in keys if k]
@@ -1767,7 +1785,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             save_manual_qa_store(entries)
             self._refresh_qa_live()
             info = self._push_qa_if_enabled()
-            self._send(_qa_list(state, self._csrf, flash=self._flash(True, "Сохранено" + info)))
+            self._flash_redirect("/qa", True, "Сохранено" + info)
 
         def _qa_delete(self, form: dict[str, str]) -> None:
             try:
@@ -1779,20 +1797,20 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             if ok:
                 self._refresh_qa_live()
                 msg += self._push_qa_if_enabled()
-            self._send(_qa_list(state, self._csrf, flash=self._flash(ok, msg)))
+            self._flash_redirect("/qa", ok, msg)
 
         def _fixes_add(self, form: dict[str, str]) -> None:
             query = _norm_text(form.get("query", ""))
             url = form.get("url", "").strip()
             if not query or not url:
-                self._send(_fixes_list(state, self._csrf, flash=self._flash(False, "Нужны и запрос, и URL")))
+                self._flash_redirect("/fixes", False, "Нужны и запрос, и URL")
                 return
             fixes = _load_fix_store()
             fixes[query] = url
             _save_fix_store(fixes)
             if state.application is not None:
                 state.application.bot_data["fix_store"] = fixes
-            self._send(_fixes_list(state, self._csrf, flash=self._flash(True, "Фикс добавлен")))
+            self._flash_redirect("/fixes", True, "Фикс добавлен")
 
         def _fixes_delete(self, form: dict[str, str]) -> None:
             key = form.get("key", "")
@@ -1802,7 +1820,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             if state.application is not None:
                 state.application.bot_data["fix_store"] = fixes
             msg = "Фикс удалён" if existed else "Такого фикса нет"
-            self._send(_fixes_list(state, self._csrf, flash=self._flash(existed, msg)))
+            self._flash_redirect("/fixes", existed, msg)
 
         def _replies_flag(self, form: dict[str, str]) -> None:
             """Отмечает ответ из ленты как ошибочный, удаляет из ленты и сохраняет в bad_answers.json."""
@@ -1819,8 +1837,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 if state.application else []
             )
             if idx < 0 or idx >= len(replies):
-                self._send(_dashboard(state, self._csrf, flash=self._flash(False, "Запись не найдена"),
-                                      replies_page=replies_page))
+                self._flash_redirect(f"/?replies_page={replies_page}#recent-replies", False, "Запись не найдена")
                 return
             r = replies[idx]
             note = form.get("note", "").strip()
@@ -1843,9 +1860,8 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     push_info = f" · git: {pmsg}" if pushed else f" · git ошибка: {pmsg}"
                 except Exception as e:  # noqa: BLE001
                     push_info = f" · git исключение: {e}"
-            self._send(_dashboard(state, self._csrf,
-                                  flash=self._flash(True, f"Ответ отмечен как ошибочный{push_info}"),
-                                  replies_page=replies_page))
+            self._flash_redirect(f"/?replies_page={replies_page}#recent-replies", True,
+                                 f"Ответ отмечен как ошибочный{push_info}")
 
         def _bad_answers_delete(self, form: dict[str, str]) -> None:
             """Удаляет обработанную запись из bad_answers.json."""
@@ -1860,31 +1876,27 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     msg += f" · git: {pmsg}" if pushed else f" · git ошибка: {pmsg}"
                 except Exception as e:  # noqa: BLE001
                     msg += f" · git исключение: {e}"
-            self._send(_dashboard(state, self._csrf, flash=self._flash(ok, msg)))
+            self._flash_redirect("/", ok, msg)
 
         def _missed_questions_delete(self, form: dict[str, str]) -> None:
             i_text = form.get("i_text", "").strip()
             sort = form.get("sort", "count")
             if i_text:
                 ok, msg = delete_missed_question_by_text(text=i_text)
-                flash = self._flash(ok, msg)
-                self._redirect(f"/missed?sort={sort}")
+                self._flash_redirect(f"/missed?sort={sort}", ok, msg)
                 return
             try:
                 idx = int(form.get("i", "-1"))
             except ValueError:
                 idx = -1
             ok, msg = delete_missed_question(idx=idx)
-            self._send(_dashboard(state, self._csrf, flash=self._flash(ok, msg)))
+            self._flash_redirect("/", ok, msg)
 
         def _missed_questions_clear(self, form: dict[str, str]) -> None:  # noqa: ARG002
             count = clear_missed_questions()
             referer = self.headers.get("Referer", "")
-            if "/missed" in referer:
-                self._redirect("/missed")
-            else:
-                self._send(_dashboard(state, self._csrf,
-                                      flash=self._flash(True, f"Удалено {count} записей")))
+            dest = "/missed" if "/missed" in referer else "/"
+            self._flash_redirect(dest, True, f"Удалено {count} записей")
 
         def _missed_questions_to_qa(self, form: dict[str, str]) -> None:
             sort = form.get("sort", "count")
