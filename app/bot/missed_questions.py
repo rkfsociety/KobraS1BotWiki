@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import threading
 import time
@@ -18,6 +19,37 @@ from app.bot.git_autopull import project_repo_root
 
 _MAX_ENTRIES = 500
 _LOCK = threading.Lock()
+
+# --- Санитайзер: чистим приватные/запрещённые данные перед сохранением (файл уходит в публичный git) ---
+_URL_RE = re.compile(r"(?:https?://|www\.|t\.me/)\S+", re.IGNORECASE)
+_BARE_DOMAIN_RE = re.compile(
+    r"\b[\w-]+\.(?:ru|com|net|org|io|me|tv|cc|info|biz|ua|by|kz|рф|su|online|store|app|dev)"
+    r"(?:/\S*)?\b",
+    re.IGNORECASE,
+)
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+_HANDLE_RE = re.compile(r"(?<![\w])@[A-Za-z][\w]{3,}")
+_LONGNUM_RE = re.compile(r"\b\d{12,}\b")  # карты, длинные id — НЕ коды ошибок (4–7 цифр)
+_PHONE_RE = re.compile(r"(?<!\d)(?:\+?\d[\s\-()]{0,2}){10,15}(?!\d)")
+_PLACEHOLDER_RE = re.compile(r"\[(?:ссылка|email|телефон|ник|номер)\]")
+
+
+def sanitize_text(text: str) -> str:
+    """Заменяет ссылки, email, телефоны, @ники и длинные номера на плейсхолдеры."""
+    text = _URL_RE.sub("[ссылка]", text)
+    text = _EMAIL_RE.sub("[email]", text)
+    text = _BARE_DOMAIN_RE.sub("[ссылка]", text)
+    text = _PHONE_RE.sub("[телефон]", text)
+    text = _LONGNUM_RE.sub("[номер]", text)
+    text = _HANDLE_RE.sub("[ник]", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def is_meaningful_question(sanitized: str) -> bool:
+    """True, если после чистки остаётся осмысленный текст (а не только ссылка/контакты)."""
+    leftover = _PLACEHOLDER_RE.sub("", sanitized)
+    words = re.findall(r"[A-Za-zА-Яа-яЁё]{2,}", leftover)
+    return len(words) >= 2
 
 
 def _path() -> Path:
@@ -52,9 +84,13 @@ def add_missed_question(
     best_url: str | None,
     chat_id: int | None = None,
 ) -> None:
-    """Добавить вопрос без ответа. Дубликаты по тексту увеличивают счётчик."""
-    text = text.strip()
-    if not text:
+    """Добавить вопрос без ответа. Дубликаты по тексту увеличивают счётчик.
+
+    Текст санитизируется (ссылки/контакты → плейсхолдеры); чисто ссылочные/
+    контактные сообщения не записываются — файл уходит в публичный git.
+    """
+    text = sanitize_text(text.strip())
+    if not text or not is_meaningful_question(text):
         return
 
     with _LOCK:
@@ -113,6 +149,29 @@ def clear_missed_questions() -> int:
         count = len(entries)
         _save([])
     return count
+
+
+def sanitize_existing() -> tuple[int, int]:
+    """Перечистить уже накопленные записи: санитизировать текст и выбросить
+    чисто ссылочные/контактные. Возвращает (изменено_или_удалено, осталось)."""
+    with _LOCK:
+        entries = load_missed_questions()
+        before = len(entries)
+        cleaned: list[dict[str, Any]] = []
+        changed = 0
+        for e in entries:
+            orig = str(e.get("text", ""))
+            new = sanitize_text(orig.strip())
+            if not new or not is_meaningful_question(new):
+                changed += 1
+                continue
+            if new != orig:
+                e["text"] = new
+                changed += 1
+            cleaned.append(e)
+        if changed:
+            _save(cleaned)
+    return changed, len(cleaned)
 
 
 def try_git_push_missed_questions() -> tuple[bool, str]:
