@@ -7,6 +7,7 @@ import json
 import re
 import xml.etree.ElementTree as ET
 
+from collections import OrderedDict
 from dataclasses import dataclass
 
 from pathlib import Path
@@ -339,6 +340,9 @@ class WebWikiDoc:
 
 
 
+_SEARCH_CACHE_SIZE = 500
+
+
 class WebWikiIndex:
 
     def __init__(self, docs: list[WebWikiDoc]) -> None:
@@ -348,6 +352,8 @@ class WebWikiIndex:
         self._blobs = [_make_search_blob(d) for d in docs]
 
         self._lock = threading.Lock()
+
+        self._search_cache: OrderedDict[str, list[tuple[WebWikiDoc, int]]] = OrderedDict()
 
 
 
@@ -440,14 +446,16 @@ class WebWikiIndex:
     def search(self, query: str, *, top_k: int = 1) -> list[tuple[WebWikiDoc, int]]:
 
         q = _normalize(query)
-
-        scored: list[tuple[int, int]] = []
+        cache_key = f"{q}\x00{top_k}"
 
         with self._lock:
-
+            if cache_key in self._search_cache:
+                self._search_cache.move_to_end(cache_key)
+                return self._search_cache[cache_key]
             blobs = list(self._blobs)
-
             docs = list(self._docs)
+
+        scored: list[tuple[int, int]] = []
 
         for i, blob in enumerate(blobs):
 
@@ -457,7 +465,15 @@ class WebWikiIndex:
 
         scored.sort(reverse=True, key=lambda x: x[0])
 
-        return [(docs[i], score) for score, i in scored[: max(1, top_k)]]
+        result = [(docs[i], score) for score, i in scored[: max(1, top_k)]]
+
+        with self._lock:
+            self._search_cache[cache_key] = result
+            self._search_cache.move_to_end(cache_key)
+            if len(self._search_cache) > _SEARCH_CACHE_SIZE:
+                self._search_cache.popitem(last=False)
+
+        return result
 
 
 
@@ -472,6 +488,8 @@ class WebWikiIndex:
             self._docs.extend(new_docs)
 
             self._blobs.extend(_make_search_blob(d) for d in new_docs)
+
+            self._search_cache.clear()
 
 
 

@@ -91,6 +91,19 @@ def delete_missed_question(*, idx: int) -> tuple[bool, str]:
     return True, "удалено"
 
 
+def delete_missed_question_by_text(*, text: str) -> tuple[bool, str]:
+    """Удалить запись по тексту (безопасно при сортировке)."""
+    key = text.strip().lower()
+    with _LOCK:
+        entries = load_missed_questions()
+        before = len(entries)
+        entries = [e for e in entries if e.get("text", "").lower() != key]
+        if len(entries) == before:
+            return False, "запись не найдена"
+        _save(entries)
+    return True, "удалено"
+
+
 def clear_missed_questions() -> int:
     """Очистить весь список. Возвращает количество удалённых записей."""
     with _LOCK:

@@ -48,6 +48,7 @@ from app.bot.bad_answers import (
 from app.bot.missed_questions import (
     clear_missed_questions,
     delete_missed_question,
+    delete_missed_question_by_text,
     load_missed_questions,
 )
 from app.bot.reply_logging import save_recent_replies
@@ -287,6 +288,7 @@ def _layout(state: _PanelState, body: str, *, title: str = "Панель бот�
         '<a href="/">Дашборд</a>'
         '<a href="/qa">Ручные ответы</a>'
         '<a href="/fixes">Фиксы ссылок</a>'
+        '<a href="/missed">Пропущенные</a>'
         '<a href="/logs">Логи</a>'
         '<a href="/config">Настройки</a>'
         '</nav>'
@@ -626,6 +628,103 @@ def _missed_questions_section(csrf: str) -> str:
         f"{clear_btn}"
         "</div>"
     )
+
+
+def _missed_page(state: _PanelState, csrf: str, flash: str = "", sort: str = "count") -> bytes:
+    entries = load_missed_questions()
+    qa_entries = load_manual_qa_store()
+    qa_keys: set[str] = set()
+    for e in qa_entries:
+        for k in (e.get("keys") or []):
+            qa_keys.add(str(k).lower().strip())
+
+    if sort == "score":
+        entries = sorted(entries, key=lambda x: float(x.get("score") or 0))
+    elif sort == "time":
+        entries = sorted(entries, key=lambda x: float(x.get("ts") or 0), reverse=True)
+    else:
+        entries = sorted(entries, key=lambda x: int(x.get("count") or 1), reverse=True)
+
+    rows = []
+    for i, e in enumerate(entries):
+        ts = time.strftime("%d.%m %H:%M", time.localtime(float(e.get("ts", 0) or 0)))
+        text = str(e.get("text", ""))
+        q = html.escape(text[:300])
+        score = e.get("score")
+        score_str = f"{score:.0f}" if score is not None else "—"
+        url = str(e.get("best_url", "") or "")
+        count = int(e.get("count", 1))
+        in_qa = text.lower().strip() in qa_keys
+        url_cell = (
+            f'<a href="{html.escape(url)}" target=_blank rel=noopener style="font-size:12px">'
+            f'{html.escape(url[:60])}</a>'
+            if url else '<span class=muted>—</span>'
+        )
+        count_badge = (
+            f'<span style="background:#374151;border-radius:4px;padding:1px 5px;font-size:11px">{count}×</span>'
+        )
+        in_qa_badge = (
+            '<span style="background:#14532d;color:#86efac;border-radius:4px;padding:1px 5px;font-size:11px"'
+            ' title="Уже есть в manual_qa">✓ QA</span> '
+            if in_qa else ""
+        )
+        add_btn = "" if in_qa else (
+            '<form class="inline-form" method="post" action="/missed-questions/to-qa">'
+            f'<input type="hidden" name="csrf" value="{csrf}">'
+            f'<input type="hidden" name="i" value="{i}">'
+            f'<input type="hidden" name="sort" value="{sort}">'
+            '<button class="btn btn-sm" style="background:#1e3a5f" type="submit" title="Добавить заготовку в manual_qa">+ QA</button>'
+            '</form>'
+        )
+        del_btn = (
+            '<form class="inline-form" method="post" action="/missed-questions/delete">'
+            f'<input type="hidden" name="csrf" value="{csrf}">'
+            f'<input type="hidden" name="i_text" value="{html.escape(text)}">'
+            '<button class="btn btn-sm" style="background:#374151" type="submit" title="Удалить">✓</button>'
+            '</form>'
+        )
+        rows.append(
+            "<tr>"
+            f'<td class=muted style="white-space:nowrap;font-size:12px">{html.escape(ts)}</td>'
+            f'<td class=muted style="text-align:center">{html.escape(score_str)}</td>'
+            f'<td style="text-align:center">{count_badge}</td>'
+            f'<td>{in_qa_badge}{q}</td>'
+            f'<td class="a-cell">{url_cell}</td>'
+            f'<td class=right style="white-space:nowrap">{add_btn} {del_btn}</td>'
+            "</tr>"
+        )
+
+    _active_style = ' style="font-weight:bold;text-decoration:none"'
+    sort_links = " &nbsp; ".join(
+        f'<a href="/missed?sort={s}"{_active_style if sort == s else ""}>{label}</a>'
+        for s, label in [("count", "по частоте"), ("score", "по score"), ("time", "по времени")]
+    )
+    table = (
+        f'<p style="margin-bottom:8px">{sort_links}</p>'
+        "<table>"
+        "<colgroup>"
+        '<col style="width:8%"><col style="width:5%"><col style="width:5%">'
+        '<col style="width:45%"><col style="width:27%"><col style="width:10%">'
+        "</colgroup>"
+        "<tr><th>Время</th><th>Score</th><th>Кол-во</th><th>Вопрос</th><th>Лучший URL</th><th></th></tr>"
+        + ("".join(rows) or '<tr><td colspan=6 class=muted style="text-align:center">Список пуст</td></tr>')
+        + "</table>"
+    )
+    clear_btn = (
+        '<form class="inline-form" method="post" action="/missed-questions/clear"'
+        " onsubmit=\"return confirm('Очистить весь список?')\">"
+        f'<input type="hidden" name="csrf" value="{csrf}">'
+        '<button class="btn btn-sm" style="background:#7f1d1d" type="submit">🗑 Очистить всё</button>'
+        "</form>"
+    )
+    body = (
+        f'<div style="display:flex;align-items:baseline;gap:16px;margin-bottom:16px">'
+        f'<h1 style="margin:0">Вопросы без ответа ({len(entries)})</h1>'
+        f'{clear_btn}'
+        f'</div>'
+        f'<div class="card">{table}</div>'
+    )
+    return _layout(state, body, title="Пропущенные вопросы", flash=flash, csrf=csrf)
 
 
 def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page: int = 1) -> bytes:
@@ -1180,6 +1279,9 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             if path == "/bot-login/finish":
                 self._bot_login_finish((qs.get("code") or [""])[0])
                 return
+            if path == "/health":
+                self._health_check()
+                return
 
             sess = self._require_auth()
             if sess is None:
@@ -1210,6 +1312,9 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 self._send(_logs_page(state, q, n, self._csrf))
             elif path == "/config":
                 self._send(_config_page(state, self._csrf))
+            elif path == "/missed":
+                sort = (qs.get("sort") or ["count"])[0]
+                self._send(_missed_page(state, self._csrf, sort=sort))
             else:
                 self._send(_layout(state, "<h1>404</h1><p>Страница не найдена.</p>"), status=404)
 
@@ -1263,10 +1368,25 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 self._missed_questions_delete(form)
             elif path == "/missed-questions/clear":
                 self._missed_questions_clear(form)
+            elif path == "/missed-questions/to-qa":
+                self._missed_questions_to_qa(form)
             else:
                 self._send(_layout(state, "<h1>404</h1>"), status=404)
 
         # --- обработчики действий ---
+        def _health_check(self) -> None:
+            app = state.application
+            bd = app.bot_data if app else {}
+            wix = bd.get("wiki_index")
+            alive = app is not None and bd.get("settings") is not None
+            status_code = 200 if alive else 503
+            payload = json.dumps({
+                "status": "ok" if alive else "unavailable",
+                "wiki_pages": wix.doc_count if wix is not None else 0,
+                "bot_username": bd.get("bot_username"),
+            }, ensure_ascii=False).encode("utf-8")
+            self._send(payload, status=status_code, content_type="application/json; charset=utf-8")
+
         def _reindex_webhook(self) -> None:
             length = int(self.headers.get("Content-Length") or 0)
             raw = self.rfile.read(length) if length else b"{}"
@@ -1652,7 +1772,13 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             self._send(_dashboard(state, self._csrf, flash=self._flash(ok, msg)))
 
         def _missed_questions_delete(self, form: dict[str, str]) -> None:
-            """Удаляет одну запись из missed_questions.json."""
+            i_text = form.get("i_text", "").strip()
+            sort = form.get("sort", "count")
+            if i_text:
+                ok, msg = delete_missed_question_by_text(text=i_text)
+                flash = self._flash(ok, msg)
+                self._redirect(f"/missed?sort={sort}")
+                return
             try:
                 idx = int(form.get("i", "-1"))
             except ValueError:
@@ -1661,10 +1787,44 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             self._send(_dashboard(state, self._csrf, flash=self._flash(ok, msg)))
 
         def _missed_questions_clear(self, form: dict[str, str]) -> None:  # noqa: ARG002
-            """Очищает весь список missed_questions.json."""
             count = clear_missed_questions()
-            self._send(_dashboard(state, self._csrf,
-                                  flash=self._flash(True, f"Удалено {count} записей")))
+            referer = self.headers.get("Referer", "")
+            if "/missed" in referer:
+                self._redirect("/missed")
+            else:
+                self._send(_dashboard(state, self._csrf,
+                                      flash=self._flash(True, f"Удалено {count} записей")))
+
+        def _missed_questions_to_qa(self, form: dict[str, str]) -> None:
+            sort = form.get("sort", "count")
+            entries = load_missed_questions()
+            try:
+                i = int(form.get("i", "-1"))
+            except ValueError:
+                i = -1
+            if i < 0 or i >= len(sorted(entries, key=lambda x: int(x.get("count") or 1), reverse=True)):
+                self._redirect(f"/missed?sort={sort}")
+                return
+            sorted_entries = sorted(entries, key=lambda x: int(x.get("count") or 1), reverse=True)
+            if sort == "score":
+                sorted_entries = sorted(entries, key=lambda x: float(x.get("score") or 0))
+            elif sort == "time":
+                sorted_entries = sorted(entries, key=lambda x: float(x.get("ts") or 0), reverse=True)
+            if i >= len(sorted_entries):
+                self._redirect(f"/missed?sort={sort}")
+                return
+            entry = sorted_entries[i]
+            text = str(entry.get("text", "")).strip()
+            if not text:
+                self._redirect(f"/missed?sort={sort}")
+                return
+            qa_store = load_manual_qa_store()
+            qa_store.append({"title": text, "keys": [text], "answer": ""})
+            save_manual_qa_store(qa_store)
+            if state.application is not None:
+                state.application.bot_data["manual_qa_entries"] = qa_store
+            new_idx = len(qa_store) - 1
+            self._redirect(f"/qa/edit?i={new_idx}")
 
     return Handler
 
