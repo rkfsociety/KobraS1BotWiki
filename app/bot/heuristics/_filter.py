@@ -68,6 +68,9 @@ from app.bot.heuristics._banter import (
     _is_vague_filament_thread_reference,
     _message_has_help_intent,
     _is_pure_numeric_or_symbol_message,
+    _is_causal_continuation,
+    _is_anaphoric_person_question,
+    _is_chat_social_moderation,
 )
 from app.bot.heuristics._intents import (
     _topic_is_marketplace_commerce_intent,
@@ -158,6 +161,9 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_multicolor_tower_rhetoric(text)
         or _is_geo_social_only_request(text)
         or _is_print_task_planning_statement(text)
+        or _is_causal_continuation(text)
+        or _is_anaphoric_person_question(text)
+        or _is_chat_social_moderation(text)
     )
 
 

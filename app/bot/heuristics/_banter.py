@@ -1931,3 +1931,58 @@ def _is_multicolor_flow_calibration_chat(text: str | None) -> bool:
         re.search(r"(?:тпу|tpu|петг|petg|пла|pla|abs|абс|nylon|нейлон)", t)
     )
     return not specific_material
+
+
+
+def _is_causal_continuation(text: str) -> bool:
+    r"""«Потому что...» / «Ну потому...» — продолжение чужой реплики, не вопрос к боту.
+
+    Такие сообщения объясняют что-то, сказанное выше в треде, и не адресованы боту.
+    """
+    if not text or not text.strip():
+        return False
+    t = re.sub(r'\s+', ' ', text.lower()).strip()
+    if re.search(r'\b(?:помогите|подскаж|как\s+(?:настро|исправ|починить|сделать|убрать|решить))\b', t):
+        return False
+    return bool(re.match(r'^(?:ну\s+)?потому\s+что\b', t))
+
+
+def _is_anaphoric_person_question(text: str) -> bool:
+    r"""«А щас че он хочет?» — короткий вопрос о человеке без темы принтера."""
+    if not text or not text.strip():
+        return False
+    raw = text.strip()
+    if '?' not in raw:
+        return False
+    t = re.sub(r'\s+', ' ', raw.lower()).strip()
+    word_count = len(t.split())
+    if word_count > 8:
+        return False
+    if re.search(r'\b(?:помогите|подскаж|принтер|печат|экструдер|сопло|кобра|kobra)\w*\b', t):
+        return False
+    from app.bot.heuristics._base import _printer_mentioned
+    if _printer_mentioned(raw):
+        return False
+    person_ref = bool(re.search(r'\b(?:он|она|они|его|её|ее|им|их)\b', t))
+    want_verb = bool(re.search(r'\b(?:хочет|хотят|хотел|хотела|хотели|говорит|говорят|делает|делают)\b', t))
+    if person_ref and want_verb:
+        return True
+    if re.match(r'^(?:а\s+)?(?:щас|сейчас|тут|там)\b', t) and word_count <= 6:
+        return True
+    return False
+
+
+def _is_chat_social_moderation(text: str) -> bool:
+    r"""«Можно не тут? Тут дети» — социальный/модерационный комментарий в чате."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r'\s+', ' ', text.lower()).strip()
+    if re.search(r'\b(?:принтер|печат|экструдер|сопло|кобра|kobra|ошибка|калибр)\w*\b', t):
+        return False
+    if re.search(r'\b(?:тут|здесь|при)\s+(?:дет\w+|ребёнк\w+|детьми)\b', t):
+        return True
+    if re.search(r'\b(?:можно|давайте|пожалуйста)\b.{0,20}\b(?:не\s+тут|не\s+здесь|в\s+лс|в\s+лич)\b', t):
+        return True
+    if re.search(r'\b(?:иди|идите|пиш\w+|перенес\w+|общайтесь)\b.{0,15}\b(?:в\s+лс|в\s+лич\w*|в\s+личку)\b', t):
+        return True
+    return False
