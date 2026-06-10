@@ -727,6 +727,39 @@ def _missed_page(state: _PanelState, csrf: str, flash: str = "", sort: str = "co
     return _layout(state, body, title="Пропущенные вопросы", flash=flash, csrf=csrf)
 
 
+def _update_wait_page(message: str) -> bytes:
+    body = (
+        '<div class="login-wrap"><div class="card">'
+        "<h2>Обновление…</h2>"
+        f'<p class=muted>{html.escape(message)}</p>'
+        '<p id="st" style="margin:16px 0">⏳ Ожидание перезапуска панели…</p>'
+        '<p class=muted style="font-size:13px">Страница откроется автоматически.</p>'
+        "</div></div>"
+        "<script>"
+        "var attempts=0;"
+        "function poll(){"
+        "attempts++;"
+        "fetch('/health',{cache:'no-store'})"
+        ".then(function(r){"
+        "if(r.ok){document.getElementById('st').textContent='✅ Панель доступна, переходим…';"
+        "setTimeout(function(){location='/';},800);}"
+        "else{retry();}"
+        "}).catch(function(){retry();});}"
+        "function retry(){"
+        "var el=document.getElementById('st');"
+        "el.textContent='⏳ Ожидание перезапуска… (попытка '+attempts+')';"
+        "setTimeout(poll,2500);}"
+        "setTimeout(poll,3000);"
+        "</script>"
+    )
+    page = (
+        "<!doctype html><html lang=ru><head><meta charset=utf-8>"
+        '<meta name=viewport content="width=device-width, initial-scale=1">'
+        f"<title>Обновление бота</title><style>{_CSS}</style></head><body><main>{body}</main></body></html>"
+    )
+    return page.encode("utf-8")
+
+
 def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page: int = 1) -> bytes:
     bd = state.application.bot_data if state.application else {}
     wix = bd.get("wiki_index")
@@ -1554,7 +1587,10 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 self._send(_dashboard(state, self._csrf, flash=self._flash(True, f"Обновление не требуется: {gmsg}")))
                 return
             ok, rmsg = self._trigger_restart()
-            self._send(_dashboard(state, self._csrf, flash=self._flash(ok, f"Обновлено: {gmsg}. {rmsg}")))
+            if ok:
+                self._send(_update_wait_page(f"Обновлено: {gmsg}. {rmsg}"))
+            else:
+                self._send(_dashboard(state, self._csrf, flash=self._flash(False, f"Обновлено: {gmsg}. {rmsg}")))
 
         def _trigger_restart(self) -> tuple[bool, str]:
             app = state.application
