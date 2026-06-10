@@ -52,6 +52,32 @@ def is_meaningful_question(sanitized: str) -> bool:
     return len(words) >= 2
 
 
+# Политика / война / запрещённые темы — такие сообщения вообще не записываем.
+# Список консервативный: только однозначно непечатные темы, без двусмысленных слов
+# вроде «выбор» (выбор материала) или «россия/украина» (доставка).
+_BLOCKED_TOPIC_RE = re.compile(
+    r"(?:"
+    # политика / власть / персоны
+    r"путин|зеленск|байден|трамп|навальн|кадыр|лукашенк|"
+    r"кремл|госдум|президент|правительств|минобороны|оппозиц|митинг|протест|"
+    # война / конфликт
+    r"\bвойн|\bсво\b|спецоперац|мобилизац|\bмобик|\bфронт|\bвсу\b|обстрел|"
+    r"ракетн|\bбпла\b|оккупац|бандеровц|\bхохл|нацбат|"
+    # геополитика
+    r"санкци|\bнато\b|"
+    # запрещённые / чувствительные темы
+    r"лгбт|\bгей\b|трансгендер|экстремист|террорист|\bтеракт|"
+    r"\bнацист|\bфашист|суицид|самоубийств|наркотик"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def contains_blocked_topic(text: str) -> bool:
+    """True, если в тексте есть политическая/запрещённая тема (не пишем в публичный git)."""
+    return bool(_BLOCKED_TOPIC_RE.search(text or ""))
+
+
 def _path() -> Path:
     return project_repo_root() / "data" / "missed_questions.json"
 
@@ -90,7 +116,7 @@ def add_missed_question(
     контактные сообщения не записываются — файл уходит в публичный git.
     """
     text = sanitize_text(text.strip())
-    if not text or not is_meaningful_question(text):
+    if not text or not is_meaningful_question(text) or contains_blocked_topic(text):
         return
 
     with _LOCK:
@@ -162,7 +188,7 @@ def sanitize_existing() -> tuple[int, int]:
         for e in entries:
             orig = str(e.get("text", ""))
             new = sanitize_text(orig.strip())
-            if not new or not is_meaningful_question(new):
+            if not new or not is_meaningful_question(new) or contains_blocked_topic(new):
                 changed += 1
                 continue
             if new != orig:
