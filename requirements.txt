@@ -3,3 +3,4 @@ python-dotenv>=1.2.2,<2
 rapidfuzz>=3.14.5,<4
 beautifulsoup4>=4.15.0,<5
 python-telegram-bot[job-queue]>=22.7,<23
+psutil>=6.0,<7

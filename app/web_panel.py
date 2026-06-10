@@ -25,6 +25,14 @@ import secrets
 import threading
 import time
 import urllib.request
+
+try:
+    import psutil as _psutil
+    _PROC = _psutil.Process()
+    _PROC.cpu_percent()  # первый вызов — инициализация, всегда 0.0
+except Exception:
+    _psutil = None  # type: ignore[assignment]
+    _PROC = None
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -307,6 +315,18 @@ def _layout(state: _PanelState, body: str, *, title: str = "Панель бот�
             '<button class="btn btn-sm" style="background:#b45309" type="submit" '
             'title="git pull и перезапуск">Обновить</button></form>'
         )
+    if _PROC is not None:
+        try:
+            cpu = _PROC.cpu_percent()
+            rss_mb = _PROC.memory_info().rss / 1024 / 1024
+            sys_metrics = (
+                f'<span style="font-size:12px;color:#6b7280;margin-right:12px" title="CPU / RAM процесса бота">'
+                f'CPU {cpu:.1f}% · RAM {rss_mb:.0f} MB</span>'
+            )
+        except Exception:
+            sys_metrics = ""
+    else:
+        sys_metrics = ""
     head = (
         '<header>'
         f'<span class="brand">🤖 {html.escape("@" + bot) if bot else "Бот"}'
@@ -314,6 +334,7 @@ def _layout(state: _PanelState, body: str, *, title: str = "Панель бот�
         f'{html.escape(get_bot_version())}</span></span>'
         f'{nav}'
         '<span class="spacer"></span>'
+        f'{sys_metrics}'
         f'{upd}'
         '<a href="/logout" style="margin-left:14px">Выйти</a>'
         '</header>'
