@@ -33,6 +33,30 @@ def project_repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+_cached_version: str | None = None
+
+
+def get_bot_version() -> str:
+    """Возвращает короткий хеш текущего коммита (например 'a1b2c3d').
+
+    Результат кэшируется на весь процесс — git вызывается один раз.
+    Возвращает 'unknown' если git недоступен.
+    """
+    global _cached_version
+    if _cached_version is not None:
+        return _cached_version
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short=8", "HEAD"],
+            capture_output=True, text=True, timeout=5,
+            cwd=project_repo_root(),
+        )
+        _cached_version = result.stdout.strip() or "unknown"
+    except Exception:
+        _cached_version = "unknown"
+    return _cached_version
+
+
 def _manual_qa_file(repo: Path) -> Path:
     return repo / "data" / "manual_qa.json"
 

@@ -33,6 +33,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
 from app.bot.git_autopull import (
+    get_bot_version,
     git_ping_compare_with_remote,
     git_sync_from_remote,
     project_repo_root,
@@ -308,7 +309,9 @@ def _layout(state: _PanelState, body: str, *, title: str = "Панель бот�
         )
     head = (
         '<header>'
-        f'<span class="brand">🤖 {html.escape("@" + bot) if bot else "Бот"}</span>'
+        f'<span class="brand">🤖 {html.escape("@" + bot) if bot else "Бот"}'
+        f'<span style="font-weight:400;font-size:12px;color:#6b7280;margin-left:8px">'
+        f'{html.escape(get_bot_version())}</span></span>'
         f'{nav}'
         '<span class="spacer"></span>'
         f'{upd}'
@@ -1415,6 +1418,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             status_code = 200 if alive else 503
             payload = json.dumps({
                 "status": "ok" if alive else "unavailable",
+                "version": get_bot_version(),
                 "wiki_pages": wix.doc_count if wix is not None else 0,
                 "bot_username": bd.get("bot_username"),
             }, ensure_ascii=False).encode("utf-8")

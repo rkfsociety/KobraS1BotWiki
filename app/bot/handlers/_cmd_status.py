@@ -10,7 +10,7 @@ from telegram.constants import ChatType, ParseMode
 from telegram.ext import ContextTypes
 
 from app.bot.ephemeral import schedule_delete_slash_command_and_reply
-from app.bot.git_autopull import git_ping_compare_with_remote, project_repo_root
+from app.bot.git_autopull import get_bot_version, git_ping_compare_with_remote, project_repo_root
 from app.bot.i18n import _lang_from_message, _t
 from app.bot.reply_access import chat_topic_in_allowed_lists
 from app.bot.reply_logging import log_bot_reply_for_message
@@ -80,6 +80,7 @@ async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     text = (
         _t(lang, "ping") + "\n"
+        f"version: <code>{html.escape(get_bot_version())}</code>\n"
         f"chat_id: <code>{update.effective_chat.id}</code>\n"
         f"wiki_docs: <code>{index.doc_count}</code>\n"
         f"QUESTIONS_ONLY: <code>{settings.questions_only}</code>\n"
