@@ -327,11 +327,12 @@ def _layout(state: _PanelState, body: str, *, title: str = "Панель бот�
             sys_metrics = ""
     else:
         sys_metrics = ""
+    ver = get_bot_version()
     head = (
         '<header>'
-        f'<span class="brand">🤖 {html.escape("@" + bot) if bot else "Бот"}'
-        f'<span style="font-weight:400;font-size:12px;color:#6b7280;margin-left:8px">'
-        f'{html.escape(get_bot_version())}</span></span>'
+        f'<span class="brand">🤖 {html.escape("@" + bot) if bot else "Бот"}</span>'
+        f'<code style="font-size:11px;background:#262b36;color:#9ca3af;padding:2px 6px;border-radius:4px">'
+        f'{html.escape(ver)}</code>'
         f'{nav}'
         '<span class="spacer"></span>'
         f'{sys_metrics}'
