@@ -172,7 +172,7 @@ def test_qa_add_updates_live_bot_data(panel):
         {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
     )
     r = c.getresponse()
-    assert r.status == 200
+    assert r.status == 303  # Post-Redirect-Get
     r.read()
     # запись попала в живой bot_data без перезапуска
     entries = app.bot_data["manual_qa_entries"]
@@ -459,7 +459,7 @@ def test_config_save_updates_env(panel):
         {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
     )
     r = c.getresponse()
-    assert r.status == 200
+    assert r.status == 303  # Post-Redirect-Get
     r.read()
     text = env_file.read_text(encoding="utf-8")
     assert "MIN_SCORE=90" in text
@@ -480,7 +480,7 @@ def test_config_save_invalid_int_rejected(panel):
         {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
     )
     r = c.getresponse()
-    assert r.status == 400
+    assert r.status == 303  # Post-Redirect-Get: ошибка показывается flash-ем после редиректа
     r.read()
     assert env_file.read_text(encoding="utf-8") == before  # ничего не записано
 
@@ -520,8 +520,10 @@ def test_update_check_reports_available(panel, monkeypatch):
         {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
     )
     r = c.getresponse()
-    body = r.read().decode("utf-8")
-    assert r.status == 200
+    assert r.status == 303  # Post-Redirect-Get
+    r.read()
+    c.request("GET", r.getheader("Location"), headers={"Cookie": ck})
+    body = c.getresponse().read().decode("utf-8")
     assert "Есть обновление" in body
 
 
@@ -539,8 +541,10 @@ def test_update_check_up_to_date(panel, monkeypatch):
         {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
     )
     r = c.getresponse()
-    body = r.read().decode("utf-8")
-    assert r.status == 200
+    assert r.status == 303  # Post-Redirect-Get
+    r.read()
+    c.request("GET", r.getheader("Location"), headers={"Cookie": ck})
+    body = c.getresponse().read().decode("utf-8")
     assert "последняя версия" in body
 
 
@@ -557,8 +561,10 @@ def test_update_run_no_change(panel, monkeypatch):
         {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
     )
     r = c.getresponse()
-    body = r.read().decode("utf-8")
-    assert r.status == 200
+    assert r.status == 303  # Post-Redirect-Get
+    r.read()
+    c.request("GET", r.getheader("Location"), headers={"Cookie": ck})
+    body = c.getresponse().read().decode("utf-8")
     assert "не требуется" in body
 
 

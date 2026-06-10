@@ -1917,22 +1917,22 @@ def _is_multicolor_flow_calibration_chat(text: str | None) -> bool:
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
     has_flow_calib = bool(
-        (re.search(r"калибр\w*", t) and re.search(r"поток\w*", t))
+        (re.search(r"\bкалибр\w*", t) and re.search(r"\bпоток\w*", t))
         or re.search(r"flow\s+calibrat", t)
     )
     if not has_flow_calib:
         return False
     multicolor = bool(
         re.search(
-            r"(?:многоцвет\w*|много\s+цвет\w*|мультиколор|multi[\s-]?color|multicolor|"
-            r"разн\w*\s+цвет\w*|неск\w*\s+цвет\w*)",
+            r"\b(?:многоцвет\w*|много\s+цвет\w*|мультиколор|multi[\s-]?color|multicolor|"
+            r"разн\w*\s+цвет\w*|неск\w*\s+цвет\w*)\b",
             t,
         )
     )
     if not multicolor:
         return False
     specific_material = bool(
-        re.search(r"(?:тпу|tpu|петг|petg|пла|pla|abs|абс|nylon|нейлон)", t)
+        re.search(r"\b(?:тпу|tpu|петг|petg|пла|pla|abs|абс|nylon|нейлон)\b", t)
     )
     return not specific_material
 
