@@ -50,6 +50,7 @@ from app.bot.reactions import on_message_reaction
 from app.bot.ops_notify import notify_ops
 from app.bot.telegram_log_mirror import attach_telegram_log_mirror, flush_telegram_log_mirror
 from app.bot.stores import _load_clarify_store, _load_fix_store
+from app.bot.missed_questions import try_git_push_missed_questions
 from app.bot.wiki_reindex import SitemapMonitor, WikiReindexer
 from app.config import Settings, load_settings
 from app.error_codes_catalog import ensure_error_codes_catalog, merge_manual_overrides
@@ -400,6 +401,29 @@ def main() -> None:
             name="check_wiki_updates",
         )
         logging.info("Автопроверка обновлений вики: каждые %s секунд", wiki_check_interval)
+
+    async def _push_missed_questions_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Периодический бэкап data/missed_questions.json в git (если включён MANUAL_QA_GIT_PUSH)."""
+        st: Settings = context.application.bot_data["settings"]
+        if not getattr(st, "manual_qa_git_push", False):
+            return
+        try:
+            ok, msg = await asyncio.to_thread(try_git_push_missed_questions)
+            if ok and msg not in ("без изменений", "нечего коммитить"):
+                logging.info("missed_questions git push: %s", msg)
+            elif not ok:
+                logging.warning("missed_questions git push: %s", msg)
+        except Exception as e:
+            logging.warning("missed_questions git push: исключение: %s", e)
+
+    if settings.manual_qa_git_push:
+        app.bot_data["missed_push_job"] = app.job_queue.run_repeating(
+            _push_missed_questions_job,
+            interval=1800,
+            first=300,
+            name="push_missed_questions",
+        )
+        logging.info("Бэкап missed_questions.json в git: каждые 1800 секунд")
 
     async def _git_autopull_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         application = context.application

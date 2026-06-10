@@ -59,6 +59,7 @@ from app.bot.missed_questions import (
     delete_missed_question,
     delete_missed_question_by_text,
     load_missed_questions,
+    try_git_push_missed_questions,
 )
 from app.bot.reply_logging import save_recent_replies
 from app.bot.manual_qa import (
@@ -1878,11 +1879,22 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     msg += f" · git исключение: {e}"
             self._flash_redirect("/", ok, msg)
 
+        def _push_missed_if_enabled(self) -> str:
+            if not getattr(state.settings, "manual_qa_git_push", False):
+                return ""
+            try:
+                pushed, info = try_git_push_missed_questions()
+                return f" · git: {info}" if pushed else f" · git ошибка: {info}"
+            except Exception as e:  # noqa: BLE001
+                return f" · git исключение: {e}"
+
         def _missed_questions_delete(self, form: dict[str, str]) -> None:
             i_text = form.get("i_text", "").strip()
             sort = form.get("sort", "count")
             if i_text:
                 ok, msg = delete_missed_question_by_text(text=i_text)
+                if ok:
+                    msg += self._push_missed_if_enabled()
                 self._flash_redirect(f"/missed?sort={sort}", ok, msg)
                 return
             try:
@@ -1890,13 +1902,16 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             except ValueError:
                 idx = -1
             ok, msg = delete_missed_question(idx=idx)
+            if ok:
+                msg += self._push_missed_if_enabled()
             self._flash_redirect("/", ok, msg)
 
         def _missed_questions_clear(self, form: dict[str, str]) -> None:  # noqa: ARG002
             count = clear_missed_questions()
+            info = self._push_missed_if_enabled()
             referer = self.headers.get("Referer", "")
             dest = "/missed" if "/missed" in referer else "/"
-            self._flash_redirect(dest, True, f"Удалено {count} записей")
+            self._flash_redirect(dest, True, f"Удалено {count} записей{info}")
 
         def _missed_questions_to_qa(self, form: dict[str, str]) -> None:
             sort = form.get("sort", "count")

@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -111,3 +113,44 @@ def clear_missed_questions() -> int:
         count = len(entries)
         _save([])
     return count
+
+
+def try_git_push_missed_questions() -> tuple[bool, str]:
+    """git add + commit + push для data/missed_questions.json. Без изменений — no-op."""
+    repo = project_repo_root()
+    rel = "data/missed_questions.json"
+    path = repo / rel
+    if not path.is_file():
+        return False, "нет файла data/missed_questions.json"
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
+
+    def run(args: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            args, cwd=str(repo), env=env,
+            capture_output=True, text=True, timeout=120, check=False,
+        )
+
+    if not (repo / ".git").exists():
+        return False, "нет .git — только локальный файл"
+
+    run(["git", "add", "--", rel])
+    diff = run(["git", "diff", "--staged", "--quiet"])
+    if diff.returncode == 0:
+        return True, "без изменений"
+
+    cm = run([
+        "git", "-c", "user.email=bot@kobra-wiki.local",
+        "-c", "user.name=KobraS1BotWiki",
+        "commit", "-m", "chore(bot): update missed_questions.json",
+    ])
+    if cm.returncode != 0:
+        err = (cm.stderr or cm.stdout or "").strip()
+        if "nothing to commit" in err.lower():
+            return True, "нечего коммитить"
+        return False, err[:500] if err else "git commit failed"
+
+    ps = run(["git", "push"])
+    if ps.returncode != 0:
+        return False, (ps.stderr or ps.stdout or "git push").strip()[:500]
+    return True, "отправлено в origin"
