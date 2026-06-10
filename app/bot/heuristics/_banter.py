@@ -1250,7 +1250,11 @@ def _is_peer_action_experience_question(text: str) -> bool:
     )
     # Безличное короткое «X-ли?» — обращено к группе («ставили? пробовали?»).
     bare_group = len(t.split()) <= 5
-    return second_person or bare_group
+    # «кто-нибудь ставил/пробовал/обновлял?» — вопрос к группе об опыте (любой длины).
+    group_query = bool(
+        re.search(r"\b(?:кто[\s-]?нибудь|ктонибудь|кто[\s-]?то|кто[\s-]?либо|никто)\b", t)
+    )
+    return second_person or bare_group or group_query
 
 
 def _is_filament_feed_test_probe(text: str) -> bool:
