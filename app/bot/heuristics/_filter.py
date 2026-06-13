@@ -71,6 +71,9 @@ from app.bot.heuristics._banter import (
     _is_causal_continuation,
     _is_anaphoric_person_question,
     _is_chat_social_moderation,
+    _is_profanity_outburst_chatter,
+    _is_works_fine_reassurance,
+    _is_marketplace_search_chatter,
 )
 from app.bot.heuristics._intents import (
     _topic_is_marketplace_commerce_intent,
@@ -164,6 +167,9 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_causal_continuation(text)
         or _is_anaphoric_person_question(text)
         or _is_chat_social_moderation(text)
+        or _is_profanity_outburst_chatter(text)
+        or _is_works_fine_reassurance(text)
+        or _is_marketplace_search_chatter(text)
     )
 
 

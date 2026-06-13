@@ -97,6 +97,9 @@ from app.bot.heuristics._banter import (
     _is_thread_printing_tip,
     _is_unrelated_pc_hardware_banter,
     _is_vague_filament_thread_reference,
+    _is_profanity_outburst_chatter,
+    _is_works_fine_reassurance,
+    _is_marketplace_search_chatter,
     _message_has_help_intent,
 )
 
@@ -212,6 +215,9 @@ __all__ = [
     "_is_thread_printing_tip",
     "_is_unrelated_pc_hardware_banter",
     "_is_vague_filament_thread_reference",
+    "_is_profanity_outburst_chatter",
+    "_is_works_fine_reassurance",
+    "_is_marketplace_search_chatter",
     "_message_has_help_intent",
     # _intents
     "_topic_is_filament_bed_removal_intent",

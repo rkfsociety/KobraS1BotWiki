@@ -1811,13 +1811,25 @@ def _is_print_task_planning_statement(text: str) -> bool:
 
 
 def _is_multicolor_tower_rhetoric(text: str) -> bool:
-    """«Без башни никак» — риторическое объяснение нужности Prime Tower, не запрос к вики."""
+    """«Без башни никак / без башни не печатается?» — риторика про нужность Prime Tower, не запрос к вики.
+
+    Сюда же риторические подтверждения у соседей по чату:
+    «многоцвет же без башни не печатается?» — на это в вики нет отдельной страницы-ответа.
+    """
     if not text or not text.strip():
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
-    if re.search(r"\b(?:помогите|подскаж\w*|как\s+(?:отключ|убрать|настро))\b", t):
+    if re.search(r"\b(?:помогите|подскаж\w*|как\s+(?:отключ|убрать|настро|включ|добав))\b", t):
         return False
-    return bool(re.search(r"\bбез\s+башн\w*\s+никак\b", t))
+    if re.search(r"\bбез\s+башн\w*\s+никак\b", t):
+        return True
+    # «без башни не печатается/не работает/не выйдет?» (с опечатками «чепятается»)
+    return bool(
+        re.search(
+            r"\bбез\s+башн\w*\b.{0,20}\bне\s+\w*(?:печат|чепят|чипят|напечат|работ|выйд|получ|ид[её]т)\w*",
+            t,
+        )
+    )
 
 
 def _is_colloquial_printer_fragment(text: str) -> bool:
@@ -1990,3 +2002,101 @@ def _is_chat_social_moderation(text: str) -> bool:
     if re.search(r'\b(?:иди|идите|пиш\w+|перенес\w+|общайтесь)\b.{0,15}\b(?:в\s+лс|в\s+лич\w*|в\s+личку)\b', t):
         return True
     return False
+
+
+# Мат с растянутыми буквами: «заеееебааал» сначала схлопываем до «заебал».
+_PROFANITY_RE = re.compile(
+    r"\b(?:"
+    r"а?х+у+е|о+х+у+е|ху+[йёяе]|"
+    r"за+[её]+б|вы+[её]+б|въ+[её]+б|до+[её]+б|"
+    r"[её]+б+а+н|[её]+б+а+л|[её]+б+у+ч|на+х+у+й|на+х+е+р|"
+    r"б+л+я+|бл[яэ]ть|"
+    r"пи+зд|"
+    r"му+да[кч]|долбо[её]б|пид[оа]р|"
+    r"г[оа]ндон|"
+    r"с+у+к+а+\b|сук[аи]\b"
+    r")",
+    re.IGNORECASE,
+)
+
+# Слова про принтер/печать — если есть, мат может сопровождать реальную проблему.
+_PRINT_CTX_RE = re.compile(
+    r"\b(?:принтер|печат|слайсер|сопл|экструдер|пластик|филамент|катушк|смол|"
+    r"кобра|kobra|ace|аськ|прошивк|калибр|сло[йя]|температур|стол\b|платформ|"
+    r"ошибк|подач|обдув|ремен|термистор|нагрев|адгез|сцеплен)\w*\b",
+    re.IGNORECASE,
+)
+
+# Явная просьба о помощи/инструкции — такие реплики под фильтры болтовни не загоняем.
+_HELP_GUARD_RE = re.compile(
+    r"\b(?:помогите|помоги|подскаж\w*)\b|"
+    r"\bкак\s+(?:настро|исправ|почин|сделать|убрать|решить|подключ|замен|откалибр)",
+    re.IGNORECASE,
+)
+
+
+def _is_profanity_outburst_chatter(text: str) -> bool:
+    """Эмоциональный мат без темы 3D-печати — «Ахуели совсем?», «как меня этот Николай заебал».
+
+    Если в сообщении нет ни одного слова про принтер/печать и нет просьбы о помощи,
+    а есть мат — это выброс эмоций в чате, а не вопрос к боту.
+    """
+    if not text or not text.strip():
+        return False
+    raw = text.strip()
+    t = re.sub(r"\s+", " ", raw.lower()).strip()
+    # схлопываем растянутые буквы: «заеееебааал» → «заебал»
+    collapsed = re.sub(r"(.)\1{2,}", r"\1", t)
+    if _HELP_GUARD_RE.search(collapsed):
+        return False
+    if _PRINT_CTX_RE.search(collapsed) or _printer_mentioned(raw):
+        return False
+    if not _PROFANITY_RE.search(collapsed):
+        return False
+    # ограничиваемся короткими выбросами, не длинными текстами
+    return len(collapsed.split()) <= 10
+
+
+def _is_works_fine_reassurance(text: str) -> bool:
+    """«У меня норм пашет», «всё нормально работает» — реплика-успокоение, не вопрос к боту."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    # «не работает / не пашет» — это уже проблема, а не успокоение
+    if re.search(r"\bне\s+(?:пашет|работает|печатает|фурычит|пыхтит)\b", t):
+        return False
+    positive = bool(
+        re.search(
+            r"\b(?:норм|нормально|нормас|нормал|ок|окей|отлично|хорошо|збс|пучком|ч[её]тко)\b",
+            t,
+        )
+    )
+    works = bool(re.search(r"\b(?:пашет|работает|печатает|фурычит|пыхтит|крутит)\b", t))
+    return positive and works
+
+
+def _is_marketplace_search_chatter(text: str) -> bool:
+    """«Нашёл, но не то что на Авито» — болтовня про поиск на барахолке/маркетплейсе, не вопрос к вики."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    place = bool(
+        re.search(
+            r"\b(?:авито|avito|юла\b|барахолк\w*|алиэкспресс|алик\b|aliexpress|"
+            r"озон|ozon|вайлдбер\w*|wildberries|маркетплейс)\b",
+            t,
+        )
+    )
+    if not place:
+        return False
+    return bool(
+        re.search(
+            r"\b(?:нашёл|нашел|нашл\w*|не\s+то|искал\w*|смотрел\w*|глянул\w*|"
+            r"видел\w*|купил\w*|заказал\w*|брал\b)\b",
+            t,
+        )
+    )
