@@ -1,1 +1,50 @@
-[]
+[
+  {
+    "text": "Не разу не было такого, что отправляли к магазину где покупал",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/creat-ticket",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781370113.2057385
+  },
+  {
+    "text": "Попробуем сначала ДНС, как раз покупал кобру с1 за +-55, одобрят возврат - чуть добавлю и большого брата возьму)",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/10105-code/kobra-3",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781369927.721999
+  },
+  {
+    "text": "С кривым столом писал уже - попросили данные о покупке и отправили в магазин где покупал(",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/11531-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781369819.4262753
+  },
+  {
+    "text": "Ну я и имел ввиду поменять местами асе) Даже Али с ремнем не поможет? Не думаю, что ДНС будет ремонтировать, второй раз по гарантии заберут😂",
+    "score": 64,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2/heated-bed-replacement-guide",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781369376.237863
+  },
+  {
+    "text": "Только не поменять )) а указать что на асе от с1 порвало )) скорее всего весь узел вышлют , ремней как запчасти у них вроде нет",
+    "score": 64,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2/heated-bed-replacement-guide",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781369331.5281873
+  },
+  {
+    "text": "Коллеги, всем привет. Порвало рeмeнь в АМС, сталкивался кто? Есть ссылка за проверенную запчасть?",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/resin-3d-printer/Common/how-to-replace-film",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781368980.2442012
+  }
+]
