@@ -1,5 +1,13 @@
 [
   {
+    "question": "Тот кто писал - не стачивал",
+    "answer": "Vyper:Replace the nozzle | Anycubic Wiki",
+    "url": "https://wiki.anycubic.com/en/fdm-3d-printer/vyper/vyper-replace-the-nozzle",
+    "source": "wiki",
+    "note": "",
+    "ts": 1781727015.0446513
+  },
+  {
     "question": "Вы территориально откуда?",
     "answer": "Kobra 3 Series-Firmware Update Guide | Anycubic Wiki",
     "url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-3-combo/firmware-update-guide",
