@@ -1,5 +1,13 @@
 [
   {
+    "question": "Комбо?",
+    "answer": "Assembly for Anycubic Kobra 3 Combo | Anycubic Wiki",
+    "url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-3-combo/assembly",
+    "source": "wiki",
+    "note": "",
+    "ts": 1781726924.7942364
+  },
+  {
     "question": "хотя ладно, не везде. Но есть профиля где выключен. На том же тпу у меня он был выключен",
     "answer": "Kobra 3 Series- TPU Printing Guide | Anycubic Wiki",
     "url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-3-combo/print-tpu",
