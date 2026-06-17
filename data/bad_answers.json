@@ -1,5 +1,13 @@
 [
   {
+    "question": "по времени печати смотрю - когда 2 одинаковых цвета то печать дольше, а один убрал красный и остается один - то меньше на печать времени",
+    "answer": "Resin 3D Printer:The print platform is empty after printing | Anycubic Wiki",
+    "url": "https://wiki.anycubic.com/en/resin-3d-printer/Common/the-print-platform-is-empty-after-printing",
+    "source": "wiki",
+    "note": "",
+    "ts": 1781727044.3272047
+  },
+  {
     "question": "Здравствуйте, такая проблема может кто может подсказать. Печатаю ABS вчера результат был прекрасный сегодня уже кошмар что делает. Кучу наплывов пластика и выгибает модель. Подскажи что можно сделать.",
     "answer": "FDM 3D Printing: Filament Guide for Beginners | Anycubic Wiki",
     "url": "https://wiki.anycubic.com/en/filament-and-resin/filament-guide",
