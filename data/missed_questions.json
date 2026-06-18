@@ -1,5 +1,133 @@
 [
   {
+    "text": "А если в том же компасе перевести в точечную геометрию? Правда мой компас не любит так делать если больше 500 тыс треугольников",
+    "score": 16,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/10136-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781808271.5379665
+  },
+  {
+    "text": "Жги, посмотрим что умеет",
+    "score": 12,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781808141.720566
+  },
+  {
+    "text": "Зачем он все это делал",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2/faq",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1781808066.271438
+  },
+  {
+    "text": "можно спокойно пластик хранить и не переживать , что он будет влажный",
+    "score": 64,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-3-combo/troubleshooting-abnormal-discharge-of-purge-wiper-material",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781807814.441928
+  },
+  {
+    "text": "Вряд ли это то, к чему она стремится, так как влажность при сушке явно будет ниже. Возможно, при подъёме до 20 она включится на цикл",
+    "score": 16,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/11503-code/kobra-3",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781807614.2474089
+  },
+  {
+    "text": "А это целевая, или влажность, выше которой она включится?",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/sn-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781807511.8261921
+  },
+  {
+    "text": "Так может именно для пла, что б не пересушить до хрупкости?",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/creat-ticket",
+    "chat_id": -1002295062981,
+    "count": 2,
+    "ts": 1781808270.6965907
+  },
+  {
+    "text": "Первый раз что ли?",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781807207.7333062
+  },
+  {
+    "text": "Но как то нагрузить его хотелось бы",
+    "score": 16,
+    "best_url": "https://wiki.anycubic.com/en/sn-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781807058.852225
+  },
+  {
+    "text": "Или борщ для принтера?",
+    "score": 13,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781807043.4358785
+  },
+  {
+    "text": "Работает изумительно тихо, датчик не дрыгается как раньше",
+    "score": 12,
+    "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1781806924.886933
+  },
+  {
+    "text": "Юпринт вроде как ничо",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781806808.7994468
+  },
+  {
+    "text": "А каких фирм и тд брать?",
+    "score": 16,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781806798.300549
+  },
+  {
+    "text": "Я тут делал когда то табличку",
+    "score": 20,
+    "best_url": "https://wiki.anycubic.com/en/sn-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781806763.6904361
+  },
+  {
+    "text": "Че лучше заказать?",
+    "score": 13,
+    "best_url": "https://wiki.anycubic.com/en/policy",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781806700.618934
+  },
+  {
+    "text": "Все что требует активную камеру",
+    "score": 12,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781806684.6603677
+  },
+  {
     "text": "Большую модель с массой?",
     "score": 12,
     "best_url": "https://wiki.anycubic.com/en/faq",
@@ -44,8 +172,8 @@
     "score": 14,
     "best_url": "https://wiki.anycubic.com/en/faq",
     "chat_id": -1002295062981,
-    "count": 1,
-    "ts": 1781806221.2426457
+    "count": 2,
+    "ts": 1781808270.750452
   },
   {
     "text": "Смотря чего ждёшь. Ограниченное меню, постоянно меняется бар, чувство чего-то закрытого. На повседнев явно нет, но как аттракцион норм. Но дороговато.",
@@ -516,8 +644,8 @@
     "score": 15,
     "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
     "chat_id": -1002295062981,
-    "count": 1,
-    "ts": 1781774659.5009303
+    "count": 2,
+    "ts": 1781808271.1913426
   },
   {
     "text": "что им всем так хочется дуть в.....",
