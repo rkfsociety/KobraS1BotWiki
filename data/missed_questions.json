@@ -1,5 +1,69 @@
 [
   {
+    "text": "И долго запчасти идти будут ?",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/contact-us",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781889052.2689645
+  },
+  {
+    "text": "У меня стоковый где-то валяется с трубкой, но не спортивно это.",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/creat-ticket",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781889022.5073307
+  },
+  {
+    "text": "Что-то да получится",
+    "score": 11,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781888967.2406328
+  },
+  {
+    "text": "Новая сборка ?",
+    "score": 13,
+    "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781888913.634358
+  },
+  {
+    "text": "Я присоединюсь к вашим тестам на s1, когда запчасти для хотенда приедут",
+    "score": 57,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2/leveling-calibration-guide",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781888883.4449651
+  },
+  {
+    "text": "А не хочешь потока подкинуть заодно?",
+    "score": 13,
+    "best_url": "https://wiki.anycubic.com/en/test",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781888420.1120682
+  },
+  {
+    "text": "Если что толщина слоя 0.16",
+    "score": 44,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2-max/kobra-2-max-layer-shift-during-printing-troubleshooting",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781888356.4192498
+  },
+  {
+    "text": "Странно, почему на всех остальных моделях с потоком все в порядке, а на тестовых недоэкструзия",
+    "score": 57,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2/leveling-calibration-guide",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781888242.085016
+  },
+  {
     "text": "Скинь стл или ссылку",
     "score": 14,
     "best_url": "https://wiki.anycubic.com/en/faq",
