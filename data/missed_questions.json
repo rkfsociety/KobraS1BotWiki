@@ -1,5 +1,21 @@
 [
   {
+    "text": "Разве тут есть недоэкструзия ?",
+    "score": 13,
+    "best_url": "https://wiki.anycubic.com/en/creat-ticket",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781894835.7793043
+  },
+  {
+    "text": "А очистку в поддержку стоит отключать? Или пох?",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1781893256.8943038
+  },
+  {
     "text": "Я когда пробовал не изменил и у меня слои после связующего в детали от вмешанного пла расползались",
     "score": 0,
     "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2-neo/recognize-tf",
