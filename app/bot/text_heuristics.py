@@ -95,6 +95,12 @@ from app.bot.heuristics._banter import (
     _is_profanity_outburst_chatter,
     _is_works_fine_reassurance,
     _is_marketplace_search_chatter,
+    _is_peer_diagnostic_checklist,
+    _is_bare_combo_variant_fragment,
+    _is_social_location_question,
+    _is_content_post_request,
+    _is_thread_continuation_filler,
+    _is_competitor_model_disambiguation,
     _message_has_help_intent,
 )
 from app.bot.heuristics._intents import (

@@ -2053,8 +2053,11 @@ def _is_profanity_outburst_chatter(text: str) -> bool:
         return False
     if not _PROFANITY_RE.search(collapsed):
         return False
-    # ограничиваемся короткими выбросами, не длинными текстами
-    return len(collapsed.split()) <= 10
+    # короткие вопросы-выбросы («ахуели?») — до 10 слов; ранты-утверждения без «?» — длиннее
+    wc = len(collapsed.split())
+    if "?" in raw:
+        return wc <= 10
+    return wc <= 30
 
 
 def _is_works_fine_reassurance(text: str) -> bool:
@@ -2100,3 +2103,113 @@ def _is_marketplace_search_chatter(text: str) -> bool:
             t,
         )
     )
+
+
+# Узлы/параметры для диагностического допроса соседа («вентилятор работает?»).
+_DIAG_COMPONENT_RE = re.compile(
+    r"\b(?:вентилятор\w*|кулер\w*|ремн\w*|ремень|сопл\w*|хотенд\w*|термистор\w*|"
+    r"температур\w*|поток\w*|обдув\w*|ретракт\w*|концевик\w*|датчик\w*|"
+    r"экструдер\w*|подач\w*|нагрев\w*|вал\w*|эксцентрик\w*|пластик\w*|филамент\w*)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_peer_diagnostic_checklist(text: str) -> bool:
+    """«Боковой вентилятор работает?», «Температура, фирма пластика, хотенд?» —
+
+    короткий диагностический вопрос/перечисление узлов соседу по чату, не запрос к вики.
+    """
+    if not text or "?" not in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:у\s+меня|не\s+работает|не\s+могу|не\s+получ\w*|"
+        r"как\s+(?:настро|почин|исправ|сделать|убрать|подключ|замен)|"
+        r"почему|что\s+делать|помогите|подскаж\w*|ошибк\w*)\b",
+        t,
+    ):
+        return False
+    if len(t.split()) > 7:
+        return False
+    comma_list = ("," in t) and (len(_DIAG_COMPONENT_RE.findall(t)) >= 2)
+    state = bool(
+        _DIAG_COMPONENT_RE.search(t)
+        and re.search(
+            r"\b(?:работает|работают|крутит\w*|натянут\w*|закручен\w*|"
+            r"подключ\w*|включ[её]н\w*|цел\w*|стоит|стоят)\b",
+            t,
+        )
+    )
+    return comma_list or state
+
+
+def _is_bare_combo_variant_fragment(text: str) -> bool:
+    """«Комбо?», «гарантийный комбо?» — обрывок про вариант принтера без вопроса по сути."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    return bool(
+        re.match(r"^(?:а\s+|и\s+|про\s+|это\s+|гарантийн\w*\s+)?(?:комбо|combo)\s*\??$", t)
+    )
+
+
+def _is_social_location_question(text: str) -> bool:
+    """«Вы территориально откуда?» — социальный вопрос о местоположении, не тема вики."""
+    if not text or "?" not in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _PRINT_CTX_RE.search(t):
+        return False
+    if re.search(r"\bтерриториально\b", t):
+        return True
+    if re.search(r"\b(?:вы|ты)\b.{0,12}\bоткуда\b", t) or re.search(r"\bоткуда\b.{0,8}\b(?:вы|ты)\b", t):
+        return True
+    if re.search(r"\bв\s+как(?:ом|ой)\s+(?:городе|регионе|стране)\b", t):
+        return True
+    return False
+
+
+def _is_content_post_request(text: str) -> bool:
+    """«Видео нарезки будет?» — вопрос про публикацию контента в чате, не запрос к вики."""
+    if not text or "?" not in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _PRINT_CTX_RE.search(t):
+        return False
+    return bool(
+        re.search(r"\b(?:видео|ролик|стрим|запись|туториал|урок|обзор)\w*\b", t)
+        and re.search(
+            r"\b(?:будет|будут|выложи\w*|скинеш\w*|скинет\w*|запиш\w*|сдела\w*|планир\w*)\b",
+            t,
+        )
+    )
+
+
+def _is_thread_continuation_filler(text: str) -> bool:
+    """«хотя ладно, не везде…», «это я понял, но…» — продолжение/реакция в треде, не вопрос к боту."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    if re.match(r"^(?:да\s+|ну\s+)?хотя\b", t):
+        return True
+    if re.match(r"^(?:это\s+)?я\s+понял", t):
+        return True
+    if re.match(r"^понял[,\s]", t) or t in ("понял", "понятно"):
+        return True
+    return False
+
+
+def _is_competitor_model_disambiguation(text: str) -> bool:
+    """«а хот к2 это чё, кобра 2? или креалити к2?» — выяснение чужой модели/конкурента, не вопрос к вики."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    has_comp = bool(
+        re.search(r"\b(?:креалит\w*|creality|бамбу\w*|bambu|prusa|пруса|ender|qidi)\b", t)
+    )
+    disambig = bool(re.search(r"(?:\bэто\s+ч[ёе]\b|\bчто\s+за\b|\bили\b)", t))
+    return has_comp and disambig
