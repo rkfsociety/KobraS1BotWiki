@@ -571,9 +571,23 @@ def _recent_replies_section(state: _PanelState, csrf: str, page: int = 1) -> str
         "</div></div>"
     )
 
+    clear_btn = (
+        '<form class="inline-form" method="post" action="/replies/clear" '
+        'onsubmit="return confirm(\'Очистить всю ленту последних ответов?\')">'
+        f'<input type="hidden" name="csrf" value="{csrf}">'
+        '<button class="btn btn-sm btn-danger" type="submit" title="Очистить всю ленту">'
+        'Очистить ленту</button>'
+        "</form>"
+    )
+    header = (
+        '<div style="display:flex;justify-content:space-between;align-items:center">'
+        f'<h2 style="margin:0">Последние ответы бота ({total})</h2>'
+        f"{clear_btn}"
+        "</div>"
+    )
     return (
         '<div class="card" id="recent-replies">'
-        f'<h2>Последние ответы бота ({total})</h2>'
+        f"{header}"
         f"{table}"
         f"{pagination}"
         "</div>"
@@ -1470,6 +1484,8 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 self._update_run()
             elif path == "/replies/flag":
                 self._replies_flag(form)
+            elif path == "/replies/clear":
+                self._replies_clear(form)
             elif path == "/bad-answers/delete":
                 self._bad_answers_delete(form)
             elif path == "/missed-questions/delete":
@@ -1863,6 +1879,16 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     push_info = f" · git исключение: {e}"
             self._flash_redirect(f"/?replies_page={replies_page}#recent-replies", True,
                                  f"Ответ отмечен как ошибочный{push_info}")
+
+        def _replies_clear(self, form: dict[str, str]) -> None:  # noqa: ARG002
+            """Полностью очищает ленту последних ответов (память + диск)."""
+            count = 0
+            if state.application is not None:
+                buf = state.application.bot_data.get("recent_replies") or []
+                count = len(buf)
+                state.application.bot_data["recent_replies"] = []
+                save_recent_replies(state.application.bot_data)
+            self._flash_redirect("/#recent-replies", True, f"Лента очищена: {count} записей")
 
         def _bad_answers_delete(self, form: dict[str, str]) -> None:
             """Удаляет обработанную запись из bad_answers.json."""

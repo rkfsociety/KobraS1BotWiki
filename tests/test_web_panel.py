@@ -581,3 +581,23 @@ def test_update_run_requires_csrf(panel):
     r = c.getresponse()
     assert r.status == 400  # без csrf
     r.read()
+
+
+def test_replies_clear_empties_feed(panel):
+    from urllib.parse import urlencode
+
+    app, port = panel
+    # Заполняем ленту последних ответов и проверяем, что кнопка очистки её сбрасывает.
+    app.bot_data["recent_replies"] = [
+        {"ts": time.time(), "question": "Q1", "answer": "A1", "url": "", "source": "wiki", "chat_id": 1},
+        {"ts": time.time(), "question": "Q2", "answer": "A2", "url": "", "source": "wiki", "chat_id": 1},
+    ]
+    c, ck, csrf = _login_and_get_csrf(port, "/")
+    c.request(
+        "POST", "/replies/clear", urlencode({"csrf": csrf}),
+        {"Content-Type": "application/x-www-form-urlencoded", "Cookie": ck},
+    )
+    r = c.getresponse()
+    assert r.status == 303  # Post-Redirect-Get
+    r.read()
+    assert app.bot_data["recent_replies"] == []
