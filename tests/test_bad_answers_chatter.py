@@ -130,3 +130,39 @@ def test_real_video_help_not_content_request():
 
 def test_real_temperature_question_not_chatter():
     assert not _is_conversational_chatter("какую температуру стола ставить для петг?")
+
+
+# --- разбор «последних ответов»: бот отвечал на болтовню/фрагменты ---
+
+def test_slicer_preview_chatter_is_chatter():
+    assert _is_conversational_chatter("Как слайсер нарезал")
+    assert _is_conversational_chatter("Как нарезает слайсер")
+    assert _is_conversational_chatter("Сделайте видео как Слайсер нарезал деталь")
+
+
+def test_profile_tweak_account_is_chatter():
+    assert _is_conversational_chatter(
+        "Ну, а профиль Андрея . Максимум что я там сделал, так это снизил скорость внешке с 180 до 150"
+    )
+
+
+def test_solo_recollection_is_chatter():
+    assert _is_conversational_chatter(
+        "Помню кто-то писал что 600+ надо. Думаю если печать объёмная - лучше поэкспериментировать"
+    )
+
+
+def test_personal_opinion_remark_is_chatter():
+    assert _is_conversational_chatter("Поддержками с ветками тебе там все портит как мне кажется")
+
+
+def test_filler_what_to_do_is_chatter():
+    assert _is_conversational_chatter("Но что поделать")
+
+
+# --- реальные слайсер/профиль вопросы не блокируются ---
+
+def test_real_slicer_questions_not_chatter():
+    assert not _is_conversational_chatter("почему слайсер не нарезает модель?")
+    assert not _is_conversational_chatter("как сделать поддержки в слайсере?")
+    assert not _is_conversational_chatter("как настроить скорость внешнего периметра на kobra s1?")

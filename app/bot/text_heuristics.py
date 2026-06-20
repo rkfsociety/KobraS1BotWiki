@@ -101,6 +101,8 @@ from app.bot.heuristics._banter import (
     _is_content_post_request,
     _is_thread_continuation_filler,
     _is_competitor_model_disambiguation,
+    _is_slicer_preview_chatter,
+    _is_personal_opinion_remark,
     _message_has_help_intent,
 )
 from app.bot.heuristics._intents import (

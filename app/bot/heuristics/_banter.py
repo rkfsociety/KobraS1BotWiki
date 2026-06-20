@@ -165,7 +165,12 @@ def _is_chat_past_incident_recollection(text: str) -> bool:
             t,
         )
     )
-    return chat_ref and recollection
+    # «Помню кто-то писал что 600+ надо» — байка-воспоминание и без явной отсылки «в чате».
+    solo_recollection = bool(
+        re.search(r"\b(?:помн\w*|вспомн\w*)\b(?:\W+\w+){0,3}\W+(?:кто[\s-]?то|кто[\s-]?нибудь|где[\s-]?то|вроде)\b", t)
+        or re.search(r"\bкто[\s-]?то\s+(?:писа|говор|расск|упомин)\w*", t)
+    )
+    return (chat_ref and recollection) or solo_recollection
 
 
 def _is_print_quality_meta_curiosity(text: str) -> bool:
@@ -647,14 +652,25 @@ def _is_layer_profile_thread_opinion(text: str) -> bool:
         return False
     layer_ctx = bool(re.search(r"\b(?:первый\s+слой|слой\w*|layer)\b", t))
     # «соковом» — опечатка «сопловом» в обсуждении профиля
-    profile_ctx = bool(re.search(r"\b(?:профил\w*|сопл\w*|соков\w*|nozzle)\b", t))
+    profile_ctx = bool(
+        re.search(r"\b(?:профил\w*|сопл\w*|соков\w*|nozzle|скорост\w*|внешк\w*|внешн\w*\s+периметр)\b", t)
+    )
     if not (layer_ctx or profile_ctx):
         return False
     opinion = bool(
         re.search(r"\b(?:не\s+повлия|не\s+влия|думаю|кажется|норм|сырой|сыр\w+)\b", t)
         or re.search(r"\b(?:сомнева|вряд\s+ли|не\s+думаю)\b", t)
     )
-    return opinion
+    # Рассказ о своих правках профиля: «я снизил скорость внешке с 180 до 150»
+    tweak = bool(
+        re.search(
+            r"\b(?:я|мы)\b(?:\W+\w+){0,3}\W+"
+            r"(?:снизил\w*|поднял\w*|задрал\w*|поставил\w*|выставил\w*|изменил\w*|"
+            r"сделал\w*|убрал\w*|оставил\w*|менял\w*|поменял\w*)\b",
+            t,
+        )
+    )
+    return opinion or tweak
 
 
 def _is_other_printer_experience_story(text: str) -> bool:
@@ -2198,7 +2214,47 @@ def _is_thread_continuation_filler(text: str) -> bool:
         return True
     if re.match(r"^понял[,\s]", t) or t in ("понял", "понятно"):
         return True
+    if re.search(r"\b(?:ну\s+)?что\s+(?:ж\s+)?поделать\b", t):
+        return True
     return False
+
+
+def _is_slicer_preview_chatter(text: str) -> bool:
+    """«Как слайсер нарезал», «Сделайте видео как слайсер нарезал деталь» —
+
+    обсуждение/показ нарезки в слайсере или просьба к человеку снять видео, не запрос к вики.
+    """
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж\w*|почему|что\s+делать|не\s+работает|ошибк\w*|"
+        r"как\s+(?:настро|откалибр|почин|исправ|сделать|убрать|включ|отключ|задать))\b",
+        t,
+    ):
+        return False
+    if re.search(r"\bкак\b(?:\W+\w+){0,3}\W+слайсер\w*\b(?:\W+\w+){0,3}\W+нарез", t):
+        return True
+    if re.search(r"\bкак\b(?:\W+\w+){0,2}\W+нарез\w*\b(?:\W+\w+){0,2}\W+слайсер", t):
+        return True
+    if re.search(
+        r"\b(?:сделай\w*|запиш\w*|выложи\w*|скинь\w*|покаж\w*)\b(?:\W+\w+){0,4}\W+(?:видео|ролик)\b",
+        t,
+    ):
+        return True
+    return False
+
+
+def _is_personal_opinion_remark(text: str) -> bool:
+    """«…тебе там всё портит, как мне кажется» — личное мнение в треде, не вопрос к боту."""
+    if not text or "?" in (text or ""):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t) or re.search(r"\b(?:не\s+работает|что\s+делать|ошибк\w*)\b", t):
+        return False
+    return bool(
+        re.search(r"\b(?:как\s+мне\s+кажется|мне\s+кажется|по[\s-]?моему|на\s+мой\s+взгляд|имхо)\b", t)
+    )
 
 
 def _is_competitor_model_disambiguation(text: str) -> bool:

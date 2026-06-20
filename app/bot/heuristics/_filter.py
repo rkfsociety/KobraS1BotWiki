@@ -80,6 +80,8 @@ from app.bot.heuristics._banter import (
     _is_content_post_request,
     _is_thread_continuation_filler,
     _is_competitor_model_disambiguation,
+    _is_slicer_preview_chatter,
+    _is_personal_opinion_remark,
 )
 from app.bot.heuristics._intents import (
     _topic_is_marketplace_commerce_intent,
@@ -182,6 +184,8 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_content_post_request(text)
         or _is_thread_continuation_filler(text)
         or _is_competitor_model_disambiguation(text)
+        or _is_slicer_preview_chatter(text)
+        or _is_personal_opinion_remark(text)
     )
 
 
