@@ -166,3 +166,34 @@ def test_real_slicer_questions_not_chatter():
     assert not _is_conversational_chatter("почему слайсер не нарезает модель?")
     assert not _is_conversational_chatter("как сделать поддержки в слайсере?")
     assert not _is_conversational_chatter("как настроить скорость внешнего периметра на kobra s1?")
+
+
+# --- ещё партия «последних ответов»: фрагменты, догадки, размышления ---
+
+def test_bare_fragment_questions_are_chatter():
+    assert _is_conversational_chatter("Булочка же?")
+    assert _is_conversational_chatter("Как и многоцветом")
+
+
+def test_planning_musing_is_chatter():
+    assert _is_conversational_chatter("Вот думал попробовать что то с кольцевым нагревателем")
+
+
+def test_photo_observation_musing_is_chatter():
+    assert _is_conversational_chatter(
+        "Кстати, на последнем фото видны изъяны на поверхности, думаю, что диаметр прутка гулял"
+    )
+
+
+def test_peer_past_action_question_is_chatter():
+    assert _is_conversational_chatter("Или ты уже разложил в слайсере?")
+
+
+def test_diagnostic_bin_question_is_chatter():
+    assert _is_conversational_chatter("Мусорку не цепляет?")
+
+
+def test_infinitive_howto_not_chatter():
+    # «как разложить детали» — это how-to, не вопрос соседу о прошлом действии.
+    assert not _is_conversational_chatter("как разложить детали в слайсере?")
+    assert not _is_conversational_chatter("на фото видно дефект, как исправить?")

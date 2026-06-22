@@ -46,7 +46,8 @@ _PEER_ACTION_PAST_RE = re.compile(
     r"смотрел\w*|глядел\w*|"
     r"делал\w*|сделал\w*|"
     r"брал\w*|заказывал\w*|заказал\w*|покупал\w*|"
-    r"чистил\w*|почистил\w*|сушил\w*|высушил\w*"
+    r"чистил\w*|почистил\w*|сушил\w*|высушил\w*|"
+    r"разложил\w*|раскидал\w*|расставил\w*|разместил\w*|накидал\w*"
     r")\b",
     re.I | re.UNICODE,
 )
@@ -1812,6 +1813,11 @@ def _is_print_task_planning_statement(text: str) -> bool:
     t = re.sub(r"\s+", " ", text.lower()).strip()
     if re.search(r"\b(?:помогите|подскаж|как\s+(?:настро|сделать|убрать|печатать))\b", t):
         return False
+    # «вот думал попробовать X» — размышление вслух о своей затее, не вопрос к боту
+    if re.search(r"\b(?:вот\s+)?дума[люе]\w*\s+попробовать\b", t) or re.search(
+        r"\bхочу\s+попробовать\b", t
+    ):
+        return True
     # «надо/нужно напечатать X» — объявление задачи (не «как напечатать?»)
     task = bool(
         re.search(r"\b(?:надо|нужно)\s+(?:\w+\s+){0,5}напечатать\b", t)
@@ -2125,7 +2131,8 @@ def _is_marketplace_search_chatter(text: str) -> bool:
 _DIAG_COMPONENT_RE = re.compile(
     r"\b(?:вентилятор\w*|кулер\w*|ремн\w*|ремень|сопл\w*|хотенд\w*|термистор\w*|"
     r"температур\w*|поток\w*|обдув\w*|ретракт\w*|концевик\w*|датчик\w*|"
-    r"экструдер\w*|подач\w*|нагрев\w*|вал\w*|эксцентрик\w*|пластик\w*|филамент\w*)\b",
+    r"экструдер\w*|подач\w*|нагрев\w*|вал\w*|эксцентрик\w*|пластик\w*|филамент\w*|"
+    r"мусорк\w*|корзин\w*|башн\w*|лоток\w*|каретк\w*)\b",
     re.IGNORECASE,
 )
 
@@ -2152,7 +2159,7 @@ def _is_peer_diagnostic_checklist(text: str) -> bool:
         _DIAG_COMPONENT_RE.search(t)
         and re.search(
             r"\b(?:работает|работают|крутит\w*|натянут\w*|закручен\w*|"
-            r"подключ\w*|включ[её]н\w*|цел\w*|стоит|стоят)\b",
+            r"подключ\w*|включ[её]н\w*|цел\w*|стоит|стоят|цепля\w*|задева\w*)\b",
             t,
         )
     )
@@ -2269,3 +2276,37 @@ def _is_competitor_model_disambiguation(text: str) -> bool:
     )
     disambig = bool(re.search(r"(?:\bэто\s+ч[ёе]\b|\bчто\s+за\b|\bили\b)", t))
     return has_comp and disambig
+
+
+def _is_photo_observation_musing(text: str) -> bool:
+    """«На последнем фото видны изъяны, думаю, диаметр прутка гулял» —
+
+    рассуждение по присланному фото с догадкой о причине, не вопрос к боту.
+    """
+    if not text or "?" in (text or ""):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    photo_ref = bool(re.search(r"\b(?:на\s+)?(?:фото|снимке|фотке|картинке|видео)\b", t))
+    guess = bool(
+        re.search(r"\b(?:думаю|похоже|видимо|наверное|кажется|по[\s-]?моему|скорее\s+всего)\b", t)
+    )
+    return photo_ref and guess
+
+
+def _is_bare_fragment_question(text: str) -> bool:
+    """«Булочка же?», «Как и многоцветом» — короткий обрывок реплики треда, не вопрос к боту."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t) or re.search(r"\b(?:почему|что\s+делать|не\s+работает|ошибк\w*)\b", t):
+        return False
+    wc = len(t.split())
+    # «X же?» — риторический обрывок из 1–3 слов
+    if "?" in text and wc <= 3 and re.search(r"\bже\s*\??$", t):
+        return True
+    # «Как и многоцветом», «Как и на кобре» — сравнительный обрывок (≤4 слов)
+    if wc <= 4 and re.match(r"^как\s+и\b", t):
+        return True
+    return False
