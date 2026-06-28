@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "text": "Скажите где я не прав?",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1782656228.2886908
+  },
+  {
+    "text": "Неважно где покупать оригинальный пластик или его аналоги фирменные.",
+    "score": 64,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-3-combo/troubleshooting-abnormal-discharge-of-purge-wiper-material",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1782656218.250602
+  }
+]
