@@ -62,3 +62,6 @@ stop-agent-worker.cmd
 
 # Claude Code личные настройки (разрешения и т.п.)
 .claude/settings.local.json
+
+# Локальная память агента (SSH-пароли и секреты деплоя)
+.cursor/memories.md
