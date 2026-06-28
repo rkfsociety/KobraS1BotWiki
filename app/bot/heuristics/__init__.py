@@ -25,6 +25,7 @@ from app.bot.heuristics._error_codes import (
 # --- _ace ---
 from app.bot.heuristics._ace import (
     _is_ace_unit_trade_banter,
+    _is_ace_unit_price_shopping_chatter,
     _is_combo_ace_marketplace_chat,
     _topic_is_ace_connection_intent,
     _topic_is_ace_filament_drying_intent,
@@ -117,6 +118,10 @@ from app.bot.heuristics._banter import (
     _is_thread_humor_meme,
     _is_filament_brand_social_chat,
     _is_general_thread_sidebar,
+    _is_peer_calibration_reply_chatter,
+    _is_thread_bed_surface_opinion,
+    _is_bot_helper_appreciation_meta,
+    _is_vague_fix_without_symptom,
     _message_has_help_intent,
 )
 
@@ -163,6 +168,7 @@ __all__ = [
     "_pick_error_code_doc",
     # _ace
     "_is_ace_unit_trade_banter",
+    "_is_ace_unit_price_shopping_chatter",
     "_is_combo_ace_marketplace_chat",
     "_topic_is_ace_connection_intent",
     "_topic_is_ace_filament_drying_intent",

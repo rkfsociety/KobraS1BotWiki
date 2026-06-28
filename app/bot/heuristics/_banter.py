@@ -2223,6 +2223,12 @@ def _is_thread_continuation_filler(text: str) -> bool:
         return True
     if re.search(r"\b(?:ну\s+)?что\s+(?:ж\s+)?поделать\b", t):
         return True
+    if re.match(r"^а\s+почему\s*\??$", t):
+        return True
+    if re.search(r"\bраньше\b", t) and re.search(r"\bвозобнов\w*\b", t):
+        return True
+    if re.search(r"\bтот\s+кто\s+писал\b", t):
+        return True
     return False
 
 
@@ -2453,6 +2459,62 @@ def _is_general_thread_sidebar(text: str) -> bool:
     return any(re.search(p, t) for p in patterns)
 
 
+def _is_peer_calibration_reply_chatter(text: str) -> bool:
+    """«Ты в тот раз сказал ставь 22» — ответ человеку про калибровку, не вопрос к боту."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\b(?:помогите|подскаж|как\s+(?:настро|откалибр|сделать))\b", t):
+        return False
+    to_you = bool(re.search(r"\b(?:ты\s+в\s+тот\s+раз|ты\s+сказал|ты\s+говорил)\b", t))
+    flow_ctx = bool(re.search(r"\b(?:поток|расход|flow|тест)\w*\b", t))
+    return to_you and flow_ctx
+
+
+def _is_thread_bed_surface_opinion(text: str) -> bool:
+    """«На кой там каптон?» — мнение про клей/покрытие стола в треде."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\b(?:помогите|подскаж|как\s+(?:наклеить|приклеить|настроить))\b", t):
+        return False
+    surface = bool(re.search(r"\b(?:каптон|kapton|скотч|клей|pei|пластик\s+стол)\w*\b", t))
+    dismiss = bool(re.search(r"\b(?:на\s+кой|зачем|хватит|обычн\w*|никакая)\b", t))
+    return surface and dismiss
+
+
+def _is_bot_helper_appreciation_meta(text: str) -> bool:
+    """«Он очень часто помогает всем» — разговор о боте/модераторе, не техвопрос."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t) and re.search(r"\b(?:принтер|печат|сопло|экструдер)\b", t):
+        return False
+    helps = bool(re.search(r"\b(?:помогает|выручает|спасает)\b", t))
+    meta = bool(
+        re.search(r"\b(?:админ\w*|бот\w*|когда\s+админ|свободн\w*\s+доступ)\b", t)
+        or re.search(r"\bон\s+очень\s+часто\b", t)
+    )
+    return helps and meta
+
+
+def _is_vague_fix_without_symptom(text: str) -> bool:
+    """«как такое чинится?» без описания симптома — слишком общий запрос."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if not re.search(r"\bкак\s+такое\s+чин\w*\b", t):
+        return False
+    symptom = bool(
+        re.search(
+            r"\b(?:не\s+печата|ошибк\w*|слом|забил|засор|не\s+работает|"
+            r"отрыв|наплыв|люфт|шум|завис|отвали|не\s+видит|код\s+\d+)\b",
+            t,
+        )
+    )
+    return not symptom
+
+
 def _is_bare_fragment_question(text: str) -> bool:
     """«Булочка же?», «Как и многоцветом» — короткий обрывок реплики треда, не вопрос к боту."""
     if not text or not text.strip():
@@ -2460,6 +2522,8 @@ def _is_bare_fragment_question(text: str) -> bool:
     t = re.sub(r"\s+", " ", text.lower()).strip()
     if _HELP_GUARD_RE.search(t) or re.search(r"\b(?:почему|что\s+делать|не\s+работает|ошибк\w*)\b", t):
         return False
+    if re.match(r"^фитинг\w*\s*\??$", t):
+        return True
     wc = len(t.split())
     if re.match(r"^не\s+такой\s*\??$", t):
         return True

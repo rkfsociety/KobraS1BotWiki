@@ -10,6 +10,7 @@ from app.bot.heuristics._base import (
 )
 from app.bot.heuristics._ace import (
     _is_ace_unit_trade_banter,
+    _is_ace_unit_price_shopping_chatter,
     _is_combo_ace_marketplace_chat,
     _topic_is_ace_not_detected_intent,
 )
@@ -91,6 +92,10 @@ from app.bot.heuristics._banter import (
     _is_thread_humor_meme,
     _is_filament_brand_social_chat,
     _is_general_thread_sidebar,
+    _is_peer_calibration_reply_chatter,
+    _is_thread_bed_surface_opinion,
+    _is_bot_helper_appreciation_meta,
+    _is_vague_fix_without_symptom,
 )
 from app.bot.heuristics._intents import (
     _topic_is_marketplace_commerce_intent,
@@ -139,6 +144,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_price_negotiation_chatter(text)
         or _is_price_hyperbole_banter(text)
         or _is_combo_ace_marketplace_chat(text)
+        or _is_ace_unit_price_shopping_chatter(text)
         or _is_ace_unit_trade_banter(text)
         or _is_printer_purchase_material_opinion(text)
         or _is_filament_brand_quality_opinion(text)
@@ -204,6 +210,10 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_thread_humor_meme(text)
         or _is_filament_brand_social_chat(text)
         or _is_general_thread_sidebar(text)
+        or _is_peer_calibration_reply_chatter(text)
+        or _is_thread_bed_surface_opinion(text)
+        or _is_bot_helper_appreciation_meta(text)
+        or _is_vague_fix_without_symptom(text)
     )
 
 

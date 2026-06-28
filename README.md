@@ -22,6 +22,8 @@ python -m app.bot
 
 Разбор `data/missed_questions.json`: пополнение `manual_qa.json`, эвристики в `app/bot/heuristics/_banter.py`, затем очистка файла.
 
+Разбор «отвеченных»: лента `.cache/recent_replies.json` (веб-панель) и помеченные плохие ответы `data/bad_answers.json` — те же шаги; скрипт `scripts/apply_replies_jun2026_qa.py` (июнь 2026).
+
 ## Дорожная карта
 
 ### Качество поиска

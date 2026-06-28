@@ -21,6 +21,7 @@ from app.bot.text_heuristics import (
     _is_profanity_outburst_chatter,
     _is_social_location_question,
     _is_thread_continuation_filler,
+    _is_thread_bed_surface_opinion,
     _is_thread_humor_meme,
     _is_works_fine_reassurance,
 )
@@ -238,3 +239,55 @@ def test_real_help_not_missed_chatter_filters():
     )
     assert not _is_firmware_slicer_version_gossip("как обновить прошивку до 2.7.2.7 на kobra s1?")
     assert not _is_thread_humor_meme("почему petg не липнет к столу на kobra s1?")
+
+
+# --- разбор recent_replies / bad_answers 2026-06 (отвеченные) ---
+
+def test_ace_price_shopping_chatter():
+    assert _is_conversational_chatter("Где аськи по 5 тыщ")
+    assert _is_conversational_chatter("Тысячи 2-3?)")
+
+
+def test_fitting_fragment_is_chatter():
+    assert _is_bare_fragment_question("Фитинг?")
+    assert _is_conversational_chatter("Фитинг?")
+
+
+def test_resume_print_continuation_is_chatter():
+    msg = "А почему?\nПросто раньше ещё не приходилось возобновлять печать"
+    assert _is_thread_continuation_filler(msg)
+    assert _is_conversational_chatter(msg)
+
+
+def test_peer_flow_reply_is_chatter():
+    msg = "А как поток? \nОбъемый расход? \nТы в тот раз сказал что тест хрегь ставь 22"
+    assert _is_conversational_chatter(msg)
+
+
+def test_kapton_opinion_is_chatter():
+    msg = "На кой там каптон? Там и обычного хватит, температура головы никакая."
+    assert _is_conversational_chatter(msg)
+
+
+def test_bot_appreciation_meta_is_chatter():
+    assert _is_conversational_chatter(
+        "Он очень часто помогает всем. Когда админов нет в свободном доступе"
+    )
+
+
+def test_peer_past_action_relay_is_chatter():
+    assert _is_thread_continuation_filler("Тот кто писал - не стачивал")
+    assert _is_conversational_chatter("Тот кто писал - не стачивал")
+
+
+def test_vague_fix_without_symptom_is_chatter():
+    msg = (
+        "Добрый день, опыт в печати и пользовании к сожалению скудный, "
+        "подскажите пожалуйста как такое чинится? Anycubic Kobra s1"
+    )
+    assert _is_conversational_chatter(msg)
+
+
+def test_real_asa_outdoor_not_chatter():
+    assert not _is_conversational_chatter("ASA филамент для улицы какая температура?")
+    assert not _is_thread_bed_surface_opinion("как наклеить каптон на стол kobra s1?")

@@ -188,3 +188,24 @@ def _is_combo_ace_marketplace_chat(text: str | None) -> bool:
         combo_ace
         and re.search(r"\b(?:в\s+комплект|комплектац|входит|идёт\s+в|ставят|поставля)\w*\b", t)
     )
+
+
+def _is_ace_unit_price_shopping_chatter(text: str | None) -> bool:
+    """«Где аськи по 5 тыщ», «Тысячи 2-3?» — поиск б/у ACE по цене, не запрос к вики."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж|как\s+(?:замен|поменя|настро|почин|купить\s+оригинал))\b",
+        t,
+    ):
+        return False
+    has_ace = bool(_ace_mentioned(text) or re.search(r"\bаськ\w*\b", t))
+    if has_ace and re.search(r"\bгде\b", t) and re.search(r"\d+\s*(?:тыщ|тыс\.?|к\b)", t):
+        return True
+    if re.search(r"\bтысяч\w*\b", t) and re.search(r"\d", t):
+        if has_ace:
+            return True
+        if "?" in text and len(t.split()) <= 4:
+            return True
+    return False
