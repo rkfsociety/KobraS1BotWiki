@@ -2295,6 +2295,164 @@ def _is_photo_observation_musing(text: str) -> bool:
     return photo_ref and guess
 
 
+def _is_community_experience_poll(text: str) -> bool:
+    """Опрос чата: наработки, «кто сталкивался», «никто не знает про…» — не к боту."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    if re.search(
+        r"\b(?:"
+        r"наработк\w*(?:\s+\w+){0,4}?\s+по\s+часам|"
+        r"что\s+из\s+серь[её]зного\s+уже\s+менял|"
+        r"следует\s+ли\s+его\s+продать|"
+        r"есть\s+у\s+кого\s+подобн|"
+        r"никто\s+(?:больше\s+)?(?:не\s+)?знает|"
+        r"кто\s+нибудь\s+с\s+таким\s+сталкивал|"
+        r"кто\s+то\s+может\s+помочь\s+с\s+эндер|"
+        r"вопрос\s+не\s+по\s+тебе"
+        r")\b",
+        t,
+    ):
+        return True
+    if re.search(r"\b(?:кобра\s*x|kobra\s*x)\b", t) and re.search(
+        r"\b(?:что\s+плохое|что\s+хорошее|первый\s+3д\s+принтер|28к)\b", t
+    ):
+        return True
+    return False
+
+
+def _is_private_money_contact_spam(text: str) -> bool:
+    """«Черкани в приватные», «трудности с финансами» — не запрос к вики."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    return bool(
+        re.search(r"\b(?:черкани|напиш\w*|выруч\w*)\b.*\b(?:приват|личн|лс|dm)\b", t)
+        or re.search(r"\bтрудност\w*\s+с\s+финанс", t)
+        or re.search(r"\bне\s+хватает\s+бабла\b", t)
+    )
+
+
+def _is_firmware_slicer_version_gossip(text: str) -> bool:
+    """Обсуждение версий прошивки/орки без запроса инструкции."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    if re.match(r"^ещё\s+как\s+вариант\s+\d", t):
+        return True
+    if re.search(r"\b2\.\d+\.\d+\.\d+\b", t) and re.search(
+        r"\b(?:не\s+тестил|тестил|выпустил|отзыв|обновлюсь|откат)\w*\b", t
+    ):
+        return True
+    if t in ("зачем орка", "зачем orca") or re.match(r"^зачем\s+орк\w*\s*\??$", t):
+        return True
+    if re.search(r"\bприкалываешься\b", t) and re.search(r"\b(?:орк|orca)\b", t):
+        return True
+    if re.search(r"\bоткатывать\s+до\s+стабильн", t):
+        return True
+    return False
+
+
+def _is_offtopic_news_or_shop_meta(text: str) -> bool:
+    """Новости/скандалы/мета магазина без тех. вопроса по принтеру."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t) or _PRINT_CTX_RE.search(t):
+        if not re.search(r"\b(?:сдэк|пвз|3d\s*club|закреп)\b", t):
+            return False
+    if re.search(r"\b(?:сдэк|пвз)\b", t) and re.search(r"\b(?:скандал|клиент|коробк)\b", t):
+        return True
+    if re.search(r"\bсотрудник\w*\s+магазин\w*\b", t) and re.search(r"\b3d\s*club\b", t):
+        return True
+    if re.search(r"\b(?:закреп|админ\w*)\b", t) and re.search(r"\b(?:сайт|структурир)\w*\b", t):
+        return True
+    if re.search(r"\bновост\w*\s+про\s+мужик", t):
+        return True
+    return False
+
+
+def _is_thread_humor_meme(text: str) -> bool:
+    """Шутки треда: туалет+сопля, «отдельный вид искусства», эмодзи-реакции без вопроса."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    if re.search(r"\bтуалет\w*\b", t) and re.search(r"\b(?:сопл|петг|выехать)\w*\b", t):
+        return True
+    if re.search(r"\bне\s+может\s+выехать\b", t) and re.search(r"\b(?:сопл|петг|затверд)\w*\b", t):
+        return True
+    if re.search(r"\bотдельный\s+вид\s+искусств", t):
+        return True
+    if re.search(r"\bчто\s+он\s+еблан\b", t):
+        return True
+    if re.search(r"\bзаберу\s+кобр\w*\s+за\s+\d+\s+как\s+надоест", t):
+        return True
+    return False
+
+
+def _is_filament_brand_social_chat(text: str) -> bool:
+    """«что за пластик такой», «старпласт?» — болтовня о марке, не запрос гайда."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t) or re.search(r"\b(?:где\s+почитать|вариаци\w*\s+пластик)\b", t):
+        return False
+    return bool(
+        re.search(r"\b(?:что|че)\s+за\s+пластик", t)
+        or re.search(r"\bстарпласт\w*\s*\??$", t)
+        or re.search(r"\bцвет\s+прям\s+\w+.*что\s+за\s+пластик", t)
+    )
+
+
+def _is_general_thread_sidebar(text: str) -> bool:
+    """Остатки треда: цены, сравнения, «в душе не чаю», обращение к человеку."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    patterns = (
+        r"\bв\s+душе\s+не\s+чаю\b",
+        r"\bпросто\s+спросил\b",
+        r"\bне\s+нашел\s+кто\b",
+        r"\bне\s+нашёл\s+кто\b",
+        r"\b\d+\s*к\s+дорого\b",
+        r"\bвсм\s+па\s+\d+\b",
+        r"\bодинаков\w*\s+по\s+швг\b",
+        r"^\s*всё\s*\??$",
+        r"^\s*все\s*\??$",
+        r"\bя\s+уже\s+хз\s+куда\s+копать\b",
+        r"\bс\s+чего\s+бы\s+нет\b",
+        r"\bвот\s+в\s+том\s+то\s+и\s+дело\b",
+        r"^\s*ты\s+(?:почитал|прикалыва)",
+        r"^\[\w+\]",
+        r"\bбамбук\w*\b.*\bорк\w*\b",
+        r"\bскопирует\b",
+        r"\bштук\s+\d+\b",
+        r"\bпо\s+\d+\s+продает\b",
+        r"\bозон\w*\b.*\bзаказывал\b",
+        r"\bкак-то\s+видел\s+вроде\b",
+        r"\bзвучит\s+супер\s+странно\b",
+        r"\bревизию\s+на\s+складе\b",
+        r"\bсмотрите\s+закреп\b",
+        r"\[ссылка\]",
+        r"\bхочешь\s+зарабатывать\b",
+        r"\bс\s+кончеными\s+клиентами\b",
+        r"\bпроверил\s+до\s+куда\s+пластик\b",
+        r"\bлинии\s+чуть\s+чуть\s+пальцем\b",
+        r"\bскорости\s+поддержк\w*\s+такие\s+же\b",
+        r"\bволосит\b",
+        r"\bбиметалл\s+как\s+выглядит\b",
+    )
+    return any(re.search(p, t) for p in patterns)
+
+
 def _is_bare_fragment_question(text: str) -> bool:
     """«Булочка же?», «Как и многоцветом» — короткий обрывок реплики треда, не вопрос к боту."""
     if not text or not text.strip():
@@ -2303,6 +2461,24 @@ def _is_bare_fragment_question(text: str) -> bool:
     if _HELP_GUARD_RE.search(t) or re.search(r"\b(?:почему|что\s+делать|не\s+работает|ошибк\w*)\b", t):
         return False
     wc = len(t.split())
+    if re.match(r"^не\s+такой\s*\??$", t):
+        return True
+    if re.match(r"^лучшую\s+или\s+худшую\s*\??$", t):
+        return True
+    if re.match(r"^ещё\s+как\s+вариант\b", t):
+        return True
+    if re.match(r"^(?:эт|это)\s+что\s+такое\s*\??$", t):
+        return True
+    if re.match(r"^это\s+мине\s*\??$", t):
+        return True
+    if re.match(r"^скорости\s+потока\s+па\s*\??$", t):
+        return True
+    if re.match(r"^значения\s+какие\s*\??$", t):
+        return True
+    if re.match(r"^тест\s+печатать\s*\??$", t):
+        return True
+    if re.match(r"^зачем\s+орк\w*\s*\??$", t):
+        return True
     # «X же?» — риторический обрывок из 1–3 слов
     if "?" in text and wc <= 3 and re.search(r"\bже\s*\??$", t):
         return True

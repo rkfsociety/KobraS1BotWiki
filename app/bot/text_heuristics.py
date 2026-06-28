@@ -105,6 +105,13 @@ from app.bot.heuristics._banter import (
     _is_personal_opinion_remark,
     _is_photo_observation_musing,
     _is_bare_fragment_question,
+    _is_community_experience_poll,
+    _is_private_money_contact_spam,
+    _is_firmware_slicer_version_gossip,
+    _is_offtopic_news_or_shop_meta,
+    _is_thread_humor_meme,
+    _is_filament_brand_social_chat,
+    _is_general_thread_sidebar,
     _message_has_help_intent,
 )
 from app.bot.heuristics._intents import (

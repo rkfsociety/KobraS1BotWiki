@@ -20,6 +20,8 @@ python -m app.bot
 
 Локальная память агента (SSH, деплой): `.cursor/memories.md` — не в git, создаётся на машине разработчика.
 
+Разбор `data/missed_questions.json`: пополнение `manual_qa.json`, эвристики в `app/bot/heuristics/_banter.py`, затем очистка файла.
+
 ## Дорожная карта
 
 ### Качество поиска

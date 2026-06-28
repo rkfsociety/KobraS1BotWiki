@@ -7,16 +7,21 @@ from __future__ import annotations
 
 from app.bot.text_heuristics import (
     _is_bare_combo_variant_fragment,
+    _is_bare_fragment_question,
+    _is_community_experience_poll,
     _is_competitor_model_disambiguation,
     _is_content_post_request,
     _is_conversational_chatter,
+    _is_firmware_slicer_version_gossip,
     _is_marketplace_search_chatter,
     _is_multicolor_tower_rhetoric,
     _is_non_wiki_chatter_message,
     _is_peer_diagnostic_checklist,
+    _is_private_money_contact_spam,
     _is_profanity_outburst_chatter,
     _is_social_location_question,
     _is_thread_continuation_filler,
+    _is_thread_humor_meme,
     _is_works_fine_reassurance,
 )
 
@@ -197,3 +202,39 @@ def test_infinitive_howto_not_chatter():
     # «как разложить детали» — это how-to, не вопрос соседу о прошлом действии.
     assert not _is_conversational_chatter("как разложить детали в слайсере?")
     assert not _is_conversational_chatter("на фото видно дефект, как исправить?")
+
+
+# --- разбор missed_questions 2026-06 ---
+
+def test_community_experience_poll_is_chatter():
+    assert _is_community_experience_poll(
+        "У кого сколько наработки печати по часам? Что из серьёзного уже меняли на принтере?"
+    )
+    assert _is_community_experience_poll(
+        "Всем привет! Хочу взять первый 3д принтер, смотрю на Anycubic Kobra X. "
+        "Можете сказать что плохое о нём, что хорошее?"
+    )
+    assert _is_conversational_chatter(
+        "ребят вопрос не по тебе кто то может помочь с эндером 3 про ?"
+    )
+
+
+def test_private_money_spam_is_chatter():
+    assert _is_private_money_contact_spam("Не хватает бабла? Черкани мне в приватные выручу)")
+
+
+def test_firmware_gossip_fragment_is_chatter():
+    assert _is_firmware_slicer_version_gossip("ещё как вариант 2.7.0.9")
+    assert _is_bare_fragment_question("Не такой ?")
+
+
+def test_thread_humor_is_chatter():
+    assert _is_thread_humor_meme("Он просто не может выехать из-за того , что сопля петга затвердела")
+
+
+def test_real_help_not_missed_chatter_filters():
+    assert not _is_community_experience_poll(
+        "Всем привет! Подскажите, печатаю кашпо, на одном месте залом. Корба s1, petg"
+    )
+    assert not _is_firmware_slicer_version_gossip("как обновить прошивку до 2.7.2.7 на kobra s1?")
+    assert not _is_thread_humor_meme("почему petg не липнет к столу на kobra s1?")
