@@ -1,5 +1,69 @@
 [
   {
+    "text": "Так он же вроде сам поставит на паузу и будет поддерживать температуру стола , разве нет?",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/10123-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1782721091.1629858
+  },
+  {
+    "text": "[ник] [ник] Привет. Ситуация Сейчас печатал многоцвет петг и закончился один цвет. Будет только завтра. Как максимально сохранить печать. Установить какие нибудь температуры в камере или пофиг?",
+    "score": 28,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra/kobra-install-the-filament-sensor",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1782721048.6708703
+  },
+  {
+    "text": "если чуть забито то из-за этого может быть?",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/sn-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1782719711.8356044
+  },
+  {
+    "text": "у меня как слева было на детали",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/contact-us",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1782719699.5993245
+  },
+  {
+    "text": "А вообще зачем трогать ретракты ? Они в стоке норм стоят",
+    "score": 57,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2/leveling-calibration-guide",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1782719650.0359073
+  },
+  {
+    "text": "а подскажите пж, я чайник и не понимаю что такое откаты, думаю что эти значения норм по умолчанию",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/11531-code/kobra-3",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1782719606.1737006
+  },
+  {
+    "text": "ааа, просто из-за того что переформулировано то и не понял что это((",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2/leveling-calibration-guide",
+    "chat_id": -1002295062981,
+    "count": 2,
+    "ts": 1782719564.3287916
+  },
+  {
+    "text": "Тест откатов для кого ?",
+    "score": 57,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2/leveling-calibration-guide",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1782719541.692155
+  },
+  {
     "text": "подскажите тут везде для бамбулаб. А как найти для аникубика?",
     "score": 14,
     "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
