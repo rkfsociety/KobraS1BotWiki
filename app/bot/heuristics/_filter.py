@@ -96,6 +96,7 @@ from app.bot.heuristics._banter import (
     _is_thread_bed_surface_opinion,
     _is_bot_helper_appreciation_meta,
     _is_offtopic_work_life_sidebar,
+    _is_figurative_mood_remark,
     _is_vague_fix_without_symptom,
 )
 from app.bot.heuristics._intents import (
