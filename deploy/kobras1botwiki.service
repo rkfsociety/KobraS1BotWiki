@@ -45,7 +45,6 @@ StandardOutput=journal
 StandardError=journal
 NoNewPrivileges=yes
 PrivateTmp=yes
-ProtectHome=yes
 ProtectSystem=full
 ProtectControlGroups=yes
 ProtectKernelTunables=yes
