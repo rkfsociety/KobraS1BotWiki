@@ -339,6 +339,10 @@ def _is_technical_opinion_sharing(text: str) -> bool:
         )
         if modeling_ctx and opinion_marker:
             return True
+    if re.search(r"\b(?:ретракт|откат)\w*\b", t) and re.search(
+        r"\b(?:сток|по\s+умолчан|зачем\s+трогать|норм\s+стоят)\w*\b", t
+    ):
+        return True
     return False
 
 
@@ -907,7 +911,8 @@ def _is_third_party_filament_brand_chat(text: str) -> bool:
         re.search(
             r"\b(?:"
             r"bambu\s*lab|бамбул\w*|бамбу\w*|"
-            r"esun|e\s*sun|sunlu|eryone|polymaker|prusament"
+            r"esun|e\s*sun|sunlu|eryone|polymaker|prusament|"
+            r"kingrun|кингрун|\bnit\b|нит\b"
             r")\b",
             t,
         )
@@ -2189,6 +2194,8 @@ def _is_social_location_question(text: str) -> bool:
         return True
     if re.search(r"\bв\s+как(?:ом|ой)\s+(?:городе|регионе|стране)\b", t):
         return True
+    if re.search(r"\bточно\s+из\s+(?:спб|мск|москв|питер|санкт)\b", t):
+        return True
     return False
 
 
@@ -2228,6 +2235,10 @@ def _is_thread_continuation_filler(text: str) -> bool:
     if re.search(r"\bраньше\b", t) and re.search(r"\bвозобнов\w*\b", t):
         return True
     if re.search(r"\bтот\s+кто\s+писал\b", t):
+        return True
+    if re.search(r"\bпросто\s+из-за\s+того\s+что\b", t):
+        return True
+    if re.search(r"\bразве\s+нет\b", t):
         return True
     return False
 
@@ -2317,7 +2328,11 @@ def _is_community_experience_poll(text: str) -> bool:
         r"никто\s+(?:больше\s+)?(?:не\s+)?знает|"
         r"кто\s+нибудь\s+с\s+таким\s+сталкивал|"
         r"кто\s+то\s+может\s+помочь\s+с\s+эндер|"
-        r"вопрос\s+не\s+по\s+тебе"
+        r"вопрос\s+не\s+по\s+тебе|"
+        r"есть\s+у\s+кого[\s-]?(?:то|нибудь)?|"
+        r"ssh\s+сервер|"
+        r"печатал\s+кто|"
+        r"воском\s+на\s+фдм"
         r")\b",
         t,
     ):
@@ -2338,6 +2353,8 @@ def _is_private_money_contact_spam(text: str) -> bool:
         re.search(r"\b(?:черкани|напиш\w*|выруч\w*)\b.*\b(?:приват|личн|лс|dm)\b", t)
         or re.search(r"\bтрудност\w*\s+с\s+финанс", t)
         or re.search(r"\bне\s+хватает\s+бабла\b", t)
+        or re.search(r"\bнужн\w*\s+бабк", t)
+        or (re.search(r"\bпиши\s+мне\b", t) and "?" in text)
     )
 
 
@@ -2399,6 +2416,10 @@ def _is_thread_humor_meme(text: str) -> bool:
         return True
     if re.search(r"\bзаберу\s+кобр\w*\s+за\s+\d+\s+как\s+надоест", t):
         return True
+    if len(t) > 200 and re.search(r"\b(?:проектн\w*\s+институт|сокращен\w*\s+штата|жор\w*|лор\w*|чижик)\b", t):
+        return True
+    if re.search(r"\bанекдот\b", t):
+        return True
     return False
 
 
@@ -2455,6 +2476,30 @@ def _is_general_thread_sidebar(text: str) -> bool:
         r"\bскорости\s+поддержк\w*\s+такие\s+же\b",
         r"\bволосит\b",
         r"\bбиметалл\s+как\s+выглядит\b",
+        r"\bзасран\w*\b",
+        r"\bмы\s+и\s+так\s+знали\b",
+        r"\bкингрун\w*\s+топ\b",
+        r"\bнит\b.*\bговно\b",
+        r"\bчто\s+то\s+на\s+безумном\b",
+        r"\bзачем\s+это\s+посредничество\b",
+        r"\bшпатель\s+с\s+чиди\b",
+        r"\bноу\s+нейм\b",
+        r"\bкак\s+у\s+вас\s*\??\s*$",
+        r"\bвот\s+и\s+ответ\s+почему\b",
+        r"\bскажите\s+где\s+я\s+не\s+прав\b",
+        r"\bневажно\s+где\s+покупать\b",
+        r"\bна\s+озоне\s+эта\s+же\s+цена\b",
+        r"\bлитейщик\w*\b",
+        r"\bфрезернуть\s+к\s+приемной\b",
+        r"\bпродавливаемая\s+потоком\b",
+        r"\bхз\s+почему\b",
+        r"\bно\s+знаю\s+что\s+такое\s+есть\b",
+        r"\bэто\s+с\s+чего\s+бы\b",
+        r"\bв\s+итоге\s+все\s+сломал\b",
+        r"\bщас\s+вася\s+придет\b",
+        r"\bда\s+чего\s+его\s+смотреть\b",
+        r"\bмакита\s+с\s+озона\b",
+        r"\bпригласишь\s+посмотреть\b",
     )
     return any(re.search(p, t) for p in patterns)
 
@@ -2496,6 +2541,63 @@ def _is_bot_helper_appreciation_meta(text: str) -> bool:
         or re.search(r"\bон\s+очень\s+часто\b", t)
     )
     return helps and meta
+
+
+def _is_offtopic_work_life_sidebar(text: str) -> bool:
+    """Работа, сварка, заводы, карьера — без запроса по принтеру."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    if re.search(
+        r"\b(?:"
+        r"как\s+(?:настро|откалибр|почин|сделать|подключ|обнов|прошить)|"
+        r"где\s+(?:найти|смотреть|взять|скачать)|"
+        r"помогите|подскаж|не\s+работает|ошибк\w*|"
+        r"наработк\w*|часов\s+печат|подсч[её]т"
+        r")\b",
+        t,
+    ):
+        return False
+    work_ctx = bool(
+        re.search(
+            r"\b(?:"
+            r"завод\w*|сварщик\w*|сварк\w*|литейщик\w*|айтишник\w*|токарник\w*|"
+            r"слесар\w*|цех\w*|аргоном|электрод\w*|корефан\w*|кореш\w*|удалёнк\w*|"
+            r"проектн\w*\s+институт|сокращен\w*\s+штата|первая\s+работа|"
+            r"разочарован\w*|патриот\w*|львов\w*|спб\b|санкт[\s-]?петербург|"
+            r"ликеро[\s-]?марочн\w*|маск\w*\s+панорамн\w*|краг\w*|"
+            r"станки\s+японск\w*|школьн\w*\s+токарник"
+            r")\b",
+            t,
+        )
+    )
+    if not work_ctx:
+        return False
+    if _PRINT_CTX_RE.search(t) or _printer_mentioned(text):
+        return False
+    return True
+
+
+def _is_figurative_mood_remark(text: str) -> bool:
+    """«Такое чувство что перед граблями…», «3д печать — дешёвое хобби» — настроение треда, не вопрос."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    if re.search(r"\b(?:помогите|подскаж|как\s+(?:настро|почин|сделать)|что\s+делать|не\s+работает)\b", t):
+        return False
+    if re.search(r"\bперед\s+граблями\b", t):
+        return True
+    if re.search(r"\bтакое\s+(?:чувство|ощущение)\s+что\b", t):
+        return True
+    if re.search(r"\b3[дd]\s*печат\w*\b", t) and re.search(r"\bдешев\w*\s+хобби\b", t):
+        return True
+    if re.search(r"\bкапец\s+как\s+дешев\w*\b", t) and re.search(r"\b(?:хобби|печат)\w*\b", t):
+        return True
+    return False
 
 
 def _is_vague_fix_without_symptom(text: str) -> bool:
@@ -2548,5 +2650,11 @@ def _is_bare_fragment_question(text: str) -> bool:
         return True
     # «Как и многоцветом», «Как и на кобре» — сравнительный обрывок (≤4 слов)
     if wc <= 4 and re.match(r"^как\s+и\b", t):
+        return True
+    if re.match(r"^если\s+чуть\s+забит", t):
+        return True
+    if re.match(r"^тест\s+откатов\s+для\s+кого", t):
+        return True
+    if re.match(r"^у\s+меня\s+как\s+слева", t):
         return True
     return False

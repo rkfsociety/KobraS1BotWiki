@@ -214,6 +214,8 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_thread_bed_surface_opinion(text)
         or _is_bot_helper_appreciation_meta(text)
         or _is_vague_fix_without_symptom(text)
+        or _is_offtopic_work_life_sidebar(text)
+        or _is_figurative_mood_remark(text)
     )
 
 
