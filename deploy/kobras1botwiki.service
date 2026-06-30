@@ -39,10 +39,21 @@ Group=anycubicwikibot
 WorkingDirectory=/home/anycubicwikibot/KobraS1BotWiki
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/home/anycubicwikibot/KobraS1BotWiki/.venv/bin/python -m app.bot
-Restart=always
+Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=full
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native
+MemoryDenyWriteExecute=yes
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target
