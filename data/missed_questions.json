@@ -1,5 +1,21 @@
 [
   {
+    "text": "А вы там печать с новой катушкой запускаете по 20 грамм пластика?",
+    "score": 60,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/common/kobra-series-extra-material-in-printing",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1782886355.8654187
+  },
+  {
+    "text": "Вот именно этот факт я и упомянул. Пластик lider-3d. Намотан, видимо, с перекрутом прутка. Когда пластик поднимается над катушкой, то слетает вбок.",
+    "score": 64,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-3-combo/troubleshooting-abnormal-discharge-of-purge-wiper-material",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1782886200.6863937
+  },
+  {
     "text": "Что то как то не очень",
     "score": 17,
     "best_url": "https://wiki.anycubic.com/en/faq",
