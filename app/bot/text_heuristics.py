@@ -119,6 +119,8 @@ from app.bot.heuristics._banter import (
     _is_figurative_mood_remark,
     _is_ace_meta_banter,
     _is_personal_upholstery_project_sidebar,
+    _is_klipper_offtopic_sidebar,
+    _is_offtopic_gas_station_joke,
     _is_vague_fix_without_symptom,
     _message_has_help_intent,
 )

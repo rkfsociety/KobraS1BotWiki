@@ -361,6 +361,10 @@ def _is_technical_opinion_sharing(text: str) -> bool:
         return True
     if re.search(r"\bдопустим\b", t) and re.search(r"\b(?:ничего\s+не\s+измен|не\s+поможет)\w*\b", t):
         return True
+    if re.search(r"\b95а\b", t) and re.search(r"\b(?:мягк|эластичн|желей)\w*\b", t):
+        return True
+    if re.search(r"\b0\.8\s+сопл", t) and re.search(r"\b(?:периметр|монолит)\w*\b", t):
+        return True
     return False
 
 
@@ -1373,8 +1377,8 @@ def _is_bare_competitor_printer_question(text: str) -> bool:
     if not text or not text.strip():
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
-    # Только очень короткие сообщения (1–4 слова)
-    if len(t.split()) > 4:
+    # Короткие сообщения о конкурентах (до 8 слов)
+    if len(t.split()) > 8:
         return False
     # Явный запрос инструкции — не отсекаем
     if re.search(
@@ -1489,6 +1493,10 @@ def _is_thread_printing_tip(text: str) -> bool:
     if re.search(r"\bладно\b", tl) and re.search(r"\bспасибо\b", tl):
         return True
     if re.search(r"\bу\s+меня\s+(?:есть|стоит|имеется|лежат|лежит)\b", tl):
+        return True
+    if re.search(r"\b(?:пластик\s+дорогой|перекрут\w*\s+прутк|лидер-3d)\b", tl):
+        return True
+    if re.search(r"\b(?:хот\s+не\s+так|регулировк\w*\s+лап)\b", tl):
         return True
     return False
 
@@ -1857,6 +1865,8 @@ def _is_casual_advice_in_thread(text: str) -> bool:
         r"\b(?:поставьте|переставьте|загрузите|переставь|поменяйте|поменяй)\b",
         t,
     ) and not re.search(r"\b(?:помогите|подскаж)\b", t):
+        return True
+    if re.search(r"\bклиппер\s+обновил\b", t) and re.search(r"\b(?:мцу|mcu|собирай)\w*\b", t):
         return True
     return False
 
@@ -2296,6 +2306,12 @@ def _is_thread_continuation_filler(text: str) -> bool:
         return True
     if re.search(r"\bпечатат\w*\s+прям\s+или\s+как\b", t):
         return True
+    if re.match(r"^ааа\s*да\s*\??$", t):
+        return True
+    if re.match(r"^чтобы\s+что\s*\??$", t):
+        return True
+    if re.match(r"^вряд-?ли\s*,\s*а\s+с\s+какой\s+целью", t):
+        return True
     return False
 
 
@@ -2394,7 +2410,10 @@ def _is_community_experience_poll(text: str) -> bool:
         r"кто[\s-]?(?:то|нибудь)\s+знает\s+как\s+(?:этим\s+)?пользов\w*|"
         r"устанавливал\w*\s+.*\bfunssor\b|"
         r"кто\s+нибудь\s+объясните\s+человеку|"
-        r"грохот\w*.*\bвчера\b"
+        r"грохот\w*.*\bвчера\b|"
+        r"на\s+каких\s+скорост\w*\s+печата|"
+        r"шариш\w*\s+в\s+клиппер\w*|"
+        r"есть\s+тут\s+шариш\w*"
         r")\b",
         t,
     ):
@@ -2440,8 +2459,10 @@ def _is_firmware_slicer_version_gossip(text: str) -> bool:
     if re.search(r"\bоткатывать\s+до\s+стабильн", t):
         return True
     if re.search(r"\b2\.\d+\.\d+\.\d+\b", t) and re.search(
-        r"\b(?:балуюсь|проблем\s+не\s+было|не\s+утверждаю)\b", t
+        r"\b(?:балуюсь|проблем\s+не\s+было|не\s+утверждаю|не\s+натыкал|скачать)\w*\b", t
     ):
+        return True
+    if re.search(r"\bклиппер\s+обновил\b", t) and re.search(r"\b(?:мцу|mcu|картограф)\w*\b", t):
         return True
     return False
 
@@ -2485,6 +2506,10 @@ def _is_thread_humor_meme(text: str) -> bool:
     if len(t) > 200 and re.search(r"\b(?:проектн\w*\s+институт|сокращен\w*\s+штата|жор\w*|лор\w*|чижик)\b", t):
         return True
     if re.search(r"\bанекдот\b", t):
+        return True
+    if re.search(r"\bпещерн\w*\s+принтер\b", t):
+        return True
+    if re.search(r"\bрули\s+перешив\b", t) or re.search(r"\bруки\s+перешив\b", t):
         return True
     return False
 
@@ -2636,6 +2661,35 @@ def _is_general_thread_sidebar(text: str) -> bool:
         r"\bтоп\s+\d+\s+уродов\b",
         r"\bдай\s+обниму\b",
         r"\bпод\s+тяжел\w*\s+котик\w*\s*\??\s*$",
+        r"\bбрал\s+самые\s+дешев\w*\s+на\s+озон\b",
+        r"\bлегенькие\s+как\s+картонн\w*\b",
+        r"\bне\s+нашел\s+подобн\w*\s+набор\b",
+        r"\bполтора\s+предмета\b",
+        r"\bпот[её]к\s+второй\s+хот\b",
+        r"\bвидал\s+как\s+быстро\b",
+        r"\bкак\s+в\s+клубе\s+на\s+озон\b",
+        r"\bцену\s+доставки\s+в\s+стоимость\b",
+        r"\bфантастически\s+низк\w*\s+цен\b",
+        r"\bправильно\s+инженер\b",
+        r"\bпосмотрим\s+че\s+получится\b",
+        r"\bсчет\s+отредактирован\b",
+        r"\bпещерн\w*\s+принтер\b",
+        r"\bпластик\s+авно\b",
+        r"\bкосмическ\w*\s+аппарат\b",
+        r"\bне\s+наш\s+метод\b",
+        r"\bгде-то\s+ссылка\s+есть\b",
+        r"\bвыкинуть\s+пора\b",
+        r"\bк\s+пластине\s+не\s+липнет\b",
+        r"\bчто\s+то\s+как\s+то\s+не\s+очень\b",
+        r"\bчто\s+за\s+клей\s+использовал\b",
+        r"\bчто\s+за\s+модель\s*,\s*можно\s+фото\b",
+        r"\bвася\s+на\s+клей\b",
+        r"\bа\s+где\s+такой\s+нашел\b",
+        r"\bа\s+фото\s+где\b",
+        r"\bстолкнулся\s+с\s+приколом\b",
+        r"\bспоришь\s+с\s+ними\b",
+        r"\bобъясните\s+человеку\s+в\s+техничк\b",
+        r"\bперешив\w*\b",
     )
     return any(re.search(p, t) for p in patterns)
 
@@ -2675,11 +2729,15 @@ def _is_bot_helper_appreciation_meta(text: str) -> bool:
     if _HELP_GUARD_RE.search(t) and re.search(r"\b(?:принтер|печат|сопло|экструдер)\b", t):
         return False
     helps = bool(re.search(r"\b(?:помогает|выручает|спасает)\b", t))
+    thanks = bool(
+        re.search(r"\bспасибо\b", t)
+        and re.search(r"\b(?:объяснил|объясн|ясн\w*\s+ответ|помог)\w*\b", t)
+    )
     meta = bool(
         re.search(r"\b(?:админ\w*|бот\w*|когда\s+админ|свободн\w*\s+доступ)\b", t)
         or re.search(r"\bон\s+очень\s+часто\b", t)
     )
-    return helps and meta
+    return (helps and meta) or thanks
 
 
 def _is_offtopic_auto_sidebar(text: str) -> bool:
@@ -2827,16 +2885,60 @@ def _is_personal_upholstery_project_sidebar(text: str) -> bool:
     )
     project = bool(re.search(r"\b(?:кресл\w*|обновить|набить|руку)\b", t))
     return material_choice and project
+def _is_klipper_offtopic_sidebar(text: str) -> bool:
+    """Klipper/BTT/хост/Raspberry — обсуждение вне стоковой прошивки Anycubic, не вопрос к вики."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t) and re.search(
+        r"\b(?:помогите|подскаж|как\s+(?:настро|прошить|обнов|подключ)|где\s+скачать)\b", t
+    ):
+        if not re.search(r"\b(?:клиппер|klipper|бтт|btt|мцу|mcu)\b", t):
+            return False
+    klipper_ctx = bool(
+        re.search(
+            r"\b(?:"
+            r"клиппер|klipper|"
+            r"бтт|btt|"
+            r"мцу|mcu|"
+            r"картограф|cartograph|"
+            r"распбер|raspberry|оранж\s*пи|orange\s*pi|"
+            r"плата\s+головы|хост\s+один"
+            r")\b",
+            t,
+        )
+    )
+    if not klipper_ctx:
+        return False
+    if re.search(
+        r"\b(?:"
+        r"как\s+(?:настро|прошить|обнов|подключ)|"
+        r"где\s+(?:скачать|взять)|"
+        r"помогите|подскаж|не\s+работает|ошибк\w*"
+        r")\b",
+        t,
+    ) and _printer_mentioned(text) and not re.search(r"\b(?:бтт|btt|клиппер|klipper)\s+какая\b", t):
+        return False
+    return True
+
+
+def _is_offtopic_gas_station_joke(text: str) -> bool:
+    """Шутка про АЗС/бензин 95 — оффтоп, не 3D-печать."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    return bool(
+        re.search(r"\b(?:азс|бензин|заправк)\w*\b", t)
+        and re.search(r"\b(?:фильтр|95|бензин)\b", t)
+    )
 def _is_vague_fix_without_symptom(text: str) -> bool:
     """«как такое чинится?» без описания симптома — слишком общий запрос."""
     if not text or not text.strip():
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
-    vague = bool(
-        re.search(r"\bкак\s+такое\s+чин\w*\b", t)
-        or re.search(r"\bкак\s+это\s+исправ\w*\b", t)
-    )
-    if not vague:
+    if not re.search(r"\bкак\s+(?:такое\s+)?чин\w*\b", t) and not re.search(
+        r"\bкак\s+это\s+исправ\w*\b", t
+    ):
         return False
     symptom = bool(
         re.search(
@@ -2901,5 +3003,7 @@ def _is_bare_fragment_question(text: str) -> bool:
     if re.match(r"^может\s+из\s+за\s+сопл\w*\?\s*", t):
         return True
     if re.match(r"^а\s+что\s+это\s+такое\?\s*зачем\s+это\s+нужно\?", t):
+        return True
+    if re.match(r"^так\s*,\s*а\s+что\s+это\s*\??$", t):
         return True
     return False

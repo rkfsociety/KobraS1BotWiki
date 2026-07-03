@@ -100,6 +100,8 @@ from app.bot.heuristics._banter import (
     _is_figurative_mood_remark,
     _is_ace_meta_banter,
     _is_personal_upholstery_project_sidebar,
+    _is_klipper_offtopic_sidebar,
+    _is_offtopic_gas_station_joke,
     _is_vague_fix_without_symptom,
 )
 from app.bot.heuristics._intents import (
@@ -224,6 +226,8 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_figurative_mood_remark(text)
         or _is_ace_meta_banter(text)
         or _is_personal_upholstery_project_sidebar(text)
+        or _is_klipper_offtopic_sidebar(text)
+        or _is_offtopic_gas_station_joke(text)
     )
 
 
