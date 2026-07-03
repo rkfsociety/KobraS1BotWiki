@@ -1,5 +1,21 @@
 [
   {
+    "text": "По одному - не работает",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783101113.1883597
+  },
+  {
+    "text": "А что это такое? Зачем это нужно?",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/contact-us",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783100788.894378
+  },
+  {
     "text": "а кто то уже устанавливал себе набор от Funssor вместо родного стола?",
     "score": 17,
     "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-go/z-zero-fail",
