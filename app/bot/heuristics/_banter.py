@@ -2292,6 +2292,10 @@ def _is_thread_continuation_filler(text: str) -> bool:
         return True
     if re.search(r"\bразве\s+нет\b", t):
         return True
+    if re.match(r"^это\s+ж\s+(?:во\s+)?время", t):
+        return True
+    if re.search(r"\bпечатат\w*\s+прям\s+или\s+как\b", t):
+        return True
     return False
 
 
@@ -2792,6 +2796,37 @@ def _is_figurative_mood_remark(text: str) -> bool:
     return False
 
 
+def _is_ace_meta_banter(text: str) -> bool:
+    """«Что вы там на аську жалуетесь» — мета-болтовня про ACE в треде, не вопрос."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    ace = bool(re.search(r"\b(?:ась\w*|ace|амс)\b", t))
+    if ace and re.search(r"\bчто\s+вы\s+там\b", t):
+        return True
+    if ace and re.search(r"\bжалует\w*\b", t) and not re.search(
+        r"\b(?:не\s+работает|ошибк|слом|помогите|подскаж)\b", t
+    ):
+        return True
+    return False
+
+
+def _is_personal_upholstery_project_sidebar(text: str) -> bool:
+    """«Ткань не охота… кресло обновить» — обсуждение своего проекта, не вопрос к боту."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if _HELP_GUARD_RE.search(t):
+        return False
+    if re.search(r"\b(?:подскаж|помогите|как\s+(?:сделать|настро|печат))\b", t):
+        return False
+    material_choice = bool(
+        re.search(r"\bткань\b", t) and re.search(r"\b(?:мягк\w*\s+пластик|тпу|tpu)\b", t)
+    )
+    project = bool(re.search(r"\b(?:кресл\w*|обновить|набить|руку)\b", t))
+    return material_choice and project
 def _is_vague_fix_without_symptom(text: str) -> bool:
     """«как такое чинится?» без описания симптома — слишком общий запрос."""
     if not text or not text.strip():

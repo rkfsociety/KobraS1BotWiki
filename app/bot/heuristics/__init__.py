@@ -120,6 +120,8 @@ from app.bot.heuristics._banter import (
     _is_thread_humor_meme,
     _is_filament_brand_social_chat,
     _is_figurative_mood_remark,
+    _is_ace_meta_banter,
+    _is_personal_upholstery_project_sidebar,
     _is_general_thread_sidebar,
     _is_peer_calibration_reply_chatter,
     _is_thread_bed_surface_opinion,
