@@ -96,6 +96,7 @@ from app.bot.heuristics._banter import (
     _is_thread_bed_surface_opinion,
     _is_bot_helper_appreciation_meta,
     _is_offtopic_work_life_sidebar,
+    _is_offtopic_auto_sidebar,
     _is_figurative_mood_remark,
     _is_vague_fix_without_symptom,
 )
@@ -217,6 +218,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_bot_helper_appreciation_meta(text)
         or _is_vague_fix_without_symptom(text)
         or _is_offtopic_work_life_sidebar(text)
+        or _is_offtopic_auto_sidebar(text)
         or _is_figurative_mood_remark(text)
     )
 

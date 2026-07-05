@@ -70,6 +70,7 @@ from app.bot.heuristics._banter import (
     _is_multicolor_tower_rhetoric,
     _is_offbeat_social_banter,
     _is_offtopic_work_life_sidebar,
+    _is_offtopic_auto_sidebar,
     _is_other_printer_experience_story,
     _is_other_printer_maintenance_story,
     _is_partial_manual_find_observation,
