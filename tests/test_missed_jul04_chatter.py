@@ -57,6 +57,26 @@ def test_benzin_nostalgia_is_chatter():
     assert _is_offtopic_auto_sidebar("Я еще помню времена до короны когда бензин стоил 53 рубля")
 
 
+def test_megane_starter_chat_is_chatter():
+    msg = (
+        "Как то на мегане первом…я менял стартер…..боги….руки у меня были так искривлены "
+        "чтобы его достать….прям как у работника АвтоВАЗа"
+    )
+    assert _is_offtopic_auto_sidebar(msg)
+
+
+def test_car_design_sidebar_is_chatter():
+    assert _is_offtopic_auto_sidebar("Дизайн гавна….но как сарай очень даже ничо")
+
+
+def test_renault_engine_story_is_chatter():
+    msg = (
+        "Ага, на самом живучесть в этом движке на 150% заложена. Когда свой вскрыл : "
+        "люфт оси привода маслонасоса (радиальный) 10-12 мм, шестерни грм поколоты"
+    )
+    assert _is_offtopic_auto_sidebar(msg)
+
+
 def test_speed_poll_is_chatter():
     assert _is_non_wiki_chatter_message("всем привет А кто на каких скоростях печатает на кубике?")
 
