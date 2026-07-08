@@ -268,7 +268,3 @@ def _is_generic_help_without_context(text: str) -> bool:
     if _is_error_code_query(text) or _printer_mentioned(text) or _topic_needs_printer_model(text):
         return False
     return True
-
-
-# Импортируем для _is_non_wiki_chatter_message
-from app.bot.heuristics._banter import _is_pure_numeric_or_symbol_message  # noqa: E402

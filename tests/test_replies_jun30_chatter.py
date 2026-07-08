@@ -1,7 +1,7 @@
 """Регрессии по разбору recent_replies 2026-06-30."""
 from __future__ import annotations
 
-from app.bot.manual_qa import find_manual_qa_answer
+from app.bot.manual_qa import find_manual_qa_answer, load_manual_qa_store
 from app.bot.text_heuristics import (
     _is_conversational_chatter,
     _is_figurative_mood_remark,
@@ -10,16 +10,18 @@ from app.bot.text_heuristics import (
 
 
 def test_ace_s1_compatibility_manual_qa():
+    entries = load_manual_qa_store()
     msg = (
         "хочу купить Kobra 3 V2 Combo ради бокса амс. "
         "Подскажите амс-ка же без проблем должна завестись с s1?"
     )
-    assert find_manual_qa_answer(msg)
+    assert find_manual_qa_answer(entries, msg)
 
 
 def test_silk_pla_manual_qa():
+    entries = load_manual_qa_store()
     msg = "Впервые взял силк пластик, какие советы к его печати?"
-    assert find_manual_qa_answer(msg)
+    assert find_manual_qa_answer(entries, msg)
 
 
 def test_grabli_mood_is_chatter():

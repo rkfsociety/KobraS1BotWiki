@@ -182,7 +182,6 @@ def sanitize_existing() -> tuple[int, int]:
     чисто ссылочные/контактные. Возвращает (изменено_или_удалено, осталось)."""
     with _LOCK:
         entries = load_missed_questions()
-        before = len(entries)
         cleaned: list[dict[str, Any]] = []
         changed = 0
         for e in entries:

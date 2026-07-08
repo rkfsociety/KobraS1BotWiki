@@ -8,18 +8,14 @@ from app.bot.heuristics._base import (
     _printer_mentioned,
 )
 from app.bot.heuristics._ace import (
-    _is_ace_unit_trade_banter,
     _topic_is_ace_filament_slot_intent,
-    _topic_is_ace_not_detected_intent,
 )
 from app.bot.heuristics._banter import (
-    _is_colloquial_printer_fragment,
     _is_filament_tolerance_banter,
     _is_multicolor_flow_calibration_chat,
     _is_other_printer_maintenance_story,
     _is_sarcastic_thread_banter,
     _is_third_party_filament_brand_chat,
-    _message_has_help_intent,
 )
 
 

@@ -80,7 +80,6 @@ def test_normalize_keys_long_sentence_expands():
 
 
 def test_add_entry_with_sentence_key_is_matchable(tmp_path):
-    import json
     qa_path = tmp_path / "data" / "manual_qa.json"
     qa_path.parent.mkdir(parents=True)
     qa_path.write_text("[]", encoding="utf-8")

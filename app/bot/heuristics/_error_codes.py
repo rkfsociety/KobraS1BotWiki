@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
-from app.bot.heuristics._base import _extract_error_code, _model_slug_hints
+from app.bot.heuristics._base import _model_slug_hints
 
 
 def _error_code_variant_suffix(code: str, url: str) -> str | None:

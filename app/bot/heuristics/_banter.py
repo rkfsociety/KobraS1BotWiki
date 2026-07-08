@@ -4,8 +4,6 @@ from __future__ import annotations
 import re
 
 from app.bot.heuristics._base import (
-    _ace_mentioned,
-    _extract_error_code,
     _is_error_code_query,
     _mentions_competitor_printer,
     _model_slug_hints,
@@ -274,6 +272,12 @@ def _is_technical_opinion_sharing(text: str) -> bool:
     """Мнение в обсуждении (люфт, печать) — не запрос помощи у бота."""
     if not text or not text.strip():
         return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    # «зачем трогать ретракты? в стоке норм» — риторика в треде, не вопрос к боту.
+    if re.search(r"\b(?:ретракт|откат)\w*\b", t) and re.search(
+        r"\b(?:сток|по\s+умолчан|зачем\s+трогать|норм\s+стоят)\w*\b", t
+    ):
+        return True
     if _message_has_help_intent(text):
         return False
     if _is_material_strength_discussion(text):
@@ -339,10 +343,6 @@ def _is_technical_opinion_sharing(text: str) -> bool:
         )
         if modeling_ctx and opinion_marker:
             return True
-    if re.search(r"\b(?:ретракт|откат)\w*\b", t) and re.search(
-        r"\b(?:сток|по\s+умолчан|зачем\s+трогать|норм\s+стоят)\w*\b", t
-    ):
-        return True
     if re.search(r"\b(?:пла|филамент|фирменн\w*)\b", t) and re.search(
         r"\b(?:не\s+ест|в\s+помойку|кормить)\w*\b", t
     ):

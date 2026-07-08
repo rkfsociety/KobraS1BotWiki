@@ -1,7 +1,7 @@
 """Регрессии по разбору missed_questions 2026-06-30."""
 from __future__ import annotations
 
-from app.bot.manual_qa import find_manual_qa_answer
+from app.bot.manual_qa import find_manual_qa_answer, load_manual_qa_store
 from app.bot.text_heuristics import (
     _is_conversational_chatter,
     _is_non_wiki_chatter_message,
@@ -10,24 +10,28 @@ from app.bot.text_heuristics import (
 
 
 def test_multicolor_pause_overnight_manual_qa():
+    entries = load_manual_qa_store()
     msg = (
         "Сейчас печатал многоцвет петг и закончился один цвет. Будет только завтра. "
         "Как максимально сохранить печать?"
     )
-    assert find_manual_qa_answer(msg)
+    assert find_manual_qa_answer(entries, msg)
 
 
 def test_retraction_manual_qa():
-    assert find_manual_qa_answer("я чайник и не понимаю что такое откаты")
+    entries = load_manual_qa_store()
+    assert find_manual_qa_answer(entries, "я чайник и не понимаю что такое откаты")
 
 
 def test_anycubic_profile_manual_qa():
-    assert find_manual_qa_answer("тут везде для бамбулаб. А как найти для аникубика?")
+    entries = load_manual_qa_store()
+    assert find_manual_qa_answer(entries, "тут везде для бамбулаб. А как найти для аникубика?")
 
 
 def test_print_hours_manual_qa():
-    assert find_manual_qa_answer("где у Кобры S1 наработку смотреть")
-    assert find_manual_qa_answer("Ну через ВПН подключил но чёт там 47 часов показывает")
+    entries = load_manual_qa_store()
+    assert find_manual_qa_answer(entries, "где у Кобры S1 наработку смотреть")
+    assert find_manual_qa_answer(entries, "Ну через ВПН подключил но чёт там 47 часов показывает")
 
 
 def test_money_spam_is_chatter():
