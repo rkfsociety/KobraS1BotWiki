@@ -1,5 +1,101 @@
 [
   {
+    "text": "Короч всю голову, все что откручиваю?",
+    "score": 13,
+    "best_url": "https://wiki.anycubic.com/en/test",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783616677.2756872
+  },
+  {
+    "text": "Короч всю голову, все что открутиввю?",
+    "score": 13,
+    "best_url": "https://wiki.anycubic.com/en/test",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783616668.2091281
+  },
+  {
+    "text": "А монтажное сидение?)",
+    "score": 12,
+    "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783616582.3576422
+  },
+  {
+    "text": "Кстати! Если сделаю скан корпуса головы - его кто сможет оцифровать нормально? В этом не силен",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/10131-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783616205.5393727
+  },
+  {
+    "text": "Хз что за она 😅",
+    "score": 18,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783615838.8743129
+  },
+  {
+    "text": "Так по итогу что, тормозить и искать фольгированный скотч?",
+    "score": 13,
+    "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783615796.852385
+  },
+  {
+    "text": "И как она его взорвёт?",
+    "score": 60,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/11504-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783615561.9918451
+  },
+  {
+    "text": "Пять лет как ни как)",
+    "score": 16,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783615540.388931
+  },
+  {
+    "text": "Гарантия есть ещё, но только на возврат как я понял, обмена на другой нет.",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/sn-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783615439.09962
+  },
+  {
+    "text": "Принтер брал в днс уценке, видео было что не работал и в истории печати - полторы «бенчи». Один успешно отпечатан, второй отменен на середине.",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/11531-code/kobra-3",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783615408.2740166
+  },
+  {
+    "text": "Само собой. Эта протяжка ничего не дала. Ну может малость. Проблема в том что фольгированного скотча сейчас нет.",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/11531-code/kobra-3",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783615249.850206
+  },
+  {
+    "text": "А крепко вообще зажаты были?",
+    "score": 13,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1783615154.6250296
+  },
+  {
     "text": "Ну, Антон еще как идею закидывал , что можно втулки обметать условно армированный скотчем",
     "score": 14,
     "best_url": "https://wiki.anycubic.com/en/sn-code",
