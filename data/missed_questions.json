@@ -1,5 +1,53 @@
 [
   {
+    "text": "Значит что-то не то делаете",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/creat-ticket",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784109999.9286857
+  },
+  {
+    "text": "Там вентилятор сам крепится не на магнитах, а шурупах. А корпус уже на магнитах. Но вентилятор нереально закрепить так как когда вкручиваешь винт - сразу ломается втулка эта",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/10408-code/k3",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784109958.5363185
+  },
+  {
+    "text": "А материал какой ?",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784109905.254095
+  },
+  {
+    "text": "Та печатал я уже 6 раз где-то - ломается втулка куда вкручивать шуруп",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-go/mintemp-e1",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784109811.0650663
+  },
+  {
+    "text": "Не знаю что за кожух. Но да, с вентилятором. Я его печатал но постоянно втулка отлетает",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/11521-code/kobra-3",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784109302.8068857
+  },
+  {
+    "text": "Кожух? С вентилятором который?",
+    "score": 11,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784109271.4690182
+  },
+  {
     "text": "Флюрик или люмик?",
     "score": 13,
     "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
