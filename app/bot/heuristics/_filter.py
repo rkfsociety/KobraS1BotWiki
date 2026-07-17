@@ -102,6 +102,14 @@ from app.bot.heuristics._banter import (
     _is_personal_upholstery_project_sidebar,
     _is_klipper_offtopic_sidebar,
     _is_offtopic_gas_station_joke,
+    _is_parcel_arrival_banter,
+    _is_filament_shopping_poll,
+    _is_warranty_service_sidebar,
+    _is_peer_bed_mesh_lecture,
+    _is_sensor_thread_banter,
+    _is_missed_jul17_thread_noise,
+    _is_travel_airport_sidebar,
+    _is_money_lend_spam,
     _is_vague_fix_without_symptom,
 )
 from app.bot.heuristics._intents import (
@@ -228,6 +236,14 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_personal_upholstery_project_sidebar(text)
         or _is_klipper_offtopic_sidebar(text)
         or _is_offtopic_gas_station_joke(text)
+        or _is_parcel_arrival_banter(text)
+        or _is_filament_shopping_poll(text)
+        or _is_warranty_service_sidebar(text)
+        or _is_peer_bed_mesh_lecture(text)
+        or _is_sensor_thread_banter(text)
+        or _is_money_lend_spam(text)
+        or _is_travel_airport_sidebar(text)
+        or _is_missed_jul17_thread_noise(text)
     )
 
 
