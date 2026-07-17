@@ -448,6 +448,19 @@ def format_log_for_telegram(record: logging.LogRecord, *, redact: str | None = N
 
         return None
 
+    m_ready = _RE_STARTUP_READY.match(msg)
+    if m_ready:
+        bot = m_ready.group(1).lstrip("@")
+        wiki, qa, codes = m_ready.group(2), m_ready.group(3), m_ready.group(4)
+        pid = m_ready.group(6)
+        idx_ok = m_ready.group(7) == "true"
+        idx = "индекс из кэша" if idx_ok else "индекс ещё качается"
+        return (
+            f"🚀 <b>Бот запущен</b> · @{_esc(bot)}\n"
+            f"Вики: {wiki} · QA: {qa} · коды: {codes}\n"
+            f"{idx} · pid {pid}"
+        )
+
     body = _format_body(msg, record)
 
     if body is None:
@@ -541,18 +554,6 @@ def _format_body(msg: str, record: logging.LogRecord) -> str | None:
 
         return f"🔄 <b>Перезапуск</b>\n{_esc(msg)}"
 
-    m = _RE_STARTUP_READY.match(msg)
-    if m:
-        bot = m.group(1).lstrip("@")
-        # Распаковываем счётчики из лог-строки: wiki/QA/коды/fix-store; fix-store не показываем в зеркале
-        wiki, qa, codes, _ = m.group(2), m.group(3), m.group(4), m.group(5)
-        idx_ok = m.group(7) == "true"
-        tail = " · индекс из кэша" if idx_ok else ""
-        return (
-            f"🚀 <b>Бот запущен</b> · @{_esc(bot)}\n"
-            f"Вики: {wiki} · QA: {qa} · коды: {codes}{tail}"
-        )
-
     if (
         msg.startswith("Бот запущен. Wiki docs:")
         or msg.startswith("Bot username:")
@@ -560,11 +561,15 @@ def _format_body(msg: str, record: logging.LogRecord) -> str | None:
         or msg.startswith("Manual QA:")
         or msg.startswith("Каталог кодов ошибок загружен:")
         or msg.startswith("Fix-store загружен:")
+        or msg.startswith("Автопроверка обновлений вики:")
+        or msg.startswith("Бэкап missed_questions.json")
+        or msg.startswith("Веб-панель запущена:")
+        or msg.startswith("recent_replies:")
+        or msg.startswith("bot_stats:")
+        or msg.startswith("Мониторинг sitemap")
+        or msg.startswith("Зеркало лога в Telegram")
+        or msg.startswith("Лог-файл:")
     ):
-        return None
-
-    if msg.startswith("Зеркало лога в Telegram") or msg.startswith("Лог-файл:"):
-
         return None
 
     if record.levelno >= logging.WARNING:

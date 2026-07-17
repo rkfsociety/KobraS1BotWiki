@@ -123,7 +123,11 @@ def test_startup_ready_compact_mirror():
     assert "@AnycubicWiki_bot" in out
     assert "1703" in out
     assert "индекс из кэша" in out
+    assert "pid 12345" in out
     assert "@@" not in out
+    # без обёртки ℹ️ timestamp — одно чистое сообщение
+    assert not out.startswith("ℹ️")
+    assert out.count("\n") <= 2
 
 
 def test_startup_noise_suppressed():
@@ -131,9 +135,15 @@ def test_startup_noise_suppressed():
         "Загружен кэш индекса: /path (страниц: 1703)",
         "Manual QA: 1 записей",
         "Bot username: @AnycubicWiki_bot",
+        "Автопроверка обновлений вики: каждые 3600 секунд",
+        "Бэкап missed_questions.json в git: каждые 1800 секунд",
+        "Веб-панель запущена: http://0.0.0.0:8080 (логин: admin)",
+        "recent_replies: загружено 0 записей с диска",
+        "bot_stats: загружено wiki_pages=23 вопросов=104 итого=106",
+        "Мониторинг sitemap инициализирован",
     ):
         record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
-        assert format_log_for_telegram(record) is None
+        assert format_log_for_telegram(record) is None, msg
 
 
 def test_incoming_text_for_log_includes_reply_quote():

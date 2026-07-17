@@ -240,15 +240,7 @@ def main() -> None:
             logging.info("Мониторинг sitemap инициализирован")
         except Exception as e:
             logging.warning("Не удалось инициализировать мониторинг вики: %s", e)
-        try:
-            wix = application.bot_data.get("wiki_index")
-            nd = wix.doc_count if wix is not None else "?"
-            await notify_ops(
-                application,
-                f"Старт @{me.username} · wiki={nd} · pid={os.getpid()}",
-            )
-        except Exception as e:
-            logging.warning("ops_notify при старте: %s", e)
+        # Одно сообщение о старте уходит через зеркало лога (startup_ready), без дубля notify_ops.
         try:
             idxr = application.bot_data["wiki_indexer"]
             wix = application.bot_data.get("wiki_index")

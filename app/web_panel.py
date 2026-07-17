@@ -965,7 +965,9 @@ def _bot_stats_section(
         "</table>"
         "</div>"
         "<div>"
-        '<h3 style="margin-top:0;font-size:14px;color:#9aa4b2">Активность по часам</h3>'
+        '<h3 style="margin-top:0;font-size:14px;color:#9aa4b2">Активность по часам'
+        '<br><span class=muted style="font-weight:400;font-size:12px">'
+        "входящие в разрешённых чатах</span></h3>"
         f"{bar_rows}"
         "</div>"
         "</div>"

@@ -1,12 +1,14 @@
-"""Сбор статистики ответов бота: топ вики-страниц, топ вопросов, активность по часам.
+"""Сбор статистики бота: топ вики/вопросов + активность чата по часам.
 
 Хранится в bot_data["bot_stats"] и персистируется в .cache/bot_stats.json.
 Формат на диске:
   {
     "wiki_pages": {"<url>": <count>, ...},
     "questions":  {"<normalized_q>": <count>, ...},
-    "hourly_activity": [<count_h0>, ..., <count_h23>],
+    "hourly_activity": [<count_h0>, ..., <count_h23>],  # входящие в разрешённых чатах
+    "hourly_activity_kind": "incoming",
     "total_answers": <int>,
+    "total_incoming": <int>,
     "last_updated": <unix_ts>
   }
 """
@@ -24,6 +26,8 @@ log = logging.getLogger(__name__)
 _STATS_KEY = "bot_stats"
 _SAVE_LOCK = threading.Lock()
 _MAX_UNIQUE_QUESTIONS = 2000
+# v2: hourly_activity = все входящие в allowed-чатах (раньше считались только ответы бота).
+_STATS_VERSION = 2
 
 
 def _stats_path() -> Path:
@@ -36,7 +40,10 @@ def _empty_stats() -> dict[str, Any]:
         "wiki_pages": {},
         "questions": {},
         "hourly_activity": [0] * 24,
+        "hourly_activity_kind": "incoming",
         "total_answers": 0,
+        "total_incoming": 0,
+        "stats_version": _STATS_VERSION,
         "last_updated": 0.0,
     }
 
@@ -58,11 +65,21 @@ def load_bot_stats(bot_data: dict[str, Any]) -> None:
         qs = raw.get("questions")
         if isinstance(qs, dict):
             stats["questions"] = {k: int(v) for k, v in qs.items() if isinstance(k, str)}
-        hourly = raw.get("hourly_activity")
-        if isinstance(hourly, list) and len(hourly) == 24:
-            stats["hourly_activity"] = [max(0, int(x)) for x in hourly]
         stats["total_answers"] = max(0, int(raw.get("total_answers", 0)))
+        stats["total_incoming"] = max(0, int(raw.get("total_incoming", 0)))
         stats["last_updated"] = float(raw.get("last_updated", 0.0))
+        ver = int(raw.get("stats_version") or 1)
+        kind = raw.get("hourly_activity_kind")
+        hourly = raw.get("hourly_activity")
+        # Старая схема считала ответы бота — сбрасываем гистограмму при миграции.
+        if ver >= _STATS_VERSION and kind == "incoming" and isinstance(hourly, list) and len(hourly) == 24:
+            stats["hourly_activity"] = [max(0, int(x)) for x in hourly]
+        else:
+            stats["hourly_activity"] = [0] * 24
+            stats["total_incoming"] = 0
+            log.info("bot_stats: hourly_activity сброшена (миграция на входящие сообщения)")
+        stats["stats_version"] = _STATS_VERSION
+        stats["hourly_activity_kind"] = "incoming"
         bot_data[_STATS_KEY] = stats
         log.info(
             "bot_stats: загружено wiki_pages=%d вопросов=%d итого=%d",
@@ -88,6 +105,28 @@ def _persist(bot_data: dict[str, Any]) -> None:
             log.warning("bot_stats: ошибка сохранения — %s", exc)
 
 
+def _bump_hour(stats: dict[str, Any], hour: int) -> None:
+    hourly: list[int] = stats.setdefault("hourly_activity", [0] * 24)
+    if isinstance(hourly, list) and len(hourly) == 24:
+        hourly[hour] += 1
+    else:
+        stats["hourly_activity"] = [0] * 24
+        stats["hourly_activity"][hour] = 1
+
+
+def record_incoming_activity(bot_data: dict[str, Any]) -> None:
+    """Учитывает входящее сообщение в разрешённом чате (для гистограммы по часам)."""
+    stats: dict[str, Any] = bot_data.setdefault(_STATS_KEY, _empty_stats())
+    now = time.time()
+    hour = time.localtime(now).tm_hour
+    _bump_hour(stats, hour)
+    stats["total_incoming"] = int(stats.get("total_incoming", 0)) + 1
+    stats["hourly_activity_kind"] = "incoming"
+    stats["stats_version"] = _STATS_VERSION
+    stats["last_updated"] = now
+    _persist(bot_data)
+
+
 def record_answer(
     bot_data: dict[str, Any],
     *,
@@ -99,11 +138,12 @@ def record_answer(
 
     source="wiki"      — ответ ссылкой на вики-страницу (url обязателен)
     source="manual_qa" — ответ из ручного FAQ (url игнорируется)
+
+    Гистограмму по часам не трогает — она считает входящие (record_incoming_activity).
     """
     stats: dict[str, Any] = bot_data.setdefault(_STATS_KEY, _empty_stats())
 
     now = time.time()
-    hour = time.localtime(now).tm_hour
 
     if source == "wiki" and url:
         pages: dict[str, int] = stats.setdefault("wiki_pages", {})
@@ -118,13 +158,6 @@ def record_answer(
             rare = [k for k, v in questions.items() if v == 1]
             for k in rare[: len(questions) - _MAX_UNIQUE_QUESTIONS]:
                 del questions[k]
-
-    hourly: list[int] = stats.setdefault("hourly_activity", [0] * 24)
-    if isinstance(hourly, list) and len(hourly) == 24:
-        hourly[hour] += 1
-    else:
-        stats["hourly_activity"] = [0] * 24
-        stats["hourly_activity"][hour] = 1
 
     stats["total_answers"] = stats.get("total_answers", 0) + 1
     stats["last_updated"] = now
@@ -147,7 +180,7 @@ def get_top_questions(bot_data: dict[str, Any], limit: int = 10) -> list[tuple[s
 
 
 def get_hourly_activity(bot_data: dict[str, Any]) -> list[int]:
-    """Массив счётчиков активности по часам суток (24 элемента, индекс = час)."""
+    """Счётчики входящих сообщений по часам суток (24 элемента, индекс = час)."""
     stats = bot_data.get(_STATS_KEY) or {}
     hourly = stats.get("hourly_activity")
     if isinstance(hourly, list) and len(hourly) == 24:

@@ -51,6 +51,7 @@ from app.ru_layer import expand_queries
 from app.web_wiki_index import WebWikiIndex
 
 from app.bot.bot_stats import record_answer as _record_stat
+from app.bot.bot_stats import record_incoming_activity as _record_incoming
 from ._utils import _is_triggered_message, _trigger_source, _try_reply_manual_qa
 
 
@@ -174,6 +175,14 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     if not ok:
         return
+
+    # Активность чата: все входящие в allowed-чатах/топиках (не только ответы бота).
+    try:
+        from_user = msg.from_user
+        if from_user is None or not getattr(from_user, "is_bot", False):
+            _record_incoming(context.application.bot_data)
+    except Exception:
+        pass
 
     # В группах часто вопросы прилетают как "text", но иногда как подпись к медиа.
     raw_text = msg.text if msg.text is not None else msg.caption
