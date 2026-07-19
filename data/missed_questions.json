@@ -1,5 +1,101 @@
 [
   {
+    "text": "Какой принтер у вас?",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784449881.1967413
+  },
+  {
+    "text": "Какой принтер?",
+    "score": 13,
+    "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784449870.5190635
+  },
+  {
+    "text": "столько гемора с принтером - не представляю как печатают это в промышленных масштабах. только головняк один",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/10131-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784449857.0963569
+  },
+  {
+    "text": "Есть ближе фотография дефекта?",
+    "score": 11,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784449764.3275633
+  },
+  {
+    "text": "Клей наносили ?",
+    "score": 12,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784449727.279672
+  },
+  {
+    "text": "А я не говорю что будут дефекты с 250 вплоть до 310",
+    "score": 22,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/310-msgcode",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784449539.5635273
+  },
+  {
+    "text": "Ну, как знаете:)",
+    "score": 13,
+    "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784449264.1819148
+  },
+  {
+    "text": "Как будто уровень стола неверно определил. Ну и температура 270 как будто бы высоковата немного, в связи с чем поставили такую?",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/10113-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784449139.1364503
+  },
+  {
+    "text": "На первом слое проблема? По фото не совсем понятно",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784449072.0499885
+  },
+  {
+    "text": "А параметры пластика?",
+    "score": 64,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-3-combo/troubleshooting-abnormal-discharge-of-purge-wiper-material",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784448937.3459868
+  },
+  {
+    "text": "Параметры какие?",
+    "score": 11,
+    "best_url": "https://wiki.anycubic.com/en/policy",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784448835.3888535
+  },
+  {
+    "text": "Пытаюсь бошку напечатать, что не так? АБС",
+    "score": 13,
+    "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784448793.605024
+  },
+  {
     "text": "Не ну а что, с момента покупки один день, товар новый, полтора цилиндрика напечатал с размером в крышку бутылки",
     "score": 14,
     "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-go/z-zero-fail",
