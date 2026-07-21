@@ -296,8 +296,12 @@ h1.page-title { margin: 0 0 20px; font-size: clamp(1.5rem, 2vw, 1.9rem); letter-
 .section-head p { margin: 0; font-size: 13px; line-height: 1.45; }
 .monitor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
 .monitor-grid--2 { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+.monitor-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px;
+  align-items: start; }
+.monitor-layout__mains, .monitor-layout__side { display: grid; gap: 16px; min-width: 0; }
+.monitor-layout__mains { grid-template-columns: 1fr; }
 .monitor-panel { background: rgba(10, 12, 18, 0.55); border: 1px solid #232936; border-radius: 12px;
-  padding: 16px 18px; min-height: 100%; }
+  padding: 16px 18px; min-height: 0; }
 .monitor-panel--wide { grid-column: 1 / -1; }
 .monitor-title { margin: 0 0 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
   text-transform: uppercase; color: #8b95a8; }
@@ -374,6 +378,9 @@ form.inline-form { display: inline; }
 .badge-err { background: #3a1414; color: #f0a0a0; border-color: #6b1f1f; }
 td.q-cell { max-width: min(100%, 520px); word-break: break-word; }
 td.a-cell { max-width: min(100%, 560px); word-break: break-word; }
+@media (max-width: 1100px) {
+  .monitor-layout { grid-template-columns: 1fr; }
+}
 @media (max-width: 720px) {
   .hourly-chart { height: 120px; gap: 3px; }
   .hourly-bar { max-width: 100%; }
@@ -953,13 +960,13 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
     recent_section = _recent_replies_section(state, csrf, page=replies_page) if csrf else ""
     bad_section = _bad_answers_section(state, csrf) if csrf else ""
     missed_section = _missed_questions_section(csrf) if csrf else ""
-    bot_stats_section = _bot_stats_section(top_wiki_pages, top_questions, hourly_activity, top_users)
-    admin_activity_section = _admin_activity_section(bd)
+    bot_stats_section = _bot_stats_section(
+        top_wiki_pages, top_questions, hourly_activity, top_users, bd
+    )
     body = (
         '<h1 class="page-title">Дашборд</h1>'
         f'<div class="card"><div class="grid">{stats}</div></div>'
         f"{bot_stats_section}"
-        f"{admin_activity_section}"
         f"{recent_section}"
         f"{bad_section}"
         f"{missed_section}"
@@ -1006,8 +1013,9 @@ def _bot_stats_section(
     top_questions: list[tuple[str, int]],
     hourly_activity: list[int],
     top_users: list[dict[str, Any]],
+    bot_data: dict[str, Any] | None = None,
 ) -> str:
-    """HTML-карточка: топ вики/вопросов/участников и активность по часам."""
+    """HTML-карточка: топы слева, активность по часам и модераторы справа."""
     if top_wiki_pages:
         wiki_rows = "".join(
             "<tr>"
@@ -1052,14 +1060,16 @@ def _bot_stats_section(
     peak_hour = max(range(24), key=lambda h: hourly_activity[h]) if total_incoming else 0
     peak_val = hourly_activity[peak_hour] if total_incoming else 0
     peak_note = f", пик {peak_hour:02d}:00 — {peak_val}" if total_incoming else ""
+    admin_panels = _admin_activity_panels(bot_data or {})
 
     return (
         '<div class="card monitor-section">'
         '<div class="section-head">'
         "<h2>Статистика и активность чата</h2>"
-        '<p class="muted">Топы и график входящих сообщений в разрешённых чатах (text/caption).</p>'
+        '<p class="muted">Топы слева; справа — входящие по часам и действия модераторов.</p>'
         "</div>"
-        '<div class="monitor-grid">'
+        '<div class="monitor-layout">'
+        '<div class="monitor-layout__mains">'
         '<div class="monitor-panel">'
         '<h3 class="monitor-title">Топ страниц вики<span class="monitor-sub">по ответам бота</span></h3>'
         '<table class="table-compact"><tr><th>Страница</th><th class=right>Ответов</th></tr>'
@@ -1072,16 +1082,19 @@ def _bot_stats_section(
         '<h3 class="monitor-title">Топ участников<span class="monitor-sub">сообщения в чате</span></h3>'
         '<table class="table-compact"><tr><th>#</th><th>Участник</th><th class=right>Сообщ.</th></tr>'
         f"{user_rows_html}</table></div>"
-        '<div class="monitor-panel monitor-panel--wide">'
+        "</div>"
+        '<div class="monitor-layout__side">'
+        '<div class="monitor-panel">'
         '<h3 class="monitor-title">Активность по часам'
         f'<span class="monitor-sub">всего {total_incoming}{peak_note}</span></h3>'
         f"{_hourly_chart_html(hourly_activity)}</div>"
-        f"</div></div>"
+        f"{admin_panels}"
+        "</div></div></div>"
     )
 
 
-def _admin_activity_section(bot_data: dict[str, Any]) -> str:
-    """HTML-карточка: активность модераторов."""
+def _admin_activity_panels(bot_data: dict[str, Any]) -> str:
+    """Панели активности модераторов (без внешней карточки) — правая колонка дашборда."""
     summary = get_admin_activity_summary(bot_data, limit=15)
     recent = get_recent_admin_actions(bot_data, limit=20)
     stat_keys = ("ban", "kick", "restrict", "unrestrict", "unban", "promote", "demote", "pin", "delete_bot_msg")
@@ -1139,20 +1152,31 @@ def _admin_activity_section(bot_data: dict[str, Any]) -> str:
         recent_table = '<p class=muted>Последних событий пока нет.</p>'
 
     return (
+        '<div class="monitor-panel">'
+        '<h3 class="monitor-title">Активность модераторов'
+        '<span class="monitor-sub">баны, кики, муты, закрепы; удаление чужих сообщений API не отдаёт</span></h3>'
+        '<div class="monitor-grid monitor-grid--2">'
+        '<div>'
+        '<h3 class="monitor-title" style="margin-top:4px">По админам</h3>'
+        f"{summary_table}</div>"
+        '<div>'
+        '<h3 class="monitor-title" style="margin-top:4px">Последние события</h3>'
+        f"{recent_table}</div>"
+        "</div></div>"
+    )
+
+
+def _admin_activity_section(bot_data: dict[str, Any]) -> str:
+    """Совместимость: отдельная карточка модераторов (если понадобится вне дашборда)."""
+    return (
         '<div class="card monitor-section">'
         '<div class="section-head">'
         "<h2>Активность модераторов</h2>"
         '<p class="muted">Баны, кики, муты, закрепы. Удаление чужих сообщений Telegram API не передаёт; '
         "учитывается только удаление ответа бота по /error и /fix.</p>"
         "</div>"
-        '<div class="monitor-grid monitor-grid--2">'
-        '<div class="monitor-panel">'
-        '<h3 class="monitor-title">По админам</h3>'
-        f"{summary_table}</div>"
-        '<div class="monitor-panel">'
-        '<h3 class="monitor-title">Последние события</h3>'
-        f"{recent_table}</div>"
-        f"</div></div>"
+        f"{_admin_activity_panels(bot_data)}"
+        "</div>"
     )
 
 def _qa_list(state: _PanelState, csrf: str, flash: str = "") -> bytes:
