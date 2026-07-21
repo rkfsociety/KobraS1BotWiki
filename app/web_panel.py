@@ -269,22 +269,77 @@ class _PanelState:
 _CSS = """
 * { box-sizing: border-box; }
 body { font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0;
-  background: #0f1115; color: #e6e6e6; }
+  background: #0b0d12; color: #e6e6e6; min-height: 100vh; }
 a { color: #5aa9ff; text-decoration: none; }
 a:hover { text-decoration: underline; }
-header { background: #161a22; padding: 12px 20px; border-bottom: 1px solid #262b36;
-  display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+header { background: #12151c; padding: 12px clamp(18px, 2.5vw, 48px); border-bottom: 1px solid #232936;
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap; position: sticky; top: 0; z-index: 10;
+  backdrop-filter: blur(8px); }
 header .brand { font-weight: 700; color: #fff; }
 header nav a { margin-right: 14px; }
 header .spacer { flex: 1; }
-main { padding: 20px; max-width: 1100px; margin: 0 auto; }
+main { width: 100%; max-width: none; margin: 0; padding: 28px clamp(18px, 2.5vw, 48px) 48px; }
 h1, h2 { color: #fff; }
-.card { background: #161a22; border: 1px solid #262b36; border-radius: 10px;
-  padding: 16px 18px; margin-bottom: 18px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-.stat { background: #1b2030; border-radius: 8px; padding: 14px; }
-.stat .n { font-size: 26px; font-weight: 700; color: #fff; }
-.stat .l { color: #9aa4b2; font-size: 13px; margin-top: 4px; }
+h1.page-title { margin: 0 0 20px; font-size: clamp(1.5rem, 2vw, 1.9rem); letter-spacing: -0.02em; }
+.card { background: linear-gradient(180deg, #151922 0%, #12151c 100%);
+  border: 1px solid #232936; border-radius: 14px; padding: 20px 22px; margin-bottom: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22); }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+.stat { background: linear-gradient(145deg, #1a2030 0%, #151a26 100%);
+  border: 1px solid #2a3140; border-radius: 12px; padding: 16px 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03); }
+.stat .n { font-size: clamp(1.35rem, 2vw, 1.75rem); font-weight: 700; color: #fff; line-height: 1.1; }
+.stat .l { color: #9aa4b2; font-size: 13px; margin-top: 6px; line-height: 1.35; }
+.monitor-section { overflow: hidden; }
+.section-head { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid #232936; }
+.section-head h2 { margin: 0 0 6px; font-size: 1.15rem; }
+.section-head p { margin: 0; font-size: 13px; line-height: 1.45; }
+.monitor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.monitor-grid--2 { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+.monitor-panel { background: rgba(10, 12, 18, 0.55); border: 1px solid #232936; border-radius: 12px;
+  padding: 16px 18px; min-height: 100%; }
+.monitor-panel--wide { grid-column: 1 / -1; }
+.monitor-title { margin: 0 0 12px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: #8b95a8; }
+.monitor-sub { display: block; margin-top: 4px; font-size: 12px; font-weight: 400;
+  text-transform: none; letter-spacing: normal; color: #6b7280; }
+.table-compact { width: 100%; border-collapse: collapse; }
+.table-compact th, .table-compact td { padding: 9px 10px; border-bottom: 1px solid #232936;
+  vertical-align: middle; font-size: 13px; }
+.table-compact th { color: #8b95a8; font-weight: 600; font-size: 12px; }
+.table-compact tbody tr:hover { background: rgba(37, 99, 235, 0.06); }
+.table-compact tbody tr:last-child td { border-bottom: 0; }
+.count-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 30px;
+  padding: 3px 9px; border-radius: 999px; background: rgba(37, 99, 235, 0.18); color: #93c5fd;
+  border: 1px solid rgba(96, 165, 250, 0.25); font-weight: 700; font-size: 12px; }
+.rank-cell { width: 34px; color: #6b7280; font-size: 12px; font-weight: 700; }
+.rank-cell--top { color: #fbbf24; font-size: 15px; }
+.user-cell .name { color: #f3f4f6; font-weight: 500; }
+.user-cell .id { color: #6b7280; font-size: 11px; margin-top: 2px; }
+.hourly-chart { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 6px;
+  align-items: end; height: 160px; padding: 8px 4px 0; }
+.hourly-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+  height: 100%; gap: 6px; min-width: 0; }
+.hourly-bar { width: 100%; max-width: 28px; min-height: 3px; border-radius: 6px 6px 2px 2px;
+  background: linear-gradient(180deg, #60a5fa 0%, #2563eb 55%, #1d4ed8 100%);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.35); transition: filter 0.15s ease, transform 0.15s ease; }
+.hourly-col:hover .hourly-bar { filter: brightness(1.12); transform: translateY(-2px); }
+.hourly-label { font-size: 10px; color: #6b7280; }
+.hourly-val { font-size: 11px; color: #cbd5e1; font-weight: 600; min-height: 14px; }
+.monitor-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.admin-total { color: #fbbf24; font-weight: 800; }
+.action-pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px;
+  font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
+.action-pill--ban, .action-pill--kick { background: #3f1515; color: #fca5a5; border-color: #7f1d1d; }
+.action-pill--restrict { background: #3b2f14; color: #fcd34d; border-color: #854d0e; }
+.action-pill--unrestrict, .action-pill--unban { background: #14331f; color: #86efac; border-color: #166534; }
+.action-pill--promote, .action-pill--demote { background: #1e1b4b; color: #c4b5fd; border-color: #4c1d95; }
+.action-pill--pin { background: #0f2744; color: #7dd3fc; border-color: #1d4ed8; }
+.action-pill--delete_bot_msg { background: #2a1f14; color: #fdba74; border-color: #9a3412; }
+.action-pill--default { background: #1f2937; color: #d1d5db; border-color: #374151; }
+.mod-stat { text-align: right; font-variant-numeric: tabular-nums; }
+.mod-stat--zero { color: #4b5563; }
+.mod-stat--hot { color: #f87171; font-weight: 700; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #262b36;
   vertical-align: top; font-size: 14px; }
@@ -317,8 +372,12 @@ form.inline-form { display: inline; }
 .badge-faq { background: #14331f; color: #9be7b4; border-color: #1f6b3a; }
 .badge-wiki { background: #0f2040; color: #7ab8ff; border-color: #1a3a6b; }
 .badge-err { background: #3a1414; color: #f0a0a0; border-color: #6b1f1f; }
-td.q-cell { max-width: 280px; word-break: break-word; }
-td.a-cell { max-width: 320px; word-break: break-word; }
+td.q-cell { max-width: min(100%, 520px); word-break: break-word; }
+td.a-cell { max-width: min(100%, 560px); word-break: break-word; }
+@media (max-width: 720px) {
+  .hourly-chart { height: 120px; gap: 3px; }
+  .hourly-bar { max-width: 100%; }
+}
 """
 
 
@@ -897,7 +956,7 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
     bot_stats_section = _bot_stats_section(top_wiki_pages, top_questions, hourly_activity, top_users)
     admin_activity_section = _admin_activity_section(bd)
     body = (
-        "<h1>Дашборд</h1>"
+        '<h1 class="page-title">Дашборд</h1>'
         f'<div class="card"><div class="grid">{stats}</div></div>'
         f"{bot_stats_section}"
         f"{admin_activity_section}"
@@ -912,171 +971,189 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
     return _layout(state, body, title="Дашборд", flash=flash, csrf=csrf)
 
 
+def _action_pill_html(action: str) -> str:
+    key = (action or "").strip()
+    css = key if key in {
+        "ban", "kick", "restrict", "unrestrict", "unban", "promote", "demote", "pin", "delete_bot_msg",
+    } else "default"
+    label = action_label(key) if key else "?"
+    return f'<span class="action-pill action-pill--{css}">{html.escape(label)}</span>'
+
+
+def _hourly_chart_html(hourly_activity: list[int]) -> str:
+    max_val = max(hourly_activity) if hourly_activity else 0
+    scale = max_val or 1
+    tag = "d" + "iv"
+    cols: list[str] = []
+    for h in range(24):
+        count = hourly_activity[h]
+        pct = int((count / scale) * 100)
+        if count and pct < 6:
+            pct = 6
+        bar_h = pct if count else 0
+        cols.append(
+            f'<{tag} class="hourly-col" title="{h:02d}:00 — {count}">'
+            f'<span class="hourly-val">{count}</span>'
+            f'<{tag} class="hourly-bar" style="height:{bar_h}%"></{tag}>'
+            f'<span class="hourly-label">{h:02d}</span>'
+            f"</{tag}>"
+        )
+    return f'<{tag} class="hourly-chart">{"".join(cols)}</{tag}>'
+
+
 def _bot_stats_section(
     top_wiki_pages: list[tuple[str, int]],
     top_questions: list[tuple[str, int]],
     hourly_activity: list[int],
     top_users: list[dict[str, Any]],
 ) -> str:
-    """HTML-карточка: топ вики-страниц, топ вопросов, активность по часам."""
-    # Топ вики-страниц
+    """HTML-карточка: топ вики/вопросов/участников и активность по часам."""
     if top_wiki_pages:
         wiki_rows = "".join(
-            f"<tr>"
+            "<tr>"
             f'<td class=q-cell><a href="{html.escape(url)}" target=_blank rel=noopener>'
-            f"{html.escape(url.rstrip('/').rsplit('/', 1)[-1][:60] or url[:60])}"
+            f"{html.escape(url.rstrip('/').rsplit('/', 1)[-1][:80] or url[:80])}"
             f"</a></td>"
-            f"<td class=right>{count}</td>"
-            f"</tr>"
+            f'<td class=right><span class="count-badge">{count}</span></td>'
+            "</tr>"
             for url, count in top_wiki_pages
         )
     else:
         wiki_rows = '<tr><td colspan=2 class=muted>Нет данных — бот ещё не отвечал</td></tr>'
 
-    # Топ вопросов
     if top_questions:
         q_rows = "".join(
-            f"<tr><td class=q-cell>{html.escape(q[:150])}</td><td class=right>{count}</td></tr>"
+            f"<tr><td class=q-cell>{html.escape(q[:180])}</td>"
+            f'<td class=right><span class="count-badge">{count}</span></td></tr>'
             for q, count in top_questions
         )
     else:
         q_rows = '<tr><td colspan=2 class=muted>Нет данных — бот ещё не отвечал</td></tr>'
 
     if top_users:
-        user_rows = "".join(
-            "<tr>"
-            f"<td>{html.escape(str(row.get('label') or '?'))}"
-            f"<br><span class=muted>{html.escape(str(row.get('user_id') or ''))}</span></td>"
-            f"<td class=right>{int(row.get('count', 0))}</td>"
-            "</tr>"
-            for row in top_users
-        )
+        medals = ("🥇", "🥈", "🥉")
+        user_rows = []
+        for i, row in enumerate(top_users):
+            rank = medals[i] if i < 3 else str(i + 1)
+            rank_cls = "rank-cell rank-cell--top" if i < 3 else "rank-cell"
+            user_rows.append(
+                "<tr>"
+                f'<td class="{rank_cls}">{rank}</td>'
+                f'<td class="user-cell"><div class="name">{html.escape(str(row.get("label") or "?"))}</div>'
+                f'<div class="id">{html.escape(str(row.get("user_id") or ""))}</div></td>'
+                f'<td class=right><span class="count-badge">{int(row.get("count", 0))}</span></td>'
+                "</tr>"
+            )
+        user_rows_html = "".join(user_rows)
     else:
-        user_rows = '<tr><td colspan=2 class=muted>Нет данных — сообщений пока не было</td></tr>'
+        user_rows_html = '<tr><td colspan=3 class=muted>Нет данных — сообщений пока не было</td></tr>'
 
-    # Гистограмма активности по часам
-    max_val = max(hourly_activity) if hourly_activity else 0
-    scale = max_val or 1
-    bar_rows = "".join(
-        "<div style='font-size:11px;margin:2px 0;white-space:nowrap'>"
-        f"<span style='display:inline-block;width:32px;color:#9aa4b2'>{h:02d}:00</span>"
-        f"<span style='color:#5aa9ff'>{'█' * int((hourly_activity[h] / scale) * 18)}"
-        f"{'░' * (18 - int((hourly_activity[h] / scale) * 18))}</span>"
-        f" <span class=muted>{hourly_activity[h]}</span>"
-        "</div>"
-        for h in range(24)
-    )
+    total_incoming = sum(hourly_activity) if hourly_activity else 0
+    peak_hour = max(range(24), key=lambda h: hourly_activity[h]) if total_incoming else 0
+    peak_val = hourly_activity[peak_hour] if total_incoming else 0
+    peak_note = f", пик {peak_hour:02d}:00 — {peak_val}" if total_incoming else ""
 
     return (
-        '<div class="card">'
-        "<h2>Статистика ответов</h2>"
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">'
-        "<div>"
-        '<h3 style="margin-top:0;font-size:14px;color:#9aa4b2">Топ страниц вики</h3>'
-        "<table>"
-        "<tr><th>Страница</th><th class=right>Ответов</th></tr>"
-        f"{wiki_rows}"
-        "</table>"
+        '<div class="card monitor-section">'
+        '<div class="section-head">'
+        "<h2>Статистика и активность чата</h2>"
+        '<p class="muted">Топы и график входящих сообщений в разрешённых чатах (text/caption).</p>'
         "</div>"
-        "<div>"
-        '<h3 style="margin-top:0;font-size:14px;color:#9aa4b2">Топ вопросов</h3>'
-        "<table>"
-        "<tr><th>Вопрос</th><th class=right>Раз</th></tr>"
-        f"{q_rows}"
-        "</table>"
-        "</div>"
-        "<div>"
-        '<h3 style="margin-top:0;font-size:14px;color:#9aa4b2">Топ участников'
-        '<br><span class=muted style="font-weight:400;font-size:12px">'
-        "сообщения в разрешённых чатах</span></h3>"
-        "<table>"
-        "<tr><th>Участник</th><th class=right>Сообщений</th></tr>"
-        f"{user_rows}"
-        "</table>"
-        "</div>"
-        "<div>"
-        '<h3 style="margin-top:0;font-size:14px;color:#9aa4b2">Активность по часам'
-        '<br><span class=muted style="font-weight:400;font-size:12px">'
-        "входящие в разрешённых чатах</span></h3>"
-        f"{bar_rows}"
-        "</div>"
-        "</div>"
-        "</div>"
+        '<div class="monitor-grid">'
+        '<div class="monitor-panel">'
+        '<h3 class="monitor-title">Топ страниц вики<span class="monitor-sub">по ответам бота</span></h3>'
+        '<table class="table-compact"><tr><th>Страница</th><th class=right>Ответов</th></tr>'
+        f"{wiki_rows}</table></div>"
+        '<div class="monitor-panel">'
+        '<h3 class="monitor-title">Топ вопросов<span class="monitor-sub">частые формулировки</span></h3>'
+        '<table class="table-compact"><tr><th>Вопрос</th><th class=right>Раз</th></tr>'
+        f"{q_rows}</table></div>"
+        '<div class="monitor-panel">'
+        '<h3 class="monitor-title">Топ участников<span class="monitor-sub">сообщения в чате</span></h3>'
+        '<table class="table-compact"><tr><th>#</th><th>Участник</th><th class=right>Сообщ.</th></tr>'
+        f"{user_rows_html}</table></div>"
+        '<div class="monitor-panel monitor-panel--wide">'
+        '<h3 class="monitor-title">Активность по часам'
+        f'<span class="monitor-sub">всего {total_incoming}{peak_note}</span></h3>'
+        f"{_hourly_chart_html(hourly_activity)}</div>"
+        f"</div></div>"
     )
 
 
 def _admin_activity_section(bot_data: dict[str, Any]) -> str:
     """HTML-карточка: активность модераторов."""
     summary = get_admin_activity_summary(bot_data, limit=15)
-    recent = get_recent_admin_actions(bot_data, limit=15)
+    recent = get_recent_admin_actions(bot_data, limit=20)
+    stat_keys = ("ban", "kick", "restrict", "unrestrict", "unban", "promote", "demote", "pin", "delete_bot_msg")
 
     if summary:
-        stat_keys = ("ban", "kick", "restrict", "unrestrict", "unban", "promote", "demote", "pin", "delete_bot_msg")
-        head = "".join(f"<th class=right>{html.escape(action_label(k))}</th>" for k in stat_keys)
+        head = "".join(f'<th class=right>{html.escape(action_label(k))}</th>' for k in stat_keys)
         rows = []
         for row in summary:
             counts = row.get("counts") or {}
-            cells = "".join(f"<td class=right>{int(counts.get(k, 0))}</td>" for k in stat_keys)
+            cells = []
+            for k in stat_keys:
+                v = int(counts.get(k, 0))
+                cls = "mod-stat mod-stat--hot" if v and k in ("ban", "kick") else "mod-stat"
+                if v == 0:
+                    cls += " mod-stat--zero"
+                cells.append(f'<td class="{cls}">{v}</td>')
             rows.append(
                 "<tr>"
-                f"<td>{html.escape(str(row.get('label') or '?'))}"
-                f"<br><span class=muted>{html.escape(str(row.get('user_id') or ''))}</span></td>"
-                f"{cells}"
-                f"<td class=right><b>{int(row.get('total', 0))}</b></td>"
+                f'<td class="user-cell"><div class="name">{html.escape(str(row.get("label") or "?"))}</div>'
+                f'<div class="id">{html.escape(str(row.get("user_id") or ""))}</div></td>'
+                f'{"".join(cells)}'
+                f'<td class="right admin-total">{int(row.get("total", 0))}</td>'
                 "</tr>"
             )
         summary_table = (
-            "<table>"
+            '<div class="monitor-table-wrap"><table class="table-compact">'
             "<tr><th>Админ</th>"
             f"{head}"
-            "<th class=right>Σ</th></tr>"
+            '<th class=right>Σ</th></tr>'
             + "".join(rows)
-            + "</table>"
+            + f"</table></div>"
         )
     else:
         summary_table = (
             '<p class=muted>Нет данных — бот должен быть админом в чате, '
-            "чтобы получать события ban/kick/mute. Счётчик начнёт расти после деплоя.</p>"
+            "чтобы получать события ban/kick/mute.</p>"
         )
 
     if recent:
         recent_rows = "".join(
             "<tr>"
-            f"<td class=muted>{html.escape(time.strftime('%d.%m %H:%M', time.localtime(float(e.get('ts', 0)))))}</td>"
-            f"<td>{html.escape(str(e.get('admin_label') or e.get('admin_id') or '?'))}</td>"
-            f"<td>{html.escape(action_label(str(e.get('action') or '')))}</td>"
-            f"<td class=muted>{html.escape(str(e.get('target_label') or e.get('target_id') or '—'))}</td>"
+            f'<td class=muted style="white-space:nowrap">{html.escape(time.strftime("%d.%m %H:%M", time.localtime(float(e.get("ts", 0)))))}</td>'
+            f'<td>{html.escape(str(e.get("admin_label") or e.get("admin_id") or "?"))}</td>'
+            f"<td>{_action_pill_html(str(e.get('action') or ''))}</td>"
+            f'<td class=muted>{html.escape(str(e.get("target_label") or e.get("target_id") or "—"))}</td>'
             "</tr>"
             for e in recent
         )
         recent_table = (
-            "<table>"
+            '<table class="table-compact">'
             "<tr><th>Время</th><th>Админ</th><th>Действие</th><th>Цель</th></tr>"
-            f"{recent_rows}"
-            "</table>"
+            f"{recent_rows}</table>"
         )
     else:
         recent_table = '<p class=muted>Последних событий пока нет.</p>'
 
     return (
-        '<div class="card">'
+        '<div class="card monitor-section">'
+        '<div class="section-head">'
         "<h2>Активность модераторов</h2>"
-        '<p class=muted style="margin-top:0">'
-        "Баны, кики, муты, закрепы — через Telegram. Удаление чужих сообщений админом "
-        "API не передаёт; учитывается только удаление ответа бота по /error и /fix.</p>"
-        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px">'
-        "<div>"
-        '<h3 style="margin-top:0;font-size:14px;color:#9aa4b2">По админам</h3>'
-        f"{summary_table}"
+        '<p class="muted">Баны, кики, муты, закрепы. Удаление чужих сообщений Telegram API не передаёт; '
+        "учитывается только удаление ответа бота по /error и /fix.</p>"
         "</div>"
-        "<div>"
-        '<h3 style="margin-top:0;font-size:14px;color:#9aa4b2">Последние события</h3>'
-        f"{recent_table}"
-        "</div>"
-        "</div>"
-        "</div>"
+        '<div class="monitor-grid monitor-grid--2">'
+        '<div class="monitor-panel">'
+        '<h3 class="monitor-title">По админам</h3>'
+        f"{summary_table}</div>"
+        '<div class="monitor-panel">'
+        '<h3 class="monitor-title">Последние события</h3>'
+        f"{recent_table}</div>"
+        f"</div></div>"
     )
-
 
 def _qa_list(state: _PanelState, csrf: str, flash: str = "") -> bytes:
     entries = load_manual_qa_store()
