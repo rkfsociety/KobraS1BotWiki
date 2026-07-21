@@ -1,1 +1,50 @@
-[]
+[
+  {
+    "text": "Клей нанесен ?",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/wash-and-cure",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784645748.7533045
+  },
+  {
+    "text": "ну как будто бы низ сопла на месте, но оно может быть деформировано",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/10105-code/kobra-3",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784645717.9669347
+  },
+  {
+    "text": "Как гексалит хорош за 5 кг - 2,5 тысячи рублей. Прям вкуснятина.",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784645688.4432647
+  },
+  {
+    "text": "Так что в итоге?",
+    "score": 16,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784645680.788409
+  },
+  {
+    "text": "А вентилятор крутится когда включаешь принтер? Я вот непомню. Видимо он не крутится, поэтому вся и фигня",
+    "score": 15,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/11531-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784645478.4647489
+  },
+  {
+    "text": "что то мне подсказывает что он печатает без наконечника сопла",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/11001-code/s1",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1784645307.4850264
+  }
+]
