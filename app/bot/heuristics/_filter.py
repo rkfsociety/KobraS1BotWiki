@@ -108,6 +108,9 @@ from app.bot.heuristics._banter import (
     _is_peer_bed_mesh_lecture,
     _is_sensor_thread_banter,
     _is_missed_jul17_thread_noise,
+    _is_missed_jul21_thread_noise,
+    _is_homing_endstop_thread_sidebar,
+    _is_vpn_bot_spam,
     _is_travel_airport_sidebar,
     _is_money_lend_spam,
     _is_vague_fix_without_symptom,
@@ -244,6 +247,9 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_money_lend_spam(text)
         or _is_travel_airport_sidebar(text)
         or _is_missed_jul17_thread_noise(text)
+        or _is_vpn_bot_spam(text)
+        or _is_homing_endstop_thread_sidebar(text)
+        or _is_missed_jul21_thread_noise(text)
     )
 
 
