@@ -7,6 +7,7 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+from app.bot.admin_activity import record_admin_action
 from app.bot.ephemeral import schedule_delete_slash_command_and_reply
 from app.bot.i18n import _lang_from_message, _t, format_wiki_card
 from app.bot.reply_logging import log_bot_reply_for_message
@@ -97,6 +98,18 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Удаляем неверный ответ бота (если есть права)
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=bad_mid)
+        actor = msg.from_user
+        if actor:
+            record_admin_action(
+                context.application.bot_data,
+                action="delete_bot_msg",
+                admin_id=actor.id,
+                admin_username=actor.username,
+                admin_first_name=actor.first_name,
+                target_id=bad_mid,
+                target_label=f"msg #{bad_mid}",
+                chat_id=chat_id,
+            )
     except Exception:
         pass
 
@@ -248,6 +261,18 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     try:
         await context.bot.delete_message(chat_id=chat_id, message_id=bad_mid)
+        actor = msg.from_user
+        if actor:
+            record_admin_action(
+                context.application.bot_data,
+                action="delete_bot_msg",
+                admin_id=actor.id,
+                admin_username=actor.username,
+                admin_first_name=actor.first_name,
+                target_id=bad_mid,
+                target_label=f"msg #{bad_mid}",
+                chat_id=chat_id,
+            )
     except Exception:
         pass
 

@@ -71,6 +71,11 @@ from app.bot.manual_qa import (
 )
 from app.bot.stores import _load_fix_store, _norm_text, _save_fix_store
 from app.bot.bot_stats import get_top_wiki_pages, get_top_questions, get_hourly_activity
+from app.bot.admin_activity import (
+    action_label,
+    get_admin_activity_summary,
+    get_recent_admin_actions,
+)
 from app.bot.wiki_reindex_handler import handle_reindex_webhook
 
 log = logging.getLogger(__name__)
@@ -889,10 +894,12 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
     bad_section = _bad_answers_section(state, csrf) if csrf else ""
     missed_section = _missed_questions_section(csrf) if csrf else ""
     bot_stats_section = _bot_stats_section(top_wiki_pages, top_questions, hourly_activity)
+    admin_activity_section = _admin_activity_section(bd)
     body = (
         "<h1>Дашборд</h1>"
         f'<div class="card"><div class="grid">{stats}</div></div>'
         f"{bot_stats_section}"
+        f"{admin_activity_section}"
         f"{recent_section}"
         f"{bad_section}"
         f"{missed_section}"
@@ -969,6 +976,79 @@ def _bot_stats_section(
         '<br><span class=muted style="font-weight:400;font-size:12px">'
         "входящие в разрешённых чатах</span></h3>"
         f"{bar_rows}"
+        "</div>"
+        "</div>"
+        "</div>"
+    )
+
+
+def _admin_activity_section(bot_data: dict[str, Any]) -> str:
+    """HTML-карточка: активность модераторов."""
+    summary = get_admin_activity_summary(bot_data, limit=15)
+    recent = get_recent_admin_actions(bot_data, limit=15)
+
+    if summary:
+        stat_keys = ("ban", "kick", "restrict", "unrestrict", "unban", "promote", "demote", "pin", "delete_bot_msg")
+        head = "".join(f"<th class=right>{html.escape(action_label(k))}</th>" for k in stat_keys)
+        rows = []
+        for row in summary:
+            counts = row.get("counts") or {}
+            cells = "".join(f"<td class=right>{int(counts.get(k, 0))}</td>" for k in stat_keys)
+            rows.append(
+                "<tr>"
+                f"<td>{html.escape(str(row.get('label') or '?'))}"
+                f"<br><span class=muted>{html.escape(str(row.get('user_id') or ''))}</span></td>"
+                f"{cells}"
+                f"<td class=right><b>{int(row.get('total', 0))}</b></td>"
+                "</tr>"
+            )
+        summary_table = (
+            "<table>"
+            "<tr><th>Админ</th>"
+            f"{head}"
+            "<th class=right>Σ</th></tr>"
+            + "".join(rows)
+            + "</table>"
+        )
+    else:
+        summary_table = (
+            '<p class=muted>Нет данных — бот должен быть админом в чате, '
+            "чтобы получать события ban/kick/mute. Счётчик начнёт расти после деплоя.</p>"
+        )
+
+    if recent:
+        recent_rows = "".join(
+            "<tr>"
+            f"<td class=muted>{html.escape(time.strftime('%d.%m %H:%M', time.localtime(float(e.get('ts', 0)))))}</td>"
+            f"<td>{html.escape(str(e.get('admin_label') or e.get('admin_id') or '?'))}</td>"
+            f"<td>{html.escape(action_label(str(e.get('action') or '')))}</td>"
+            f"<td class=muted>{html.escape(str(e.get('target_label') or e.get('target_id') or '—'))}</td>"
+            "</tr>"
+            for e in recent
+        )
+        recent_table = (
+            "<table>"
+            "<tr><th>Время</th><th>Админ</th><th>Действие</th><th>Цель</th></tr>"
+            f"{recent_rows}"
+            "</table>"
+        )
+    else:
+        recent_table = '<p class=muted>Последних событий пока нет.</p>'
+
+    return (
+        '<div class="card">'
+        "<h2>Активность модераторов</h2>"
+        '<p class=muted style="margin-top:0">'
+        "Баны, кики, муты, закрепы — через Telegram. Удаление чужих сообщений админом "
+        "API не передаёт; учитывается только удаление ответа бота по /error и /fix.</p>"
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:20px">'
+        "<div>"
+        '<h3 style="margin-top:0;font-size:14px;color:#9aa4b2">По админам</h3>'
+        f"{summary_table}"
+        "</div>"
+        "<div>"
+        '<h3 style="margin-top:0;font-size:14px;color:#9aa4b2">Последние события</h3>'
+        f"{recent_table}"
         "</div>"
         "</div>"
         "</div>"

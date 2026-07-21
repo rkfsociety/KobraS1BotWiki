@@ -5,6 +5,7 @@ from ._cmd_qa import cmd_qaadd, cmd_qadel, cmd_qalist
 from ._cmd_status import cmd_ping, cmd_status
 from ._cmd_update import cmd_update
 from ._cmd_wiki import cmd_wiki
+from ._admin_activity import on_chat_member_updated, on_left_chat_member_service, on_pinned_message
 from ._on_message import on_any_update, on_error, on_message
 from ._routing import on_channel_command
 
@@ -23,6 +24,9 @@ __all__ = [
     "cmd_wiki",
     "on_any_update",
     "on_channel_command",
+    "on_chat_member_updated",
     "on_error",
+    "on_left_chat_member_service",
     "on_message",
+    "on_pinned_message",
 ]

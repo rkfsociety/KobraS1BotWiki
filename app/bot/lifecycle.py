@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import (
     Application,
+    ChatMemberHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -39,11 +40,15 @@ from app.bot.handlers import (
     cmd_wiki,
     on_any_update,
     on_channel_command,
+    on_chat_member_updated,
     on_error,
+    on_left_chat_member_service,
     on_message,
+    on_pinned_message,
 )
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.reply_logging import load_recent_replies
+from app.bot.admin_activity import load_admin_activity
 from app.bot.bot_stats import load_bot_stats
 from app.bot.panel_login import cmd_start
 from app.bot.reactions import on_message_reaction
@@ -176,6 +181,9 @@ def main() -> None:
     # Без & ~filters.COMMAND: на части апдейтов (пустой text/caption) комбинация ломалась на PTB 21 + Py 3.14.
     # Команды всё равно отсекаются в on_message по префиксу "/" и отдельными CommandHandler.
     app.add_handler(MessageHandler((filters.TEXT | filters.CAPTION), on_message))
+    app.add_handler(ChatMemberHandler(on_chat_member_updated, ChatMemberHandler.CHAT_MEMBER))
+    app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, on_left_chat_member_service))
+    app.add_handler(MessageHandler(filters.StatusUpdate.PINNED_MESSAGE, on_pinned_message))
     # Реакции-эмодзи на сообщения бота (💩/👎 от админа → отметка в лог-зеркале)
     app.add_handler(MessageReactionHandler(on_message_reaction))
     app.add_error_handler(on_error)
@@ -193,6 +201,10 @@ def main() -> None:
             load_bot_stats(application.bot_data)
         except Exception as _e:
             logging.warning("Не удалось загрузить bot_stats: %s", _e)
+        try:
+            load_admin_activity(application.bot_data)
+        except Exception as _e:
+            logging.warning("Не удалось загрузить admin_activity: %s", _e)
         # Ссылка на основной event-loop — чтобы веб-панель могла запросить перезапуск.
         application.bot_data["main_loop"] = asyncio.get_running_loop()
         # Каталог ошибок (fallback, если у кода нет отдельной страницы /error-codes/<code>-code)
