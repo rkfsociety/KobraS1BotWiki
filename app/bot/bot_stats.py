@@ -9,6 +9,7 @@
     "hourly_activity_kind": "incoming",
     "total_answers": <int>,
     "total_incoming": <int>,
+    "user_messages": {"<user_id>": {"user_id": <int>, "label": "...", "count": <int>}, ...},
     "last_updated": <unix_ts>
   }
 """
@@ -26,6 +27,7 @@ log = logging.getLogger(__name__)
 _STATS_KEY = "bot_stats"
 _SAVE_LOCK = threading.Lock()
 _MAX_UNIQUE_QUESTIONS = 2000
+_MAX_TRACKED_USERS = 3000
 # v2: hourly_activity = все входящие в allowed-чатах (раньше считались только ответы бота).
 _STATS_VERSION = 2
 
@@ -43,6 +45,7 @@ def _empty_stats() -> dict[str, Any]:
         "hourly_activity_kind": "incoming",
         "total_answers": 0,
         "total_incoming": 0,
+        "user_messages": {},
         "stats_version": _STATS_VERSION,
         "last_updated": 0.0,
     }
@@ -68,6 +71,26 @@ def load_bot_stats(bot_data: dict[str, Any]) -> None:
         stats["total_answers"] = max(0, int(raw.get("total_answers", 0)))
         stats["total_incoming"] = max(0, int(raw.get("total_incoming", 0)))
         stats["last_updated"] = float(raw.get("last_updated", 0.0))
+        users = raw.get("user_messages")
+        if isinstance(users, dict):
+            loaded: dict[str, dict[str, Any]] = {}
+            for k, v in users.items():
+                if not isinstance(v, dict):
+                    continue
+                try:
+                    uid = int(v.get("user_id") or k)
+                except (TypeError, ValueError):
+                    continue
+                loaded[str(uid)] = {
+                    "user_id": uid,
+                    "label": str(v.get("label") or uid),
+                    "count": max(0, int(v.get("count", 0))),
+                }
+                if v.get("username"):
+                    loaded[str(uid)]["username"] = str(v["username"])
+                if v.get("first_name"):
+                    loaded[str(uid)]["first_name"] = str(v["first_name"])
+            stats["user_messages"] = loaded
         ver = int(raw.get("stats_version") or 1)
         kind = raw.get("hourly_activity_kind")
         hourly = raw.get("hourly_activity")
@@ -114,13 +137,59 @@ def _bump_hour(stats: dict[str, Any], hour: int) -> None:
         stats["hourly_activity"][hour] = 1
 
 
-def record_incoming_activity(bot_data: dict[str, Any]) -> None:
+def _user_label(*, user_id: int, username: str | None, first_name: str | None) -> str:
+    if username:
+        return f"@{username}"
+    if first_name:
+        return first_name.strip()
+    return str(user_id)
+
+
+def _bump_user_message(
+    stats: dict[str, Any],
+    *,
+    user_id: int,
+    username: str | None = None,
+    first_name: str | None = None,
+) -> None:
+    users: dict[str, dict[str, Any]] = stats.setdefault("user_messages", {})
+    key = str(user_id)
+    entry = users.setdefault(
+        key,
+        {"user_id": user_id, "label": _user_label(user_id=user_id, username=username, first_name=first_name), "count": 0},
+    )
+    entry["label"] = _user_label(
+        user_id=user_id,
+        username=username or entry.get("username"),
+        first_name=first_name or entry.get("first_name"),
+    )
+    if username:
+        entry["username"] = username
+    if first_name:
+        entry["first_name"] = first_name
+    entry["count"] = int(entry.get("count", 0)) + 1
+
+    if len(users) > _MAX_TRACKED_USERS:
+        ranked = sorted(users.items(), key=lambda kv: int((kv[1] or {}).get("count", 0)))
+        for drop_key, _ in ranked[: len(users) - _MAX_TRACKED_USERS]:
+            users.pop(drop_key, None)
+
+
+def record_incoming_activity(
+    bot_data: dict[str, Any],
+    *,
+    user_id: int | None = None,
+    username: str | None = None,
+    first_name: str | None = None,
+) -> None:
     """Учитывает входящее сообщение в разрешённом чате (для гистограммы по часам)."""
     stats: dict[str, Any] = bot_data.setdefault(_STATS_KEY, _empty_stats())
     now = time.time()
     hour = time.localtime(now).tm_hour
     _bump_hour(stats, hour)
     stats["total_incoming"] = int(stats.get("total_incoming", 0)) + 1
+    if user_id is not None:
+        _bump_user_message(stats, user_id=user_id, username=username, first_name=first_name)
     stats["hourly_activity_kind"] = "incoming"
     stats["stats_version"] = _STATS_VERSION
     stats["last_updated"] = now
@@ -186,3 +255,27 @@ def get_hourly_activity(bot_data: dict[str, Any]) -> list[int]:
     if isinstance(hourly, list) and len(hourly) == 24:
         return list(hourly)
     return [0] * 24
+
+
+def get_top_users(bot_data: dict[str, Any], limit: int = 10) -> list[dict[str, Any]]:
+    """Топ участников по числу входящих сообщений в разрешённых чатах."""
+    stats = bot_data.get(_STATS_KEY) or {}
+    users = stats.get("user_messages") or {}
+    rows: list[dict[str, Any]] = []
+    if not isinstance(users, dict):
+        return rows
+    for entry in users.values():
+        if not isinstance(entry, dict):
+            continue
+        count = int(entry.get("count", 0))
+        if count <= 0:
+            continue
+        rows.append(
+            {
+                "user_id": entry.get("user_id"),
+                "label": entry.get("label") or str(entry.get("user_id") or "?"),
+                "count": count,
+            }
+        )
+    rows.sort(key=lambda r: (r["count"], r.get("label") or ""), reverse=True)
+    return rows[:limit]

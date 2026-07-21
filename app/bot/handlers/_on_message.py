@@ -180,7 +180,12 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     try:
         from_user = msg.from_user
         if from_user is None or not getattr(from_user, "is_bot", False):
-            _record_incoming(context.application.bot_data)
+            _record_incoming(
+                context.application.bot_data,
+                user_id=from_user.id if from_user else None,
+                username=from_user.username if from_user else None,
+                first_name=from_user.first_name if from_user else None,
+            )
     except Exception:
         pass
 

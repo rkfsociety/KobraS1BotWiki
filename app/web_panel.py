@@ -70,7 +70,7 @@ from app.bot.manual_qa import (
     try_git_push_manual_qa,
 )
 from app.bot.stores import _load_fix_store, _norm_text, _save_fix_store
-from app.bot.bot_stats import get_top_wiki_pages, get_top_questions, get_hourly_activity
+from app.bot.bot_stats import get_top_wiki_pages, get_top_questions, get_hourly_activity, get_top_users
 from app.bot.admin_activity import (
     action_label,
     get_admin_activity_summary,
@@ -862,6 +862,7 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
     top_wiki_pages = get_top_wiki_pages(bd)
     top_questions = get_top_questions(bd)
     hourly_activity = get_hourly_activity(bd)
+    top_users = get_top_users(bd, limit=10)
 
     stats = (
         stat(doc_count, "страниц вики в индексе")
@@ -893,7 +894,7 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
     recent_section = _recent_replies_section(state, csrf, page=replies_page) if csrf else ""
     bad_section = _bad_answers_section(state, csrf) if csrf else ""
     missed_section = _missed_questions_section(csrf) if csrf else ""
-    bot_stats_section = _bot_stats_section(top_wiki_pages, top_questions, hourly_activity)
+    bot_stats_section = _bot_stats_section(top_wiki_pages, top_questions, hourly_activity, top_users)
     admin_activity_section = _admin_activity_section(bd)
     body = (
         "<h1>Дашборд</h1>"
@@ -915,6 +916,7 @@ def _bot_stats_section(
     top_wiki_pages: list[tuple[str, int]],
     top_questions: list[tuple[str, int]],
     hourly_activity: list[int],
+    top_users: list[dict[str, Any]],
 ) -> str:
     """HTML-карточка: топ вики-страниц, топ вопросов, активность по часам."""
     # Топ вики-страниц
@@ -939,6 +941,18 @@ def _bot_stats_section(
         )
     else:
         q_rows = '<tr><td colspan=2 class=muted>Нет данных — бот ещё не отвечал</td></tr>'
+
+    if top_users:
+        user_rows = "".join(
+            "<tr>"
+            f"<td>{html.escape(str(row.get('label') or '?'))}"
+            f"<br><span class=muted>{html.escape(str(row.get('user_id') or ''))}</span></td>"
+            f"<td class=right>{int(row.get('count', 0))}</td>"
+            "</tr>"
+            for row in top_users
+        )
+    else:
+        user_rows = '<tr><td colspan=2 class=muted>Нет данных — сообщений пока не было</td></tr>'
 
     # Гистограмма активности по часам
     max_val = max(hourly_activity) if hourly_activity else 0
@@ -969,6 +983,15 @@ def _bot_stats_section(
         "<table>"
         "<tr><th>Вопрос</th><th class=right>Раз</th></tr>"
         f"{q_rows}"
+        "</table>"
+        "</div>"
+        "<div>"
+        '<h3 style="margin-top:0;font-size:14px;color:#9aa4b2">Топ участников'
+        '<br><span class=muted style="font-weight:400;font-size:12px">'
+        "сообщения в разрешённых чатах</span></h3>"
+        "<table>"
+        "<tr><th>Участник</th><th class=right>Сообщений</th></tr>"
+        f"{user_rows}"
         "</table>"
         "</div>"
         "<div>"
