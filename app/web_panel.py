@@ -394,6 +394,33 @@ td.a-cell { max-width: min(100%, 560px); word-break: break-word; }
   .hourly-chart { height: 120px; gap: 3px; }
   .hourly-bar { max-width: 100%; }
 }
+/* Amber Ops theme: focused status colors without decorative labels. */
+body { background: #0e1014; }
+header { background: #17191e; border-bottom-color: #39352c; }
+.card { background: linear-gradient(145deg, #1a1c20 0%, #121417 100%); border-color: #34373d; }
+.stat { background: #202328; border-color: #3e4249; border-radius: 12px; }
+.stat:nth-child(2) { border-color: #8c6b21; }
+.stat:nth-child(6) { border-color: #285b47; }
+.monitor-panel { background: #111316; border-color: #353940; }
+.monitor-title { color: #f0c674; }
+.monitor-sub { color: #888e98; }
+.section-head { border-bottom-color: #353940; }
+.table-compact th, .table-compact td { border-bottom-color: #292c31; }
+.table-compact th { color: #c1a56a; }
+.count-badge { background: #3b2e15; border-color: #806120; color: #f7d889; }
+.hourly-bar { background: linear-gradient(180deg, #f4d27a 0%, #b7791f 100%); box-shadow: 0 0 14px rgba(183, 121, 31, 0.33); }
+.circle-chart-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 14px; }
+.circle-card { min-height: 250px; padding: 14px; text-align: center; background: #151719; border: 1px solid #343940; border-radius: 12px; }
+.circle { width: 148px; height: 148px; margin: 4px auto 12px; border-radius: 50%; display: grid; place-items: center; position: relative; }
+.circle::after { content: ""; position: absolute; width: 94px; height: 94px; border-radius: 50%; background: #111316; border: 1px solid #343940; }
+.circle span { position: relative; z-index: 1; color: #fff; font-size: 25px; font-weight: 800; }
+.circle small { display: block; color: #979da6; font-size: 10px; font-weight: 400; margin-top: 2px; }
+.donut-activity { background: conic-gradient(#f4d27a 0 42%, #b7791f 42% 70%, #547a62 70% 87%, #3b4047 87% 100%); box-shadow: 0 0 25px rgba(183, 121, 31, 0.2); }
+.donut-health { background: conic-gradient(#6f9b79 0 98%, #353940 98% 100%); box-shadow: 0 0 25px rgba(84, 122, 98, 0.27); }
+.circle-caption { color: #f0c674; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.circle-note { margin-top: 5px; color: #888e98; font-size: 11px; }
+@media (max-width: 1100px) { .circle-chart-grid { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .circle-chart-grid { grid-template-columns: 1fr 1fr; gap: 8px; } .circle-card { padding: 8px 4px; } .circle { width: 112px; height: 112px; } .circle::after { width: 70px; height: 70px; } .circle span { font-size: 20px; } }
 """
 
 
@@ -1017,6 +1044,47 @@ def _hourly_chart_html(hourly_activity: list[int]) -> str:
     return f'<{tag} class="hourly-chart">{"".join(cols)}</{tag}>'
 
 
+def _circle_charts_html(hourly_activity: list[int], bot_data: dict[str, Any]) -> str:
+    """Круговые карточки: распределение активности и фактический статус индекса."""
+    periods = (
+        ("Ночь", hourly_activity[0:6], "#3b4047"),
+        ("Утро", hourly_activity[6:12], "#f4d27a"),
+        ("День", hourly_activity[12:18], "#b7791f"),
+        ("Вечер", hourly_activity[18:24], "#547a62"),
+    )
+    period_values = [(label, sum(values), color) for label, values, color in periods]
+    total = sum(value for _, value, _ in period_values)
+    if total:
+        cursor = 0
+        stops = []
+        for _, value, color in period_values:
+            end = cursor + (value / total * 100)
+            stops.append(f"{color} {cursor:.2f}% {end:.2f}%")
+            cursor = end
+        activity_style = f"background: conic-gradient({', '.join(stops)});"
+    else:
+        activity_style = "background: conic-gradient(#3b4047 0 100%);"
+    peak = max(enumerate(hourly_activity), key=lambda item: item[1]) if total else (0, 0)
+    indexer = bot_data.get("wiki_indexer")
+    try:
+        index_ready = bool(indexer and indexer.is_done())
+    except Exception:
+        index_ready = False
+    index_pct = 100 if index_ready else 0
+    index_label = "готов" if index_ready else "идёт"
+    return (
+        '<div class="circle-chart-grid">'
+        f'<div class="circle-card"><div class="circle donut-activity" style="{activity_style}">'
+        f'<span>{total}<small>сообщений</small></span></div>'
+        '<div class="circle-caption">Активность чата</div>'
+        f'<div class="circle-note">пик {peak[0]:02d}:00 — {peak[1]}</div></div>'
+        f'<div class="circle-card"><div class="circle donut-health" style="background: conic-gradient(#6f9b79 0 {index_pct}%, #353940 {index_pct}% 100%);">'
+        f'<span>{index_pct}%<small>индексация</small></span></div>'
+        f'<div class="circle-caption">Индексация</div><div class="circle-note">индекс {index_label}</div></div>'
+        '</div>'
+    )
+
+
 def _bot_stats_section(
     top_wiki_pages: list[tuple[str, int]],
     top_questions: list[tuple[str, int]],
@@ -1096,7 +1164,7 @@ def _bot_stats_section(
         '<div class="monitor-panel">'
         '<h3 class="monitor-title">Активность по часам'
         f'<span class="monitor-sub">всего {total_incoming}{peak_note}</span></h3>'
-        f"{_hourly_chart_html(hourly_activity)}</div>"
+        f"{_circle_charts_html(hourly_activity, bot_data or {})}</div>"
         f"{admin_panels}"
         "</div></div></div>"
     )

@@ -7,7 +7,7 @@ import types
 
 import pytest
 
-from app.web_panel import _CSS, start_web_panel
+from app.web_panel import _CSS, _bot_stats_section, start_web_panel
 
 
 class _StubApp:
@@ -138,6 +138,20 @@ def test_dashboard_activity_layout_is_responsive_without_horizontal_scrollbar():
     assert ".monitor-grid--2 { grid-template-columns: 1fr; }" in _CSS
     assert ".admin-summary-table { table-layout: fixed; }" in _CSS
     assert ".monitor-table-wrap { overflow-x: visible; }" in _CSS
+
+
+def test_dashboard_uses_amber_circular_activity_cards():
+    body = _bot_stats_section(
+        [], [], [0, 1, 2, 3, 4, 5, 6, 7] + [0] * 16, [],
+        {"bot_stats": {"total_answers": 12}, "admin_activity": {}},
+    )
+    assert 'class="circle-chart-grid"' in body
+    assert 'class="circle donut-activity"' in body
+    assert 'class="circle donut-health"' in body
+    assert 'Активность чата' in body
+    assert 'Индексация' in body
+    assert ".circle-chart-grid" in _CSS
+    assert "#f0c674" in _CSS
 
 
 def test_csrf_required_for_mutations(panel):
