@@ -13,6 +13,7 @@ import pytest
 from telegram.constants import ChatMemberStatus
 
 from app.bot.manual_qa import load_manual_qa_store
+from app.bot.missed_questions import load_missed_questions
 from app.web_miniapp import render_miniapp
 from app.web_panel import start_web_panel
 
@@ -68,7 +69,9 @@ def mini_panel(monkeypatch, tmp_path):
             "settings": _Settings(),
             "wiki_index": types.SimpleNamespace(
                 doc_count=42,
-                search=lambda query, top_k=5: [
+                search=lambda query, top_k=5: []
+                if "неизвест" in query.lower()
+                else [
                     (types.SimpleNamespace(title="Первый слой", url="https://wiki.example/layer", text=""), 91)
                 ],
             ),
@@ -125,6 +128,9 @@ def test_miniapp_shell_has_mobile_admin_dashboard_sections():
     assert "Отметить как оффтоп" in body
     assert "Поиск по вики" in body
     assert "searchWiki" in body
+    assert "Режим пользователя" in body
+    assert "setUserMode" in body
+    assert "Задать вопрос" in body
     assert "miniapp-card" in body
     assert "env_safe" not in body
 
@@ -241,3 +247,43 @@ def test_empty_wiki_search_is_rejected(mini_panel):
 
     assert response.status == 400
     assert "запрос" in json.loads(response.read())["error"].lower()
+
+
+def test_admin_can_ask_question_in_user_preview_and_store_unknown_question(mini_panel):
+    port, _ = mini_panel
+    session = _create_session(port)
+    body = urlencode({"text": "неизвестный вопрос о принтере"})
+    c = _conn(port)
+    c.request(
+        "POST",
+        "/api/app/question",
+        body,
+        {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {session}"},
+    )
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 200
+    assert payload["answered"] is False
+    assert "Пока я не могу ответить" in payload["answer"]
+    assert load_missed_questions()[0]["text"] == "неизвестный вопрос о принтере"
+
+
+def test_admin_can_ask_question_in_user_preview_and_get_wiki_answer(mini_panel):
+    port, _ = mini_panel
+    session = _create_session(port)
+    body = urlencode({"text": "как настроить первый слой"})
+    c = _conn(port)
+    c.request(
+        "POST",
+        "/api/app/question",
+        body,
+        {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {session}"},
+    )
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 200
+    assert payload["answered"] is True
+    assert payload["source"] == "wiki"
+    assert payload["url"] == "https://wiki.example/layer"

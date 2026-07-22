@@ -10,8 +10,8 @@ from typing import Any
 
 from app.bot.miniapp_access import is_group_admin
 from app.bot.miniapp_auth import MiniAppAuthError, validate_init_data
-from app.bot.manual_qa import add_manual_qa_entry, load_manual_qa_store
-from app.bot.missed_questions import delete_missed_question_by_text, load_missed_questions
+from app.bot.manual_qa import add_manual_qa_entry, find_manual_qa_answer, load_manual_qa_store
+from app.bot.missed_questions import add_missed_question, delete_missed_question_by_text, load_missed_questions
 
 
 class MiniAppAccessError(PermissionError):
@@ -34,6 +34,7 @@ def render_miniapp() -> bytes:
     body { margin:0; min-height:100vh; background:radial-gradient(circle at 15% 0%,#202331 0,#0b0d11 42%); color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif; }
     .miniapp-shell { width:min(100%,720px); margin:0 auto; padding:20px 16px 32px; }
     .miniapp-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:20px; }
+    .miniapp-head__actions { display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
     h1,h2,p { margin:0; } h1 { font-size:25px; letter-spacing:-.02em; } h2 { font-size:14px; }
     .muted { color:var(--muted); } .eyebrow { color:var(--amber); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
     .miniapp-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
@@ -57,7 +58,7 @@ def render_miniapp() -> bytes:
     }
     function renderDashboard(data) {
       const s = data.stats || {};
-      root.innerHTML = `<div class="miniapp-head"><div><div class="eyebrow">KobraS1Bot</div><h1>Панель администратора</h1><p class="muted">${escapeHtml(data.user.first_name || 'Администратор')}</p></div><div class="eyebrow">ADMIN</div></div>
+      root.innerHTML = `<div class="miniapp-head"><div><div class="eyebrow">KobraS1Bot</div><h1>Панель администратора</h1><p class="muted">${escapeHtml(data.user.first_name || 'Администратор')}</p></div><div class="miniapp-head__actions"><div class="eyebrow">ADMIN</div><button class="secondary" onclick="setUserMode()">Режим пользователя</button></div></div>
         <section class="miniapp-grid">
           <article class="miniapp-card"><div class="muted">Страницы вики</div><div class="value">${s.wiki_pages || 0}</div></article>
           <article class="miniapp-card"><div class="muted">Ответы бота</div><div class="value">${s.total_answers || 0}</div></article>
@@ -67,6 +68,15 @@ def render_miniapp() -> bytes:
           <article class="miniapp-card miniapp-card--wide"><h2>Очередь разбора</h2><p class="muted">Вопросы, которым нужно добавить ручной ответ или улучшить поиск.</p><div class="miniapp-actions"><button onclick="loadMissed()">Открыть вопросы</button><button class="secondary" onclick="loadDashboard()">Обновить</button></div><div id="missed" class="muted" style="margin-top:12px"></div></article>
         </section>`;
     }
+    function renderUserMode() {
+      root.innerHTML = `<div class="miniapp-head"><div><div class="eyebrow">Предпросмотр</div><h1>Режим пользователя</h1><p class="muted">Проверьте, как бот ищет и обрабатывает вопросы.</p></div><button class="secondary" onclick="setAdminMode()">Режим админа</button></div>
+        <section class="miniapp-grid">
+          <article class="miniapp-card miniapp-card--wide"><h2>Поиск по вики</h2><form onsubmit="searchWiki(event)" class="miniapp-actions"><input id="wiki-query" placeholder="Например: первый слой" style="flex:1;min-width:180px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"><button type="submit">Найти</button></form><div id="search-results" class="muted" style="margin-top:12px"></div></article>
+          <article class="miniapp-card miniapp-card--wide"><h2>Задать вопрос</h2><p class="muted">Ответ будет обработан так же, как вопрос пользователя.</p><form onsubmit="askQuestion(event)" class="miniapp-actions" style="display:block"><textarea id="user-question" placeholder="Например: как выставить первый слой?" style="width:100%;min-height:100px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text);resize:vertical"></textarea><button type="submit" style="margin-top:10px">Задать вопрос</button></form><div id="question-result" style="margin-top:12px"></div></article>
+        </section>`;
+    }
+    function setUserMode() { renderUserMode(); }
+    function setAdminMode() { loadDashboard(); }
     function loadDashboard() {
       const token = sessionStorage.getItem('kobra_app_session');
       fetch('/api/app/dashboard', {headers:{Authorization:'Bearer ' + token}})
@@ -86,6 +96,16 @@ def render_miniapp() -> bytes:
       const token = sessionStorage.getItem('kobra_app_session');
       fetch('/api/app/search?q=' + encodeURIComponent(query), {headers:{Authorization:'Bearer ' + token}})
         .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка поиска'); box.innerHTML = data.results.length ? data.results.map((item) => '<p><a href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener" style="color:var(--blue)">' + escapeHtml(item.title) + '</a> · ' + item.score + '</p>').join('') : 'Ничего не найдено.'; })
+        .catch((error) => { box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
+    function askQuestion(event) {
+      event.preventDefault();
+      const box = document.getElementById('question-result');
+      const token = sessionStorage.getItem('kobra_app_session');
+      const text = document.getElementById('user-question').value;
+      box.innerHTML = '<span class="muted">Ищу ответ…</span>';
+      fetch('/api/app/question', {method:'POST', headers:{Authorization:'Bearer ' + token, 'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({text})})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка обработки вопроса'); box.innerHTML = '<p>' + escapeHtml(data.answer) + '</p>' + (data.url ? '<p style="margin-top:8px"><a href="' + escapeHtml(data.url) + '" target="_blank" rel="noopener" style="color:var(--blue)">Открыть страницу вики</a></p>' : ''); })
         .catch((error) => { box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
     function renderMissed(items) {
@@ -242,6 +262,55 @@ def search_payload(state: Any, authorization: str, query: str) -> tuple[int, dic
     for doc, score in matches:
         results.append({"title": str(getattr(doc, "title", "")), "url": str(getattr(doc, "url", "")), "score": int(score)})
     return 200, {"role": session["role"], "results": results}
+
+
+def question_payload(state: Any, authorization: str, text: str) -> tuple[int, dict[str, Any]]:
+    """Обработать вопрос в предпросмотре пользовательского режима."""
+    session = _get_session(state, authorization)
+    if session is None:
+        return 401, {"error": "Сессия Mini App отсутствует или истекла."}
+    text = text.strip()
+    if not 2 <= len(text) <= 2000:
+        return 400, {"error": "Вопрос должен содержать от 2 до 2000 символов."}
+
+    bot_data = state.application.bot_data if state.application else {}
+    manual = find_manual_qa_answer(bot_data.get("manual_qa_entries") or [], text)
+    if manual is not None:
+        answer, title = manual
+        return 200, {"answered": True, "source": "manual", "answer": answer, "title": title}
+
+    index = bot_data.get("wiki_index")
+    matches = index.search(text, top_k=1) if index is not None else []
+    if matches:
+        doc, score = matches[0]
+        score = int(score)
+        url = str(getattr(doc, "url", ""))
+        title = str(getattr(doc, "title", ""))
+        if score >= int(getattr(state.settings, "min_score", 72)):
+            return 200, {
+                "answered": True,
+                "source": "wiki",
+                "answer": f"Нашёл подходящую страницу: «{title}»." if title else "Нашёл подходящую страницу вики.",
+                "title": title,
+                "url": url,
+                "score": score,
+            }
+        best_url = url
+    else:
+        score = None
+        best_url = None
+
+    add_missed_question(
+        text=text,
+        score=score,
+        best_url=best_url,
+        chat_id=getattr(state.settings, "panel_admin_chat_id", None),
+    )
+    return 200, {
+        "answered": False,
+        "source": "missing",
+        "answer": "Пока я не могу ответить на этот вопрос. Попробуйте задать его в чате группы или повторить позже.",
+    }
 
 
 def missed_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:

@@ -82,6 +82,7 @@ from app.web_miniapp import (
     dashboard_payload,
     dismiss_missed_payload,
     missed_payload,
+    question_payload,
     render_miniapp,
     search_payload,
 )
@@ -1746,6 +1747,15 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             if path == "/api/app/session":
                 form = self._read_form()
                 status, payload = create_miniapp_session(state, form.get("init_data", ""))
+                self._send_json(payload, status=status)
+                return
+            if path == "/api/app/question":
+                form = self._read_form()
+                status, payload = question_payload(
+                    state,
+                    self.headers.get("Authorization", ""),
+                    form.get("text", ""),
+                )
                 self._send_json(payload, status=status)
                 return
             if path.startswith("/api/app/missed/"):
