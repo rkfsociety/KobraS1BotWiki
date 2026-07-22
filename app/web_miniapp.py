@@ -43,6 +43,19 @@ def render_miniapp() -> bytes:
     .miniapp-card--wide { grid-column:1/-1; } .miniapp-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
     button { border:0; border-radius:10px; background:var(--amber); color:#17130b; cursor:pointer; font:600 13px inherit; padding:10px 13px; }
     button.secondary { background:#263244; color:var(--text); } .error { color:#ff8d8d; }
+    .chat-card { display:flex; flex-direction:column; min-height:60vh; }
+    #chat-history { display:flex; flex:1; flex-direction:column; gap:10px; min-height:0; max-height:55vh; overflow-x:hidden; overflow-y:auto; padding:4px 2px 12px; }
+    .chat-load-more { align-self:center; margin-bottom:8px; }
+    .chat-message { display:flex; max-width:88%; }
+    .chat-message--user { align-self:flex-end; }
+    .chat-message--bot { align-self:flex-start; }
+    .chat-bubble { border-radius:14px; padding:10px 12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+    .chat-message--user .chat-bubble { background:#315d9b; }
+    .chat-message--bot .chat-bubble { background:#252d3a; }
+    .chat-bubble a { color:var(--blue); }
+    .chat-form { display:flex; gap:8px; margin-top:10px; align-items:flex-end; }
+    #chat-input { flex:1; min-width:0; min-height:48px; max-height:140px; padding:10px; border:1px solid var(--line); border-radius:10px; background:#0d1118; color:var(--text); font:inherit; resize:vertical; }
+    .chat-status { min-height:20px; margin-top:8px; }
     .miniapp-error { display:grid; place-items:center; min-height:60vh; padding:24px; text-align:center; }
     @media (min-width:560px) { .miniapp-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
   </style>
@@ -68,12 +81,93 @@ def render_miniapp() -> bytes:
           <article class="miniapp-card miniapp-card--wide"><h2>Очередь разбора</h2><p class="muted">Вопросы, которым нужно добавить ручной ответ или улучшить поиск.</p><div class="miniapp-actions"><button onclick="loadMissed()">Открыть вопросы</button><button class="secondary" onclick="loadDashboard()">Обновить</button></div><div id="missed" class="muted" style="margin-top:12px"></div></article>
         </section>`;
     }
+    let currentSessionRole = null;
+    let chatHasMore = false;
+    let chatLoading = false;
+    const chatMessageIds = new Set();
+
     function renderUserMode() {
-      root.innerHTML = `<div class="miniapp-head"><div><div class="eyebrow">Предпросмотр</div><h1>Режим пользователя</h1><p class="muted">Проверьте, как бот ищет и обрабатывает вопросы.</p></div><button class="secondary" onclick="setAdminMode()">Режим админа</button></div>
-        <section class="miniapp-grid">
-          <article class="miniapp-card miniapp-card--wide"><h2>Поиск по вики</h2><form onsubmit="searchWiki(event)" class="miniapp-actions"><input id="wiki-query" placeholder="Например: первый слой" style="flex:1;min-width:180px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"><button type="submit">Найти</button></form><div id="search-results" class="muted" style="margin-top:12px"></div></article>
-          <article class="miniapp-card miniapp-card--wide"><h2>Задать вопрос</h2><p class="muted">Ответ будет обработан так же, как вопрос пользователя.</p><form onsubmit="askQuestion(event)" class="miniapp-actions" style="display:block"><textarea id="user-question" placeholder="Например: как выставить первый слой?" style="width:100%;min-height:100px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text);resize:vertical"></textarea><button type="submit" style="margin-top:10px">Задать вопрос</button></form><div id="question-result" style="margin-top:12px"></div></article>
-        </section>`;
+      chatHasMore = false;
+      chatLoading = false;
+      chatMessageIds.clear();
+      const adminButton = currentSessionRole === 'admin' ? '<button class="secondary" onclick="setAdminMode()">Режим админа</button>' : '';
+      root.innerHTML = `<div class="miniapp-head"><div><div class="eyebrow">KobraS1Bot</div><h1>Режим пользователя</h1><p class="muted">Задайте вопрос боту.</p></div>${adminButton}</div>
+        <section class="miniapp-grid"><article class="miniapp-card miniapp-card--wide chat-card">
+          <div id="chat-history" aria-live="polite"></div>
+          <div id="chat-status" class="chat-status muted" aria-live="polite"></div>
+          <form onsubmit="sendChatMessage(event)" class="chat-form"><textarea id="chat-input" aria-label="Вопрос боту" placeholder="Например: как выставить первый слой?"></textarea><button id="chat-send" type="submit">Отправить</button></form>
+        </article></section>`;
+      loadChatHistory();
+    }
+
+    function appendChatMessage(message, prepend = false) {
+      const history = document.getElementById('chat-history');
+      if (!history || message.id != null && chatMessageIds.has(message.id)) return;
+      if (message.id != null) chatMessageIds.add(message.id);
+      const item = document.createElement('div');
+      item.className = 'chat-message chat-message--' + (message.role === 'user' ? 'user' : 'bot');
+      if (message.id != null) item.dataset.id = message.id;
+      const bubble = document.createElement('div');
+      bubble.className = 'chat-bubble';
+      bubble.textContent = message.text || '';
+      if (message.url && /^https?:\\/\\//i.test(message.url)) {
+        const link = document.createElement('a');
+        link.href = message.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = 'Открыть страницу вики';
+        bubble.appendChild(document.createElement('br'));
+        bubble.appendChild(link);
+      }
+      item.appendChild(bubble);
+      if (prepend) history.insertBefore(item, history.firstChild); else history.appendChild(item);
+    }
+
+    function loadChatHistory(beforeId = null) {
+      if (chatLoading) return;
+      const history = document.getElementById('chat-history');
+      if (!history) return;
+      chatLoading = true;
+      const oldHeight = history.scrollHeight;
+      const oldTop = history.scrollTop;
+      const query = new URLSearchParams({limit: '50'});
+      if (beforeId != null) query.set('before_id', beforeId);
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/chat/history?' + query.toString(), {headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки истории'); return data; })
+        .then((data) => {
+          const prepend = beforeId != null;
+          const messages = data.messages || [];
+          (prepend ? [...messages].reverse() : messages).forEach((message) => appendChatMessage(message, prepend));
+          chatHasMore = Boolean(data.has_more);
+          const button = document.getElementById('chat-load-more');
+          if (button) button.remove();
+          if (chatHasMore) {
+            const loadMore = document.createElement('button');
+            loadMore.id = 'chat-load-more'; loadMore.type = 'button'; loadMore.className = 'secondary chat-load-more';
+            loadMore.textContent = 'Загрузить предыдущие сообщения';
+            loadMore.onclick = () => loadChatHistory(history.querySelector('.chat-message')?.dataset.id || (data.messages || [])[0]?.id);
+            history.insertBefore(loadMore, history.firstChild);
+          }
+          if (prepend) history.scrollTop = history.scrollHeight - oldHeight + oldTop; else history.scrollTop = history.scrollHeight;
+        })
+        .catch((error) => { const status = document.getElementById('chat-status'); if (status) status.textContent = error.message; })
+        .finally(() => { chatLoading = false; });
+    }
+
+    function sendChatMessage(event) {
+      event.preventDefault();
+      const input = document.getElementById('chat-input');
+      const button = document.getElementById('chat-send');
+      const status = document.getElementById('chat-status');
+      const text = input && input.value.trim();
+      if (!input || !button || !text || button.disabled) return;
+      input.disabled = true; button.disabled = true; button.textContent = 'Ищу ответ…'; status.textContent = '';
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/chat/message', {method:'POST', headers:{Authorization:'Bearer ' + token, 'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({text})})
+        .then(async (response) => { const data = await response.json(); if (data.messages) data.messages.forEach((message) => appendChatMessage(message)); if (!response.ok) { const wait = data.retry_after != null ? ` Повторите через ${data.retry_after} с.` : ''; throw new Error((data.error || 'Ошибка отправки') + wait); } input.value = ''; })
+        .catch((error) => { status.textContent = error.message; })
+        .finally(() => { input.disabled = false; button.disabled = false; button.textContent = 'Отправить'; input.focus(); const history = document.getElementById('chat-history'); if (history) history.scrollTop = history.scrollHeight; });
     }
     function setUserMode() { renderUserMode(); }
     function setAdminMode() { loadDashboard(); }
@@ -96,16 +190,6 @@ def render_miniapp() -> bytes:
       const token = sessionStorage.getItem('kobra_app_session');
       fetch('/api/app/search?q=' + encodeURIComponent(query), {headers:{Authorization:'Bearer ' + token}})
         .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка поиска'); box.innerHTML = data.results.length ? data.results.map((item) => '<p><a href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener" style="color:var(--blue)">' + escapeHtml(item.title) + '</a> · ' + item.score + '</p>').join('') : 'Ничего не найдено.'; })
-        .catch((error) => { box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
-    }
-    function askQuestion(event) {
-      event.preventDefault();
-      const box = document.getElementById('question-result');
-      const token = sessionStorage.getItem('kobra_app_session');
-      const text = document.getElementById('user-question').value;
-      box.innerHTML = '<span class="muted">Ищу ответ…</span>';
-      fetch('/api/app/question', {method:'POST', headers:{Authorization:'Bearer ' + token, 'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({text})})
-        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка обработки вопроса'); box.innerHTML = '<p>' + escapeHtml(data.answer) + '</p>' + (data.url ? '<p style="margin-top:8px"><a href="' + escapeHtml(data.url) + '" target="_blank" rel="noopener" style="color:var(--blue)">Открыть страницу вики</a></p>' : ''); })
         .catch((error) => { box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
     function renderMissed(items) {
@@ -138,7 +222,8 @@ def render_miniapp() -> bytes:
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Не удалось войти');
         sessionStorage.setItem('kobra_app_session', data.session);
-        loadDashboard();
+        currentSessionRole = data.role;
+        if (data.role === 'admin') loadDashboard(); else renderUserMode();
       }).catch((error) => {
         root.innerHTML = '<p class="error">' + escapeHtml(error.message) + '</p>';
       });

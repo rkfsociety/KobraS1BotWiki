@@ -143,7 +143,14 @@ def test_miniapp_shell_has_mobile_admin_dashboard_sections():
     assert "searchWiki" in body
     assert "Режим пользователя" in body
     assert "setUserMode" in body
-    assert "Задать вопрос" in body
+    assert "chat-history" in body
+    assert "loadChatHistory" in body
+    assert "sendChatMessage" in body
+    assert "appendChatMessage" in body
+    assert 'id="chat-input"' in body
+    assert 'aria-label="Вопрос боту"' in body
+    assert "Загрузить предыдущие сообщения" in body
+    assert "askQuestion" not in body
     assert "miniapp-card" in body
     assert "env_safe" not in body
 
