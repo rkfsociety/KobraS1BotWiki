@@ -26,13 +26,55 @@ def render_miniapp() -> bytes:
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>KobraS1Bot</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root { color-scheme: dark; --bg:#0b0d11; --panel:#141821; --line:#29303b; --text:#f5f7fb; --muted:#8d98aa; --amber:#f0c674; --blue:#5c9cff; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:radial-gradient(circle at 15% 0%,#202331 0,#0b0d11 42%); color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif; }
+    .miniapp-shell { width:min(100%,720px); margin:0 auto; padding:20px 16px 32px; }
+    .miniapp-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:20px; }
+    h1,h2,p { margin:0; } h1 { font-size:25px; letter-spacing:-.02em; } h2 { font-size:14px; }
+    .muted { color:var(--muted); } .eyebrow { color:var(--amber); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
+    .miniapp-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .miniapp-card { background:linear-gradient(145deg,#171c27,#11151d); border:1px solid var(--line); border-radius:16px; padding:15px; box-shadow:0 12px 28px #0003; }
+    .miniapp-card .value { color:var(--amber); font-size:25px; font-weight:750; margin:5px 0 1px; }
+    .miniapp-card--wide { grid-column:1/-1; } .miniapp-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+    button { border:0; border-radius:10px; background:var(--amber); color:#17130b; cursor:pointer; font:600 13px inherit; padding:10px 13px; }
+    button.secondary { background:#263244; color:var(--text); } .error { color:#ff8d8d; }
+    @media (min-width:560px) { .miniapp-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+  </style>
 </head>
 <body>
-  <main id="app"><p>Загрузка приложения…</p></main>
+  <main id="app" class="miniapp-shell"><p>Загрузка приложения…</p></main>
   <script>
     const tg = window.Telegram && window.Telegram.WebApp;
     if (tg) tg.ready();
     const root = document.getElementById('app');
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
+    }
+    function renderDashboard(data) {
+      const s = data.stats || {};
+      root.innerHTML = `<div class="miniapp-head"><div><div class="eyebrow">KobraS1Bot</div><h1>Панель администратора</h1><p class="muted">${escapeHtml(data.user.first_name || 'Администратор')}</p></div><div class="eyebrow">ADMIN</div></div>
+        <section class="miniapp-grid">
+          <article class="miniapp-card"><div class="muted">Страницы вики</div><div class="value">${s.wiki_pages || 0}</div></article>
+          <article class="miniapp-card"><div class="muted">Ответы бота</div><div class="value">${s.total_answers || 0}</div></article>
+          <article class="miniapp-card"><div class="muted">Ручные ответы</div><div class="value">${s.manual_answers || 0}</div></article>
+          <article class="miniapp-card"><div class="muted">Вопросы без ответа</div><div class="value">${s.missed_questions || 0}</div></article>
+          <article class="miniapp-card miniapp-card--wide"><h2>Очередь разбора</h2><p class="muted">Вопросы, которым нужно добавить ручной ответ или улучшить поиск.</p><div class="miniapp-actions"><button onclick="loadMissed()">Открыть вопросы</button><button class="secondary" onclick="loadDashboard()">Обновить</button></div><div id="missed" class="muted" style="margin-top:12px"></div></article>
+        </section>`;
+    }
+    function loadDashboard() {
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/dashboard', {headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderDashboard(data); })
+        .catch((error) => { root.innerHTML = '<p class="error">' + escapeHtml(error.message) + '</p>'; });
+    }
+    function loadMissed() {
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/missed', {headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); const box = document.getElementById('missed'); box.innerHTML = data.items.length ? 'В очереди: <b>' + data.items.length + '</b>' : 'Очередь пуста.'; })
+        .catch((error) => { const box = document.getElementById('missed'); if (box) box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
     if (!tg || !tg.initData) {
       root.innerHTML = '<p>Откройте приложение через Telegram.</p>';
     } else {
@@ -44,13 +86,10 @@ def render_miniapp() -> bytes:
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Не удалось войти');
         sessionStorage.setItem('kobra_app_session', data.session);
-        root.innerHTML = '<h1>Панель администратора</h1><p>Сессия подтверждена.</p>';
+        loadDashboard();
       }).catch((error) => {
-        root.innerHTML = '<p>' + escapeHtml(error.message) + '</p>';
+        root.innerHTML = '<p class="error">' + escapeHtml(error.message) + '</p>';
       });
-    }
-    function escapeHtml(value) {
-      return String(value).replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
     }
   </script>
 </body>

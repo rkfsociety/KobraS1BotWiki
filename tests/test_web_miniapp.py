@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 import pytest
 from telegram.constants import ChatMemberStatus
 
+from app.web_miniapp import render_miniapp
 from app.web_panel import start_web_panel
 
 
@@ -96,6 +97,17 @@ def test_miniapp_page_is_public_and_contains_telegram_sdk(mini_panel):
 
     assert response.status == 200
     assert "telegram-web-app.js" in body
+
+
+def test_miniapp_shell_has_mobile_admin_dashboard_sections():
+    body = render_miniapp().decode()
+
+    assert "miniapp-shell" in body
+    assert "Вопросы без ответа" in body
+    assert "Страницы вики" in body
+    assert "Ответы бота" in body
+    assert "miniapp-card" in body
+    assert "env_safe" not in body
 
 
 def test_admin_session_and_dashboard_are_available(mini_panel):

@@ -20,7 +20,6 @@ import hmac
 import html
 import json
 import logging
-import os
 import secrets
 import threading
 import time
@@ -1187,7 +1186,7 @@ def _admin_activity_panels(bot_data: dict[str, Any]) -> str:
             f"{head}"
             '<th class=right>Σ</th></tr>'
             + "".join(rows)
-            + f"</table></div>"
+            + "</table></div>"
         )
     else:
         summary_table = (
