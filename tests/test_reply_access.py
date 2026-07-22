@@ -1,7 +1,13 @@
 """Проверка allowlist чатов/тем (reply_access)."""
 from __future__ import annotations
 
-from app.bot.reply_access import chat_topic_in_allowed_lists
+from app.bot.reply_access import can_bot_reply_in_context, chat_topic_in_allowed_lists
+
+
+def test_collect_only_context_cannot_send_reply():
+    assert not can_bot_reply_in_context(answer_context=False, bot_can_send=True)
+    assert not can_bot_reply_in_context(answer_context=True, bot_can_send=False)
+    assert can_bot_reply_in_context(answer_context=True, bot_can_send=True)
 
 
 def test_no_lists_allows_everywhere():

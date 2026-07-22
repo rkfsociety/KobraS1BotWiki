@@ -182,7 +182,7 @@ def record_incoming_activity(
     username: str | None = None,
     first_name: str | None = None,
 ) -> None:
-    """Учитывает входящее сообщение в разрешённом чате (для гистограммы по часам)."""
+    """Учитывает каждое входящее сообщение, которое Telegram доставил боту."""
     stats: dict[str, Any] = bot_data.setdefault(_STATS_KEY, _empty_stats())
     now = time.time()
     hour = time.localtime(now).tm_hour

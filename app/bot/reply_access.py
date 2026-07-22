@@ -16,6 +16,11 @@ _CACHE_KEY = "reply_access_cache"
 _DEFAULT_CACHE_TTL = 300.0
 
 
+def can_bot_reply_in_context(*, answer_context: bool, bot_can_send: bool) -> bool:
+    """Разрешает исходящий ответ только в настроенном контексте с правом отправки."""
+    return answer_context and bot_can_send
+
+
 def chat_topic_in_allowed_lists(
     *,
     allowed_chat_ids: frozenset[int] | None,

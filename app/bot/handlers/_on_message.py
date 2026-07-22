@@ -26,7 +26,7 @@ from app.bot.error_display import _format_error_code_info_ru
 from app.bot.i18n import _detect_user_lang, _t, format_wiki_card
 from app.bot.missed_questions import add_missed_question
 from app.bot.ops_notify import notify_ops
-from app.bot.reply_access import chat_topic_in_allowed_lists, should_process_incoming_wiki_message
+from app.bot.reply_access import can_bot_reply_in_context, chat_topic_in_allowed_lists, should_process_incoming_wiki_message
 from app.bot.reply_logging import add_to_recent_replies, log_bot_reply_for_message
 from app.bot.review_mention import reply_for_user
 from app.bot.stores import _record_bot_answer_context
@@ -165,16 +165,25 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     msg = update.effective_message
     topic_id = msg.message_thread_id
 
-    ok, _reason = await should_process_incoming_wiki_message(
-        context,
-        settings,
-        update.effective_chat,
-        chat_id,
-        topic_id,
+    answer_context = chat_topic_in_allowed_lists(
+        allowed_chat_ids=settings.allowed_chat_ids,
+        allowed_topic_ids=settings.allowed_topic_ids,
+        chat_id=chat_id,
+        topic_id=topic_id,
     )
-
-    if not ok:
-        return
+    bot_can_send = False
+    if answer_context:
+        bot_can_send, _reason = await should_process_incoming_wiki_message(
+            context,
+            settings,
+            update.effective_chat,
+            chat_id,
+            topic_id,
+        )
+    can_reply = can_bot_reply_in_context(
+        answer_context=answer_context,
+        bot_can_send=bot_can_send,
+    )
 
     # Активность чата: все входящие в allowed-чатах/топиках (не только ответы бота).
     try:
@@ -247,7 +256,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
 
     # В группах: на вопросы отвечаем без @; @ или reply нужны для прочих сообщений (если REQUIRE_TRIGGER).
-    if settings.require_trigger:
+    if can_reply and settings.require_trigger:
         bot_username = context.application.bot_data.get("bot_username")
         bot_id = context.application.bot_data.get("bot_id")
         triggered = _is_triggered_message(update, bot_username=bot_username, bot_id=bot_id) or _reply_is_expected_by_bot(
@@ -282,6 +291,13 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if settings.questions_only and not index.looks_like_question(text):
         if settings.log_decisions:
             log_skip(chat_id, "not_a_question", msg=msg)
+        return
+
+    # Вне настроенного контекста отвечать нельзя, но вопрос сохраняем в общей очереди.
+    if not can_reply:
+        add_missed_question(text=text, score=None, best_url=None, chat_id=chat_id)
+        if settings.log_decisions:
+            log_skip(chat_id, "collect_only", msg=msg)
         return
 
     # Короткий "help" без контекста — просим уточнить, вместо бессмысленного поиска.
