@@ -55,6 +55,7 @@ Thumbs.db
 
 # Bot / indexer runtime
 .cache/
+data/chat.sqlite3*
 
 # Локальные cmd-обёртки воркера (не часть деплоя бота)
 start-agent-worker.cmd
