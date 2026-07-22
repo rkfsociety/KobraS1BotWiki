@@ -92,6 +92,15 @@ from app.web_miniapp import (
 
 log = logging.getLogger(__name__)
 
+_MAX_FORM_BODY_BYTES = 32 * 1024
+
+
+class _FormReadError(ValueError):
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
+        self.message = message
+
 _COOKIE_NAME = "panel_session"
 
 
@@ -1587,8 +1596,21 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             return token, state.get_session(token)
 
         def _read_form(self) -> dict[str, str]:
-            length = int(self.headers.get("Content-Length") or 0)
-            raw = self.rfile.read(length).decode("utf-8") if length else ""
+            content_length = self.headers.get("Content-Length")
+            if content_length is None:
+                return {}
+            try:
+                length = int(content_length)
+            except ValueError as exc:
+                raise _FormReadError(400, "Некорректный Content-Length.") from exc
+            if length < 0:
+                raise _FormReadError(400, "Некорректный Content-Length.")
+            if length > _MAX_FORM_BODY_BYTES:
+                raise _FormReadError(413, "Размер формы превышает допустимый лимит.")
+            try:
+                raw = self.rfile.read(length).decode("utf-8") if length else ""
+            except UnicodeDecodeError as exc:
+                raise _FormReadError(400, "Тело формы должно быть в UTF-8.") from exc
             data = parse_qs(raw, keep_blank_values=True)
             return {k: (v[0] if v else "") for k, v in data.items()}
 
@@ -1765,12 +1787,20 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             path = parsed.path.rstrip("/") or "/"
 
             if path == "/api/app/session":
-                form = self._read_form()
+                try:
+                    form = self._read_form()
+                except _FormReadError as exc:
+                    self._send_json({"error": exc.message}, status=exc.status)
+                    return
                 status, payload = create_miniapp_session(state, form.get("init_data", ""))
                 self._send_json(payload, status=status)
                 return
             if path == "/api/app/question":
-                form = self._read_form()
+                try:
+                    form = self._read_form()
+                except _FormReadError as exc:
+                    self._send_json({"error": exc.message}, status=exc.status)
+                    return
                 status, payload = question_payload(
                     state,
                     self.headers.get("Authorization", ""),
@@ -1779,7 +1809,11 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 self._send_json(payload, status=status)
                 return
             if path == "/api/app/chat/message":
-                form = self._read_form()
+                try:
+                    form = self._read_form()
+                except _FormReadError as exc:
+                    self._send_json({"error": exc.message}, status=exc.status)
+                    return
                 status, payload = chat_message_payload(
                     state,
                     self.headers.get("Authorization", ""),

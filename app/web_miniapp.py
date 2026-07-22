@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import json
 import secrets
+import sqlite3
 import time
 from typing import Any
 
@@ -93,17 +94,17 @@ def render_miniapp() -> bytes:
       const adminButton = currentSessionRole === 'admin' ? '<button class="secondary" onclick="setAdminMode()">Режим админа</button>' : '';
       root.innerHTML = `<div class="miniapp-head"><div><div class="eyebrow">KobraS1Bot</div><h1>Режим пользователя</h1><p class="muted">Задайте вопрос боту.</p></div>${adminButton}</div>
         <section class="miniapp-grid"><article class="miniapp-card miniapp-card--wide chat-card">
-          <div id="chat-history" aria-live="polite"></div>
           <div id="chat-pagination"></div>
+          <div id="chat-history" aria-live="polite"></div>
           <div id="chat-status" class="chat-status muted" aria-live="polite"></div>
           <form onsubmit="sendChatMessage(event)" class="chat-form"><textarea id="chat-input" aria-label="Вопрос боту" placeholder="Например: как выставить первый слой?"></textarea><button id="chat-send" type="submit">Отправить</button></form>
         </article></section>`;
       loadChatHistory();
     }
 
-    function appendChatMessage(message, prepend = false) {
+    function appendChatMessage(message, prepend = false, force = false) {
       const history = document.getElementById('chat-history');
-      if (!history || message.id != null && chatMessageIds.has(message.id)) return;
+      if (!history || (!force && message.id != null && chatMessageIds.has(message.id))) return;
       if (message.id != null) chatMessageIds.add(message.id);
       const item = document.createElement('div');
       item.className = 'chat-message chat-message--' + (message.role === 'user' ? 'user' : 'bot');
@@ -166,7 +167,7 @@ def render_miniapp() -> bytes:
       input.disabled = true; button.disabled = true; button.textContent = 'Ищу ответ…'; status.textContent = '';
       const token = sessionStorage.getItem('kobra_app_session');
       fetch('/api/app/chat/message', {method:'POST', headers:{Authorization:'Bearer ' + token, 'Content-Type':'application/x-www-form-urlencoded'}, body:new URLSearchParams({text})})
-        .then(async (response) => { const data = await response.json(); if (data.messages) data.messages.forEach((message) => appendChatMessage(message)); if (!response.ok) { const wait = data.retry_after != null ? ` Повторите через ${data.retry_after} с.` : ''; throw new Error((data.error || 'Ошибка отправки') + wait); } input.value = ''; })
+        .then(async (response) => { const data = await response.json(); if (data.messages) data.messages.forEach((message) => appendChatMessage(message, false, data.duplicate === true && message.role === 'bot')); if (!response.ok) { const wait = data.retry_after != null ? ` Повторите через ${data.retry_after} с.` : ''; throw new Error((data.error || 'Ошибка отправки') + wait); } input.value = ''; })
         .catch((error) => { status.textContent = error.message; })
         .finally(() => { input.disabled = false; button.disabled = false; button.textContent = 'Отправить'; input.focus(); const history = document.getElementById('chat-history'); if (history) history.scrollTop = history.scrollHeight; });
     }
@@ -354,9 +355,9 @@ def dashboard_payload(state: Any, authorization: str) -> tuple[int, dict[str, An
 
 
 def search_payload(state: Any, authorization: str, query: str) -> tuple[int, dict[str, Any]]:
-    session = _get_session(state, authorization)
-    if session is None:
-        return 401, {"error": "Сессия Mini App отсутствует или истекла."}
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        return error
     query = query.strip()
     if not 2 <= len(query) <= 500:
         return 400, {"error": "Введите запрос длиной от 2 до 500 символов."}
@@ -375,9 +376,9 @@ def search_payload(state: Any, authorization: str, query: str) -> tuple[int, dic
 
 def question_payload(state: Any, authorization: str, text: str) -> tuple[int, dict[str, Any]]:
     """Обработать вопрос в предпросмотре пользовательского режима."""
-    session = _get_session(state, authorization)
-    if session is None:
-        return 401, {"error": "Сессия Mini App отсутствует или истекла."}
+    _session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        return error
     text = text.strip()
     if not 2 <= len(text) <= 2000:
         return 400, {"error": "Вопрос должен содержать от 2 до 2000 символов."}
@@ -464,11 +465,20 @@ def chat_history_payload(
     }
 
 
-def _chat_pair_payload(session: dict[str, Any], user_message: Any, bot_message: Any) -> dict[str, Any]:
+def _chat_pair_payload(
+    session: dict[str, Any],
+    user_message: Any,
+    bot_message: Any,
+    *,
+    duplicate: bool,
+    rate_limit: dict[str, int],
+) -> dict[str, Any]:
     return {
         "role": session["role"],
         "user": session["user"],
         "messages": [_chat_message_payload(user_message), _chat_message_payload(bot_message)],
+        "duplicate": duplicate,
+        "rate_limit": rate_limit,
     }
 
 
@@ -485,68 +495,83 @@ def chat_message_payload(state: Any, authorization: str, text: str) -> tuple[int
         return 503, {"error": "История чата временно недоступна."}
 
     user_id = int(session["user"]["id"])
-    duplicate = store.find_recent_duplicate(user_id, text)
+    try:
+        duplicate = store.find_recent_duplicate(user_id, text)
+    except sqlite3.Error:
+        return 500, {"error": "Не удалось прочитать историю чата."}
     if duplicate is not None:
-        return 200, _chat_pair_payload(session, *duplicate)
+        try:
+            user_message = store.add_message(user_id, "user", text, "miniapp")
+            rate_limit = store.rate_limit_remaining(user_id)
+        except sqlite3.Error:
+            return 500, {"error": "Не удалось сохранить историю чата."}
+        return 200, _chat_pair_payload(
+            session, user_message, duplicate[1], duplicate=True, rate_limit=rate_limit
+        )
 
-    allowed, retry_after = store.allow_request(user_id)
+    try:
+        allowed, retry_after = store.allow_request(user_id)
+    except sqlite3.Error:
+        return 500, {"error": "Не удалось сохранить историю чата."}
     if not allowed:
         return 429, {"error": "Слишком много сообщений. Повторите позже.", "retry_after": retry_after}
 
-    user_message = store.add_message(user_id, "user", text, "miniapp")
     bot_data = state.application.bot_data if state.application else {}
     manual = find_manual_qa_answer(bot_data.get("manual_qa_entries") or [], text)
     if manual is not None:
         answer, _ = manual
-        bot_message = store.add_message(user_id, "bot", answer, "manual", reply_to_id=user_message.id)
-        store.prune_user_history(user_id, keep=500)
-        return 200, _chat_pair_payload(session, user_message, bot_message)
+    else:
+        try:
+            index = bot_data.get("wiki_index")
+            matches = index.search(text, top_k=1) if index is not None else []
+        except Exception:
+            answer = "Поиск по вики временно недоступен. Попробуйте повторить вопрос позже."
+            source = "error"
+            url = None
+            status = 503
+        else:
+            if matches:
+                doc, score = matches[0]
+                title = str(getattr(doc, "title", ""))
+                if int(score) >= int(getattr(state.settings, "min_score", 72)):
+                    answer = f"Нашёл подходящую страницу: «{title}»." if title else "Нашёл подходящую страницу вики."
+                    source = "wiki"
+                    url = str(getattr(doc, "url", "")) or None
+                    status = 200
+                else:
+                    best_url = str(getattr(doc, "url", "")) or None
+                    best_score = int(score)
+            else:
+                best_url = None
+                best_score = None
+            if not matches or int(matches[0][1]) < int(getattr(state.settings, "min_score", 72)):
+                answer = "Пока я не могу ответить на этот вопрос. Попробуйте задать его в чате группы или повторить позже."
+                source = "missing"
+                url = None
+                status = 200
+
+    if manual is not None:
+        source = "manual"
+        url = None
+        status = 200
 
     try:
-        index = bot_data.get("wiki_index")
-        matches = index.search(text, top_k=1) if index is not None else []
-    except Exception:
-        bot_message = store.add_message(
-            user_id,
-            "bot",
-            "Поиск по вики временно недоступен. Попробуйте повторить вопрос позже.",
-            "error",
-            reply_to_id=user_message.id,
-        )
+        user_message, bot_message = store.add_exchange(user_id, text, answer, source, url)
         store.prune_user_history(user_id, keep=500)
-        return 503, _chat_pair_payload(session, user_message, bot_message)
+        rate_limit = store.rate_limit_remaining(user_id)
+    except sqlite3.Error:
+        return 500, {"error": "Не удалось сохранить историю чата."}
 
-    if matches:
-        doc, score = matches[0]
-        title = str(getattr(doc, "title", ""))
-        if int(score) >= int(getattr(state.settings, "min_score", 72)):
-            answer = f"Нашёл подходящую страницу: «{title}»." if title else "Нашёл подходящую страницу вики."
-            bot_message = store.add_message(
-                user_id, "bot", answer, "wiki", reply_to_id=user_message.id, url=str(getattr(doc, "url", "")) or None
-            )
-            store.prune_user_history(user_id, keep=500)
-            return 200, _chat_pair_payload(session, user_message, bot_message)
-        best_url = str(getattr(doc, "url", "")) or None
-        best_score = int(score)
-    else:
-        best_url = None
-        best_score = None
-
-    add_missed_question(
-        text=text,
-        score=best_score,
-        best_url=best_url,
-        chat_id=getattr(state.settings, "panel_admin_chat_id", None),
+    if source == "missing":
+        add_missed_question(
+            text=text,
+            score=best_score,
+            best_url=best_url,
+            chat_id=getattr(state.settings, "panel_admin_chat_id", None),
+        )
+    return status, _chat_pair_payload(
+        session, user_message, bot_message, duplicate=False, rate_limit=rate_limit
     )
-    bot_message = store.add_message(
-        user_id,
-        "bot",
-        "Пока я не могу ответить на этот вопрос. Попробуйте задать его в чате группы или повторить позже.",
-        "missing",
-        reply_to_id=user_message.id,
-    )
-    store.prune_user_history(user_id, keep=500)
-    return 200, _chat_pair_payload(session, user_message, bot_message)
 
 
 def missed_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:

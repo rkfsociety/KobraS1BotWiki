@@ -2,6 +2,8 @@ import sqlite3
 import threading
 from pathlib import Path
 
+import pytest
+
 from app.bot.chat_store import ChatMessage, ChatStore
 
 
@@ -130,6 +132,28 @@ def test_find_recent_duplicate_returns_matching_user_question_and_bot_reply(tmp_
         assert store.find_recent_duplicate(1, "same", now=question.created_at + 1) == (question, answer)
         assert store.find_recent_duplicate(2, "same", now=question.created_at + 1) is None
         assert store.find_recent_duplicate(1, "same", now=question.created_at + 11) is None
+    finally:
+        store.close()
+
+
+def test_add_exchange_rolls_back_user_message_when_bot_insert_fails(tmp_path: Path) -> None:
+    store = ChatStore(tmp_path / "chat.sqlite3")
+    try:
+        store._connection.execute(
+            """
+            CREATE TRIGGER reject_bot_message
+            BEFORE INSERT ON chat_messages
+            WHEN NEW.role = 'bot'
+            BEGIN
+                SELECT RAISE(ABORT, 'bot insert failed');
+            END;
+            """
+        )
+
+        with pytest.raises(sqlite3.IntegrityError, match="bot insert failed"):
+            store.add_exchange(1, "question", "answer", "wiki")
+
+        assert store.list_messages(1) == []
     finally:
         store.close()
 

@@ -10,8 +10,8 @@ from telegram.constants import ChatMemberStatus
 log = logging.getLogger(__name__)
 
 
-async def _get_group_member_status(application: Any, user_id: int) -> str | None:
-    """Возвращает статус участника из настроенной группы или ``None`` при ошибке."""
+async def _get_group_member(application: Any, user_id: int) -> Any | None:
+    """Возвращает объект участника из настроенной группы или ``None`` при ошибке."""
     bot_data = getattr(application, "bot_data", None) or {}
     settings = bot_data.get("settings")
     chat_id = getattr(settings, "panel_admin_chat_id", None)
@@ -35,23 +35,30 @@ async def _get_group_member_status(application: Any, user_id: int) -> str | None
             )
             return None
 
-    return member.status
+    return member
 
 
 async def is_group_member(application: Any, user_id: int) -> bool:
     """Возвращает True для любого участника, которому доступен Mini App."""
-    status = await _get_group_member_status(application, user_id)
+    member = await _get_group_member(application, user_id)
+    if member is None:
+        return False
+    status = member.status
+    if status == ChatMemberStatus.RESTRICTED:
+        return getattr(member, "is_member", None) is not False
     return status in {
         ChatMemberStatus.OWNER,
         ChatMemberStatus.ADMINISTRATOR,
         ChatMemberStatus.MEMBER,
-        ChatMemberStatus.RESTRICTED,
     }
 
 
 async def is_group_admin(application: Any, user_id: int) -> bool:
     """Возвращает True только для creator/administrator настроенной группы."""
-    status = await _get_group_member_status(application, user_id)
+    member = await _get_group_member(application, user_id)
+    if member is None:
+        return False
+    status = member.status
 
     return status in {
         ChatMemberStatus.OWNER,

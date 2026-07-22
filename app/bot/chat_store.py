@@ -90,6 +90,58 @@ class ChatStore:
             ).fetchone()
         return self._message_from_row(row)
 
+    def add_exchange(
+        self,
+        user_id: int,
+        user_text: str,
+        bot_text: str,
+        bot_source: str,
+        bot_url: str | None = None,
+    ) -> tuple[ChatMessage, ChatMessage]:
+        """Сохраняет вопрос и ответ как одну неделимую пару сообщений."""
+        created_at = time.time()
+        with self._lock:
+            self._connection.execute("BEGIN IMMEDIATE")
+            try:
+                user_cursor = self._connection.execute(
+                    """
+                    INSERT INTO chat_messages (user_id, role, text, source, created_at, reply_to_id, url)
+                    VALUES (?, 'user', ?, 'miniapp', ?, NULL, NULL)
+                    """,
+                    (user_id, user_text, created_at),
+                )
+                user_message = ChatMessage(
+                    id=int(user_cursor.lastrowid),
+                    user_id=user_id,
+                    role="user",
+                    text=user_text,
+                    source="miniapp",
+                    created_at=created_at,
+                    reply_to_id=None,
+                )
+                bot_cursor = self._connection.execute(
+                    """
+                    INSERT INTO chat_messages (user_id, role, text, source, created_at, reply_to_id, url)
+                    VALUES (?, 'bot', ?, ?, ?, ?, ?)
+                    """,
+                    (user_id, bot_text, bot_source, created_at, user_message.id, bot_url),
+                )
+                bot_message = ChatMessage(
+                    id=int(bot_cursor.lastrowid),
+                    user_id=user_id,
+                    role="bot",
+                    text=bot_text,
+                    source=bot_source,
+                    created_at=created_at,
+                    reply_to_id=user_message.id,
+                    url=bot_url,
+                )
+                self._connection.commit()
+            except sqlite3.Error:
+                self._connection.rollback()
+                raise
+        return user_message, bot_message
+
     def list_messages(
         self, user_id: int, limit: int = 50, before_id: int | None = None
     ) -> list[ChatMessage]:
@@ -166,6 +218,12 @@ class ChatStore:
                 """
                 SELECT * FROM chat_messages
                 WHERE user_id = ? AND role = 'user' AND text = ? AND created_at >= ? AND created_at <= ?
+                AND EXISTS (
+                    SELECT 1 FROM chat_messages AS answers
+                    WHERE answers.user_id = chat_messages.user_id
+                      AND answers.role = 'bot'
+                      AND answers.reply_to_id = chat_messages.id
+                )
                 ORDER BY id DESC LIMIT 1
                 """,
                 (user_id, text, now - 10, now),
@@ -183,6 +241,27 @@ class ChatStore:
         if answer_row is None:
             return None
         return self._message_from_row(question_row), self._message_from_row(answer_row)
+
+    def rate_limit_remaining(self, user_id: int, now: float | None = None) -> dict[str, int]:
+        """Возвращает текущий остаток короткого и оконного лимитов."""
+        now = time.time() if now is None else now
+        with self._lock:
+            latest = self._connection.execute(
+                """
+                SELECT created_at FROM rate_limit_events
+                WHERE user_id = ? ORDER BY created_at DESC LIMIT 1
+                """,
+                (user_id,),
+            ).fetchone()
+            count = self._connection.execute(
+                """
+                SELECT COUNT(*) FROM rate_limit_events
+                WHERE user_id = ? AND created_at > ?
+                """,
+                (user_id, now - 600),
+            ).fetchone()[0]
+        short_remaining = 0 if latest is None else max(0, math.ceil(3 - (now - latest[0])))
+        return {"short_remaining": short_remaining, "window_remaining": max(0, 20 - int(count))}
 
     def prune_user_history(self, user_id: int, keep: int = 500) -> None:
         keep = max(0, keep)

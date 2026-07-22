@@ -149,6 +149,8 @@ def test_miniapp_shell_has_mobile_admin_dashboard_sections():
     assert "appendChatMessage" in body
     assert 'id="chat-input"' in body
     assert 'id="chat-pagination"' in body
+    assert body.index('id="chat-pagination"') < body.index('id="chat-history"')
+    assert 'id="chat-status"' in body
     assert "history.insertBefore(loadMore" not in body
     assert 'aria-label="Вопрос боту"' in body
     assert "Загрузить предыдущие сообщения" in body
@@ -193,6 +195,30 @@ def test_miniapp_group_member_gets_user_session_and_admin_dashboard_is_forbidden
 
     assert dashboard.status == 403
     dashboard.read()
+
+
+def test_miniapp_user_session_is_forbidden_from_legacy_admin_endpoints(mini_panel):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.MEMBER
+    session = _create_session(port)
+    headers = {"Authorization": f"Bearer {session}"}
+    c = _conn(port)
+    c.request("GET", "/api/app/search?q=%D1%81%D0%BB%D0%BE%D0%B9", headers=headers)
+    search = c.getresponse()
+    search.read()
+    c.close()
+    c = _conn(port)
+    c.request(
+        "POST",
+        "/api/app/question",
+        urlencode({"text": "как настроить первый слой"}),
+        {"Content-Type": "application/x-www-form-urlencoded", **headers},
+    )
+    question = c.getresponse()
+    question.read()
+
+    assert search.status == 403
+    assert question.status == 403
 
 
 def test_miniapp_rejects_user_outside_group(mini_panel):
@@ -355,6 +381,7 @@ def test_chat_message_returns_manual_answer_for_group_member(mini_panel):
     assert [message["role"] for message in payload["messages"]] == ["user", "bot"]
     assert payload["messages"][1]["source"] == "manual"
     assert payload["messages"][1]["text"] == "Прочистите сопло."
+    assert payload["rate_limit"] == {"short_remaining": 3, "window_remaining": 19}
 
 
 def test_chat_message_returns_wiki_answer_for_group_member(mini_panel):
@@ -499,11 +526,59 @@ def test_chat_message_duplicate_reuses_pair_without_search_or_extra_rate_event(m
 
     assert first.status == 200
     assert duplicate.status == 200
-    assert [message["id"] for message in duplicate_payload["messages"]] == [
-        message["id"] for message in first_payload["messages"]
-    ]
+    assert duplicate_payload["duplicate"] is True
+    assert duplicate_payload["messages"][0]["id"] != first_payload["messages"][0]["id"]
+    assert duplicate_payload["messages"][1]["id"] == first_payload["messages"][1]["id"]
     assert search_calls["count"] == 1
     assert rate_events == 1
+    with sqlite3.connect(status_box["chat_store_path"]) as connection:
+        user_messages = connection.execute(
+            "SELECT COUNT(*) FROM chat_messages WHERE user_id = ? AND role = 'user'", (350,)
+        ).fetchone()[0]
+        bot_messages = connection.execute(
+            "SELECT COUNT(*) FROM chat_messages WHERE user_id = ? AND role = 'bot'", (350,)
+        ).fetchone()[0]
+    assert user_messages == 2
+    assert bot_messages == 1
+
+
+def test_chat_message_returns_json_when_exchange_storage_fails(mini_panel, monkeypatch):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.MEMBER
+
+    def fail_exchange(*_args, **_kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(ChatStore, "add_exchange", fail_exchange, raising=False)
+    session = _create_session(port, user_id=355)
+    c = _conn(port)
+    c.request(
+        "POST",
+        "/api/app/chat/message",
+        urlencode({"text": "как настроить первый слой"}),
+        {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {session}"},
+    )
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 500
+    assert "истор" in payload["error"].lower()
+
+
+@pytest.mark.parametrize("path", ["/api/app/session", "/api/app/question", "/api/app/chat/message"])
+def test_miniapp_public_posts_reject_excessive_content_length(mini_panel, path):
+    c = _conn(mini_panel[0])
+    c.request(
+        "POST",
+        path,
+        "init_data=x",
+        {"Content-Type": "application/x-www-form-urlencoded", "Content-Length": str(32 * 1024 + 1)},
+    )
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 413
+    assert "размер" in payload["error"].lower()
 
 
 def test_chat_message_search_error_is_stored_with_error_source(mini_panel):
