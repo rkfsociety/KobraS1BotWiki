@@ -19,7 +19,7 @@ import threading
 import time
 from typing import Any
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.constants import ChatMemberStatus
 from telegram.ext import ContextTypes
 
@@ -106,7 +106,16 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     args = context.args or []
     settings = context.application.bot_data.get("settings")
     if not args:
-        await msg.reply_text("Привет! Я бот-помощник по вики. Задавайте вопросы в группе — постараюсь подсказать.")
+        webapp_url = str(getattr(settings, "panel_webapp_url", "") or "").strip()
+        keyboard = None
+        if webapp_url.startswith("https://"):
+            keyboard = InlineKeyboardMarkup(
+                [[InlineKeyboardButton("Открыть приложение", web_app=WebAppInfo(webapp_url))]]
+            )
+        await msg.reply_text(
+            "Привет! Я бот-помощник по вики. Задавайте вопросы в группе — постараюсь подсказать.",
+            reply_markup=keyboard,
+        )
         return
 
     payload = (args[0] or "").strip()

@@ -240,6 +240,9 @@ class Settings:
     #: Группа, чьи админы могут войти в панель (PANEL_ADMIN_CHAT_ID). None = TG-вход выключен.
     panel_admin_chat_id: int | None
 
+    #: HTTPS-адрес Telegram Mini App (PANEL_WEBAPP_URL).
+    panel_webapp_url: str
+
 
 
 
@@ -485,6 +488,7 @@ def load_settings() -> Settings:
     panel_enabled = _get_bool("PANEL_ENABLED", bool(panel_password))
     panel_host = (os.getenv("PANEL_HOST") or "0.0.0.0").strip() or "0.0.0.0"
     panel_port = _get_int("PANEL_PORT", 8080)
+    panel_webapp_url = (os.getenv("PANEL_WEBAPP_URL") or "").strip().rstrip("/")
     panel_username = (os.getenv("PANEL_USERNAME") or "admin").strip() or "admin"
     panel_session_ttl_seconds = max(60, _get_int("PANEL_SESSION_TTL_SECONDS", 86400))
     panel_tg_login = _get_bool("PANEL_TG_LOGIN", True)
@@ -663,6 +667,8 @@ def load_settings() -> Settings:
         panel_tg_login=panel_tg_login,
 
         panel_admin_chat_id=panel_admin_chat_id,
+
+        panel_webapp_url=panel_webapp_url,
 
     )
 
