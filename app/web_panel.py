@@ -975,24 +975,6 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
         + stat(total_answers, "всего ответов бота")
         + stat(_fmt_uptime(time.time() - state.start_time), "аптайм панели")
     )
-    st = state.settings
-    _CFG_DESCRIPTIONS: list[tuple[str, Any, str]] = [
-        ("MIN_SCORE",          getattr(st, "min_score", ""),          "Минимальный порог совпадения (0–100). Чем выше — тем реже бот отвечает, но точнее. Если бот молчит на очевидные вопросы — снизьте; если отвечает невпопад — повысьте."),
-        ("CLARIFY_MIN_SCORE",  getattr(st, "clarify_min_score", ""),  "Порог для уточняющего вопроса о модели принтера. Если score найденной страницы выше этого значения, но ниже MIN_SCORE — бот спросит «какая у вас модель?» вместо молчания."),
-        ("QUESTIONS_ONLY",     getattr(st, "questions_only", ""),     "Отвечать только на сообщения, похожие на вопрос (есть вопросительные слова, знак «?» и т.п.). При True бот игнорирует утверждения и комментарии."),
-        ("REQUIRE_TRIGGER",    getattr(st, "require_trigger", ""),    "Отвечать только при явном обращении к боту: @упоминание или reply на сообщение бота. При False бот реагирует на все вопросы в разрешённых чатах автоматически."),
-        ("LOG_DECISIONS",      getattr(st, "log_decisions", ""),      "Записывать в bot.log почему бот ответил или промолчал (cooldown, low_score, not_a_question и т.д.). Полезно при отладке, но увеличивает размер лога."),
-        ("MANUAL_QA_GIT_PUSH", getattr(st, "manual_qa_git_push", ""), "Автоматически коммитить и пушить data/manual_qa.json в GitHub после каждого добавления/удаления ручного ответа через панель или команды бота."),
-        ("PID",                os.getpid(),                           "ID процесса бота в системе. Используется для диагностики и управления процессом (kill, systemctl и т.д.)."),
-    ]
-    cfg_rows = "".join(
-        f"<tr>"
-        f"<td style='min-width:180px'><span style='font-size:13px;color:#e6e6e6'>{html.escape(k)}</span>"
-        f"<br><span class=muted style='font-size:12px'>{html.escape(desc)}</span></td>"
-        f"<td style='white-space:nowrap'><code>{html.escape(str(v))}</code></td>"
-        f"</tr>"
-        for k, v, desc in _CFG_DESCRIPTIONS
-    )
     recent_section = _recent_replies_section(state, csrf, page=replies_page) if csrf else ""
     bad_section = _bad_answers_section(state, csrf) if csrf else ""
     missed_section = _missed_questions_section(csrf) if csrf else ""
@@ -1006,10 +988,6 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
         f"{recent_section}"
         f"{bad_section}"
         f"{missed_section}"
-        '<div class="card kv"><h2>Конфигурация (только просмотр)</h2>'
-        f"<table>{cfg_rows}</table>"
-        '<p class="muted">Параметры задаются через переменные окружения / .env и применяются при запуске.</p>'
-        "</div>"
     )
     return _layout(state, body, title="Дашборд", flash=flash, csrf=csrf)
 

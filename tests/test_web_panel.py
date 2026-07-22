@@ -130,6 +130,7 @@ def test_dashboard_after_login(panel):
     body = r.read()
     assert r.status == 200
     assert b"42" in body  # счётчик страниц вики
+    assert "Конфигурация (только просмотр)".encode() not in body
 
 
 def test_dashboard_activity_layout_is_responsive_without_horizontal_scrollbar():
