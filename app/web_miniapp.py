@@ -8,7 +8,7 @@ import secrets
 import time
 from typing import Any
 
-from app.bot.miniapp_access import is_group_admin
+from app.bot.miniapp_access import is_group_admin, is_group_member
 from app.bot.miniapp_auth import MiniAppAuthError, validate_init_data
 from app.bot.manual_qa import add_manual_qa_entry, find_manual_qa_answer, load_manual_qa_store
 from app.bot.missed_questions import add_missed_question, delete_missed_question_by_text, load_missed_questions
@@ -163,7 +163,7 @@ def _session_store(state: Any) -> dict[str, dict[str, Any]]:
 
 
 def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, Any]]:
-    """Проверяет Telegram initData и создаёт короткую админскую сессию."""
+    """Проверяет Telegram initData и создаёт короткую сессию участника группы."""
     try:
         verified = validate_init_data(
             init_data,
@@ -179,8 +179,12 @@ def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, A
     if application is None:
         return 503, {"error": "Бот ещё не готов."}
     application.bot_data.setdefault("settings", state.settings)
-    if not _check_group_admin(application, user_id):
-        return 403, {"error": "Доступ только для администраторов группы."}
+    if _check_group_admin(application, user_id):
+        role = "admin"
+    elif _check_group_member(application, user_id):
+        role = "user"
+    else:
+        return 403, {"error": "Доступ доступен только участникам группы."}
 
     token = secrets.token_urlsafe(32)
     ttl = min(max(300, int(getattr(state.settings, "panel_session_ttl_seconds", 1800))), 3600)
@@ -190,22 +194,32 @@ def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, A
         for old_token, session in list(sessions.items()):
             if float(session.get("exp", 0)) <= now:
                 sessions.pop(old_token, None)
-        sessions[token] = {"exp": now + ttl, "user": user, "role": "admin"}
-    return 200, {"session": token, "user": user, "role": "admin", "capabilities": {"admin": True}}
+        sessions[token] = {"exp": now + ttl, "user": user, "role": role}
+    return 200, {"session": token, "user": user, "role": role, "capabilities": {"admin": role == "admin"}}
 
 
 def _check_group_admin(application: Any, user_id: int) -> bool:
     """Запускает Telegram-проверку в основном loop PTB, а не в HTTP-потоке."""
+    return _run_group_access_check(application, user_id, is_group_admin)
+
+
+def _check_group_member(application: Any, user_id: int) -> bool:
+    """Проверяет членство в основном loop PTB, а не в HTTP-потоке."""
+    return _run_group_access_check(application, user_id, is_group_member)
+
+
+def _run_group_access_check(application: Any, user_id: int, check: Any) -> bool:
+    """Выполняет coroutine проверки статуса через основной loop приложения."""
     main_loop = (getattr(application, "bot_data", None) or {}).get("main_loop")
     if main_loop is not None and main_loop.is_running():
-        future = asyncio.run_coroutine_threadsafe(is_group_admin(application, user_id), main_loop)
+        future = asyncio.run_coroutine_threadsafe(check(application, user_id), main_loop)
         try:
             return bool(future.result(timeout=15))
         except Exception:
             future.cancel()
             return False
     try:
-        return bool(asyncio.run(is_group_admin(application, user_id)))
+        return bool(asyncio.run(check(application, user_id)))
     except Exception:
         return False
 
@@ -224,10 +238,19 @@ def _get_session(state: Any, authorization: str) -> dict[str, Any] | None:
         return dict(session)
 
 
-def dashboard_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
+def _require_admin_session(state: Any, authorization: str) -> tuple[dict[str, Any] | None, tuple[int, dict[str, Any]] | None]:
     session = _get_session(state, authorization)
     if session is None:
-        return 401, {"error": "Сессия Mini App отсутствует или истекла."}
+        return None, (401, {"error": "Сессия Mini App отсутствует или истекла."})
+    if session.get("role") != "admin":
+        return None, (403, {"error": "Для этого действия нужны права администратора группы."})
+    return session, None
+
+
+def dashboard_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        return error
     bot_data = state.application.bot_data if state.application else {}
     wiki = bot_data.get("wiki_index")
     return 200, {
@@ -313,10 +336,134 @@ def question_payload(state: Any, authorization: str, text: str) -> tuple[int, di
     }
 
 
-def missed_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
+def _chat_message_payload(message: Any) -> dict[str, Any]:
+    return {
+        "id": message.id,
+        "user_id": message.user_id,
+        "role": message.role,
+        "text": message.text,
+        "source": message.source,
+        "created_at": message.created_at,
+        "reply_to_id": message.reply_to_id,
+    }
+
+
+def _chat_store(state: Any) -> Any:
+    return getattr(state, "chat_store", None)
+
+
+def chat_history_payload(
+    state: Any, authorization: str, limit: int, before_id: int | None
+) -> tuple[int, dict[str, Any]]:
+    """Возвращает сохранённую историю только текущего пользователя."""
     session = _get_session(state, authorization)
     if session is None:
         return 401, {"error": "Сессия Mini App отсутствует или истекла."}
+    store = _chat_store(state)
+    if store is None:
+        return 503, {"error": "История чата временно недоступна."}
+
+    user_id = int(session["user"]["id"])
+    limit = max(1, min(50, limit))
+    messages = store.list_messages(user_id, limit=limit + 1, before_id=before_id)
+    has_more = len(messages) > limit
+    if has_more:
+        messages = messages[1:]
+    return 200, {
+        "role": session["role"],
+        "user": session["user"],
+        "messages": [_chat_message_payload(message) for message in messages],
+        "has_more": has_more,
+    }
+
+
+def _chat_pair_payload(session: dict[str, Any], user_message: Any, bot_message: Any) -> dict[str, Any]:
+    return {
+        "role": session["role"],
+        "user": session["user"],
+        "messages": [_chat_message_payload(user_message), _chat_message_payload(bot_message)],
+    }
+
+
+def chat_message_payload(state: Any, authorization: str, text: str) -> tuple[int, dict[str, Any]]:
+    """Сохраняет вопрос участника и ответ бота из manual_qa или вики."""
+    session = _get_session(state, authorization)
+    if session is None:
+        return 401, {"error": "Сессия Mini App отсутствует или истекла."}
+    text = text.strip()
+    if not 2 <= len(text) <= 2000:
+        return 400, {"error": "Вопрос должен содержать от 2 до 2000 символов."}
+    store = _chat_store(state)
+    if store is None:
+        return 503, {"error": "История чата временно недоступна."}
+
+    user_id = int(session["user"]["id"])
+    duplicate = store.find_recent_duplicate(user_id, text)
+    if duplicate is not None:
+        return 200, _chat_pair_payload(session, *duplicate)
+
+    allowed, retry_after = store.allow_request(user_id)
+    if not allowed:
+        return 429, {"error": "Слишком много сообщений. Повторите позже.", "retry_after": retry_after}
+
+    user_message = store.add_message(user_id, "user", text, "miniapp")
+    bot_data = state.application.bot_data if state.application else {}
+    manual = find_manual_qa_answer(bot_data.get("manual_qa_entries") or [], text)
+    if manual is not None:
+        answer, _ = manual
+        bot_message = store.add_message(user_id, "bot", answer, "manual", reply_to_id=user_message.id)
+        store.prune_user_history(user_id, keep=500)
+        return 200, _chat_pair_payload(session, user_message, bot_message)
+
+    try:
+        index = bot_data.get("wiki_index")
+        matches = index.search(text, top_k=1) if index is not None else []
+    except Exception:
+        bot_message = store.add_message(
+            user_id,
+            "bot",
+            "Поиск по вики временно недоступен. Попробуйте повторить вопрос позже.",
+            "error",
+            reply_to_id=user_message.id,
+        )
+        store.prune_user_history(user_id, keep=500)
+        return 503, _chat_pair_payload(session, user_message, bot_message)
+
+    if matches:
+        doc, score = matches[0]
+        title = str(getattr(doc, "title", ""))
+        if int(score) >= int(getattr(state.settings, "min_score", 72)):
+            answer = f"Нашёл подходящую страницу: «{title}»." if title else "Нашёл подходящую страницу вики."
+            bot_message = store.add_message(user_id, "bot", answer, "wiki", reply_to_id=user_message.id)
+            store.prune_user_history(user_id, keep=500)
+            return 200, _chat_pair_payload(session, user_message, bot_message)
+        best_url = str(getattr(doc, "url", "")) or None
+        best_score = int(score)
+    else:
+        best_url = None
+        best_score = None
+
+    add_missed_question(
+        text=text,
+        score=best_score,
+        best_url=best_url,
+        chat_id=getattr(state.settings, "panel_admin_chat_id", None),
+    )
+    bot_message = store.add_message(
+        user_id,
+        "bot",
+        "Пока я не могу ответить на этот вопрос. Попробуйте задать его в чате группы или повторить позже.",
+        "missing",
+        reply_to_id=user_message.id,
+    )
+    store.prune_user_history(user_id, keep=500)
+    return 200, _chat_pair_payload(session, user_message, bot_message)
+
+
+def missed_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        return error
     entries = []
     for entry in load_missed_questions():
         item = dict(entry)
@@ -345,9 +492,10 @@ def answer_missed_payload(
     title: str,
     answer: str,
 ) -> tuple[int, dict[str, Any]]:
-    session = _get_session(state, authorization)
-    if session is None:
-        return 401, {"ok": False, "error": "Сессия Mini App отсутствует или истекла."}
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        status, payload = error
+        return status, {"ok": False, **payload}
     answer = answer.strip()
     if not answer or len(answer) > 10_000:
         return 400, {"ok": False, "error": "Ответ должен содержать от 1 до 10000 символов."}
@@ -373,9 +521,10 @@ def answer_missed_payload(
 
 
 def dismiss_missed_payload(state: Any, authorization: str, item_id: str) -> tuple[int, dict[str, Any]]:
-    session = _get_session(state, authorization)
-    if session is None:
-        return 401, {"ok": False, "error": "Сессия Mini App отсутствует или истекла."}
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        status, payload = error
+        return status, {"ok": False, **payload}
     entry = _find_missed(item_id)
     if entry is None:
         return 404, {"ok": False, "error": "Вопрос уже обработан или не найден."}

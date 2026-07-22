@@ -56,12 +56,13 @@ def mini_panel(monkeypatch, tmp_path):
     )
     monkeypatch.setattr("app.bot.missed_questions._path", lambda: missed_file)
     monkeypatch.setattr("app.bot.manual_qa._manual_qa_path", lambda: tmp_path / "manual_qa.json")
+    monkeypatch.setattr("app.web_panel.project_repo_root", lambda: tmp_path)
 
-    status_box = {"value": ChatMemberStatus.ADMINISTRATOR}
+    status_box = {"value": ChatMemberStatus.ADMINISTRATOR, "by_user": {}}
 
     async def get_chat_member(*, chat_id: int, user_id: int):
         assert chat_id == -100123
-        return types.SimpleNamespace(status=status_box["value"])
+        return types.SimpleNamespace(status=status_box["by_user"].get(user_id, status_box["value"]))
 
     app = types.SimpleNamespace(
         bot=types.SimpleNamespace(get_chat_member=get_chat_member),
@@ -82,6 +83,7 @@ def mini_panel(monkeypatch, tmp_path):
             "bot_stats": {"total_answers": 12},
         },
     )
+    status_box["application"] = app
     server = start_web_panel(app, _Settings())
     assert server is not None
     time.sleep(0.05)
@@ -96,13 +98,18 @@ def _conn(port: int) -> http.client.HTTPConnection:
 
 
 def _create_session(port: int, user_id: int = 42) -> str:
+    response, payload = _create_session_response(port, user_id)
+    assert response.status == 200
+    return payload["session"]
+
+
+def _create_session_response(port: int, user_id: int = 42) -> tuple[http.client.HTTPResponse, dict[str, object]]:
     c = _conn(port)
     body = urlencode({"init_data": _signed_init_data(user_id)})
     c.request("POST", "/api/app/session", body, {"Content-Type": "application/x-www-form-urlencoded"})
     response = c.getresponse()
     payload = json.loads(response.read())
-    assert response.status == 200
-    return payload["session"]
+    return response, payload
 
 
 def test_miniapp_page_is_public_and_contains_telegram_sdk(mini_panel):
@@ -157,16 +164,29 @@ def test_miniapp_dashboard_rejects_missing_session(mini_panel):
     response.read()
 
 
-def test_miniapp_rejects_non_admin(mini_panel):
+def test_miniapp_group_member_gets_user_session_and_admin_dashboard_is_forbidden(mini_panel):
     port, status_box = mini_panel
     status_box["value"] = ChatMemberStatus.MEMBER
+    response, payload = _create_session_response(port)
+
+    assert response.status == 200
+    assert payload["role"] == "user"
+    session = payload["session"]
     c = _conn(port)
-    body = urlencode({"init_data": _signed_init_data()})
-    c.request("POST", "/api/app/session", body, {"Content-Type": "application/x-www-form-urlencoded"})
-    response = c.getresponse()
+    c.request("GET", "/api/app/dashboard", headers={"Authorization": f"Bearer {session}"})
+    dashboard = c.getresponse()
+
+    assert dashboard.status == 403
+    dashboard.read()
+
+
+def test_miniapp_rejects_user_outside_group(mini_panel):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.LEFT
+
+    response, _payload = _create_session_response(port)
 
     assert response.status == 403
-    response.read()
 
 
 def test_admin_can_answer_missed_question_from_miniapp(mini_panel):
@@ -287,3 +307,129 @@ def test_admin_can_ask_question_in_user_preview_and_get_wiki_answer(mini_panel):
     assert payload["answered"] is True
     assert payload["source"] == "wiki"
     assert payload["url"] == "https://wiki.example/layer"
+
+
+def test_chat_history_requires_bearer_session(mini_panel):
+    c = _conn(mini_panel[0])
+    c.request("GET", "/api/app/chat/history")
+    response = c.getresponse()
+
+    assert response.status == 401
+    assert "сессия" in json.loads(response.read())["error"].lower()
+
+
+def test_chat_message_returns_manual_answer_for_group_member(mini_panel):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.MEMBER
+    status_box["application"].bot_data["manual_qa_entries"] = [
+        {"keys": ["сопло забито"], "title": "Сопло", "answer": "Прочистите сопло."}
+    ]
+    session = _create_session(port, user_id=100)
+    c = _conn(port)
+    c.request(
+        "POST",
+        "/api/app/chat/message",
+        urlencode({"text": "почему сопло забито?"}),
+        {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {session}"},
+    )
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 200
+    assert payload["role"] == "user"
+    assert [message["role"] for message in payload["messages"]] == ["user", "bot"]
+    assert payload["messages"][1]["source"] == "manual"
+    assert payload["messages"][1]["text"] == "Прочистите сопло."
+
+
+def test_chat_message_returns_wiki_answer_for_group_member(mini_panel):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.MEMBER
+    session = _create_session(port, user_id=101)
+    c = _conn(port)
+    c.request(
+        "POST",
+        "/api/app/chat/message",
+        urlencode({"text": "как настроить первый слой"}),
+        {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {session}"},
+    )
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 200
+    assert payload["messages"][1]["source"] == "wiki"
+    assert "Первый слой" in payload["messages"][1]["text"]
+
+
+def test_chat_message_stores_missing_question_and_fallback(mini_panel):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.MEMBER
+    session = _create_session(port, user_id=102)
+    c = _conn(port)
+    c.request(
+        "POST",
+        "/api/app/chat/message",
+        urlencode({"text": "неизвестный вопрос о принтере"}),
+        {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {session}"},
+    )
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 200
+    assert payload["messages"][1]["source"] == "missing"
+    assert "Пока я не могу ответить" in payload["messages"][1]["text"]
+    assert load_missed_questions()[0]["text"] == "неизвестный вопрос о принтере"
+
+
+def test_chat_history_is_isolated_by_user_id(mini_panel):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.MEMBER
+    first_session = _create_session(port, user_id=201)
+    second_session = _create_session(port, user_id=202)
+    c = _conn(port)
+    c.request(
+        "POST",
+        "/api/app/chat/message",
+        urlencode({"text": "как настроить первый слой"}),
+        {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {first_session}"},
+    )
+    assert c.getresponse().status == 200
+    c.close()
+    c = _conn(port)
+    c.request(
+        "POST",
+        "/api/app/chat/message",
+        urlencode({"text": "неизвестный вопрос о принтере"}),
+        {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {second_session}"},
+    )
+    assert c.getresponse().status == 200
+    c.close()
+    c = _conn(port)
+    c.request("GET", "/api/app/chat/history", headers={"Authorization": f"Bearer {first_session}"})
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 200
+    assert payload["user"]["id"] == 201
+    assert [message["user_id"] for message in payload["messages"]] == [201, 201]
+    assert payload["has_more"] is False
+
+
+def test_chat_message_rate_limit_rejects_new_question(mini_panel):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.MEMBER
+    session = _create_session(port, user_id=301)
+    headers = {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {session}"}
+    c = _conn(port)
+    c.request("POST", "/api/app/chat/message", urlencode({"text": "как настроить первый слой"}), headers)
+    first = c.getresponse()
+    first.read()
+    c.close()
+    c = _conn(port)
+    c.request("POST", "/api/app/chat/message", urlencode({"text": "другой вопрос"}), headers)
+    limited = c.getresponse()
+    limited_payload = json.loads(limited.read())
+
+    assert first.status == 200
+    assert limited.status == 429
+    assert limited_payload["retry_after"] >= 1

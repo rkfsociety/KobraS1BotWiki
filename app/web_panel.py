@@ -46,6 +46,7 @@ from app.bot.git_autopull import (
     project_repo_root,
     schedule_restart_after_pull,
 )
+from app.bot.chat_store import ChatStore
 from app.bot.panel_login import consume_authorized, create_login_code, get_code_status
 from app.bot.bad_answers import (
     delete_bad_answer,
@@ -78,6 +79,8 @@ from app.bot.admin_activity import (
 from app.bot.wiki_reindex_handler import handle_reindex_webhook
 from app.web_miniapp import (
     answer_missed_payload,
+    chat_history_payload,
+    chat_message_payload,
     create_miniapp_session,
     dashboard_payload,
     dismiss_missed_payload,
@@ -148,6 +151,7 @@ class _PanelState:
         # кэш админов группы: {"chat": int, "ids": set[int], "exp": float}
         self.admin_cache: dict[str, Any] = {}
         self.miniapp_sessions: dict[str, dict[str, Any]] = {}
+        self.chat_store = ChatStore(project_repo_root() / "data" / "chat.sqlite3")
         self.lock = threading.Lock()
         self._load_sessions()
 
@@ -1670,6 +1674,22 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 )
                 self._send_json(payload, status=status)
                 return
+            if path == "/api/app/chat/history":
+                try:
+                    limit = int((qs.get("limit") or ["50"])[0])
+                    before_id = (qs.get("before_id") or [None])[0]
+                    before_id = int(before_id) if before_id is not None else None
+                except ValueError:
+                    self._send_json({"error": "Параметры истории чата некорректны."}, status=400)
+                    return
+                status, payload = chat_history_payload(
+                    state,
+                    self.headers.get("Authorization", ""),
+                    limit,
+                    before_id,
+                )
+                self._send_json(payload, status=status)
+                return
 
             if path == "/login":
                 _t, sess = self._session()
@@ -1752,6 +1772,15 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             if path == "/api/app/question":
                 form = self._read_form()
                 status, payload = question_payload(
+                    state,
+                    self.headers.get("Authorization", ""),
+                    form.get("text", ""),
+                )
+                self._send_json(payload, status=status)
+                return
+            if path == "/api/app/chat/message":
+                form = self._read_form()
+                status, payload = chat_message_payload(
                     state,
                     self.headers.get("Authorization", ""),
                     form.get("text", ""),

@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 from telegram.constants import ChatMemberStatus
 
-from app.bot.miniapp_access import is_group_admin
+from app.bot.miniapp_access import is_group_admin, is_group_member
 
 
 def _application(status: str | None = None, *, error: Exception | None = None):
@@ -33,6 +33,11 @@ def test_administrator_is_group_admin():
 
 def test_regular_member_is_not_group_admin():
     assert asyncio.run(is_group_admin(_application(ChatMemberStatus.MEMBER), 42)) is False
+
+
+def test_regular_and_restricted_members_are_group_members():
+    assert asyncio.run(is_group_member(_application(ChatMemberStatus.MEMBER), 42)) is True
+    assert asyncio.run(is_group_member(_application(ChatMemberStatus.RESTRICTED), 42)) is True
 
 
 def test_telegram_api_error_denies_access():
