@@ -77,6 +77,12 @@ from app.bot.admin_activity import (
     get_recent_admin_actions,
 )
 from app.bot.wiki_reindex_handler import handle_reindex_webhook
+from app.web_miniapp import (
+    create_miniapp_session,
+    dashboard_payload,
+    missed_payload,
+    render_miniapp,
+)
 
 log = logging.getLogger(__name__)
 
@@ -138,6 +144,7 @@ class _PanelState:
         self.login_fails: dict[str, list[float]] = {}
         # кэш админов группы: {"chat": int, "ids": set[int], "exp": float}
         self.admin_cache: dict[str, Any] = {}
+        self.miniapp_sessions: dict[str, dict[str, Any]] = {}
         self.lock = threading.Lock()
         self._load_sessions()
 
@@ -1598,6 +1605,14 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             except Exception:
                 pass
 
+        def _send_json(self, payload: dict[str, Any], *, status: int = 200) -> None:
+            self._send(
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                status=status,
+                content_type="application/json; charset=utf-8",
+                headers={"Cache-Control": "no-store"},
+            )
+
         def _redirect(self, location: str, *, cookie: str | None = None) -> None:
             self.send_response(HTTPStatus.SEE_OTHER)
             self.send_header("Location", location)
@@ -1632,6 +1647,18 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/") or "/"
             qs = parse_qs(parsed.query)
+
+            if path == "/app":
+                self._send(render_miniapp())
+                return
+            if path == "/api/app/dashboard":
+                status, payload = dashboard_payload(state, self.headers.get("Authorization", ""))
+                self._send_json(payload, status=status)
+                return
+            if path == "/api/app/missed":
+                status, payload = missed_payload(state, self.headers.get("Authorization", ""))
+                self._send_json(payload, status=status)
+                return
 
             if path == "/login":
                 _t, sess = self._session()
@@ -1705,6 +1732,12 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:  # noqa: N802
             parsed = urlparse(self.path)
             path = parsed.path.rstrip("/") or "/"
+
+            if path == "/api/app/session":
+                form = self._read_form()
+                status, payload = create_miniapp_session(state, form.get("init_data", ""))
+                self._send_json(payload, status=status)
+                return
 
             if path == "/login":
                 self._handle_login()
