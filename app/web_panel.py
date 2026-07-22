@@ -1651,7 +1651,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             qs = parse_qs(parsed.query)
 
             if path == "/app":
-                self._send(render_miniapp())
+                self._send(render_miniapp(), headers={"Cache-Control": "no-store"})
                 return
             if path == "/api/app/dashboard":
                 status, payload = dashboard_payload(state, self.headers.get("Authorization", ""))

@@ -109,6 +109,7 @@ def test_miniapp_page_is_public_and_contains_telegram_sdk(mini_panel):
     body = response.read().decode()
 
     assert response.status == 200
+    assert response.getheader("Cache-Control") == "no-store"
     assert "telegram-web-app.js" in body
 
 
@@ -116,6 +117,7 @@ def test_miniapp_shell_has_mobile_admin_dashboard_sections():
     body = render_miniapp().decode()
 
     assert "miniapp-shell" in body
+    assert "miniapp-error" in body
     assert "Вопросы без ответа" in body
     assert "Страницы вики" in body
     assert "Ответы бота" in body

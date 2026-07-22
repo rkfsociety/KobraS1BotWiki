@@ -42,6 +42,7 @@ def render_miniapp() -> bytes:
     .miniapp-card--wide { grid-column:1/-1; } .miniapp-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
     button { border:0; border-radius:10px; background:var(--amber); color:#17130b; cursor:pointer; font:600 13px inherit; padding:10px 13px; }
     button.secondary { background:#263244; color:var(--text); } .error { color:#ff8d8d; }
+    .miniapp-error { display:grid; place-items:center; min-height:60vh; padding:24px; text-align:center; }
     @media (min-width:560px) { .miniapp-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
   </style>
 </head>
@@ -70,7 +71,7 @@ def render_miniapp() -> bytes:
       const token = sessionStorage.getItem('kobra_app_session');
       fetch('/api/app/dashboard', {headers:{Authorization:'Bearer ' + token}})
         .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderDashboard(data); })
-        .catch((error) => { root.innerHTML = '<p class="error">' + escapeHtml(error.message) + '</p>'; });
+        .catch((error) => { root.innerHTML = '<div class="miniapp-error"><p class="error">' + escapeHtml(error.message) + '</p></div>'; });
     }
     function loadMissed() {
       const token = sessionStorage.getItem('kobra_app_session');
@@ -107,7 +108,7 @@ def render_miniapp() -> bytes:
         .catch((error) => { const box = document.getElementById('missed'); if (box) box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
     if (!tg || !tg.initData) {
-      root.innerHTML = '<p>Откройте приложение через Telegram.</p>';
+      root.innerHTML = '<div class="miniapp-error"><p>Откройте приложение через Telegram.</p></div>';
     } else {
       fetch('/api/app/session', {
         method: 'POST',
@@ -158,7 +159,7 @@ def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, A
     if application is None:
         return 503, {"error": "Бот ещё не готов."}
     application.bot_data.setdefault("settings", state.settings)
-    if not asyncio.run(is_group_admin(application, user_id)):
+    if not _check_group_admin(application, user_id):
         return 403, {"error": "Доступ только для администраторов группы."}
 
     token = secrets.token_urlsafe(32)
@@ -171,6 +172,22 @@ def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, A
                 sessions.pop(old_token, None)
         sessions[token] = {"exp": now + ttl, "user": user, "role": "admin"}
     return 200, {"session": token, "user": user, "role": "admin", "capabilities": {"admin": True}}
+
+
+def _check_group_admin(application: Any, user_id: int) -> bool:
+    """Запускает Telegram-проверку в основном loop PTB, а не в HTTP-потоке."""
+    main_loop = (getattr(application, "bot_data", None) or {}).get("main_loop")
+    if main_loop is not None and main_loop.is_running():
+        future = asyncio.run_coroutine_threadsafe(is_group_admin(application, user_id), main_loop)
+        try:
+            return bool(future.result(timeout=15))
+        except Exception:
+            future.cancel()
+            return False
+    try:
+        return bool(asyncio.run(is_group_admin(application, user_id)))
+    except Exception:
+        return False
 
 
 def _get_session(state: Any, authorization: str) -> dict[str, Any] | None:
