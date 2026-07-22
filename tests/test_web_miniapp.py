@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import http.client
 import json
+import sqlite3
 import time
 import types
 from urllib.parse import urlencode
@@ -14,6 +15,7 @@ from telegram.constants import ChatMemberStatus
 
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.missed_questions import load_missed_questions
+from app.bot.chat_store import ChatStore
 from app.web_miniapp import render_miniapp
 from app.web_panel import start_web_panel
 
@@ -58,7 +60,11 @@ def mini_panel(monkeypatch, tmp_path):
     monkeypatch.setattr("app.bot.manual_qa._manual_qa_path", lambda: tmp_path / "manual_qa.json")
     monkeypatch.setattr("app.web_panel.project_repo_root", lambda: tmp_path)
 
-    status_box = {"value": ChatMemberStatus.ADMINISTRATOR, "by_user": {}}
+    status_box = {
+        "value": ChatMemberStatus.ADMINISTRATOR,
+        "by_user": {},
+        "chat_store_path": tmp_path / "data" / "chat.sqlite3",
+    }
 
     async def get_chat_member(*, chat_id: int, user_id: int):
         assert chat_id == -100123
@@ -433,3 +439,121 @@ def test_chat_message_rate_limit_rejects_new_question(mini_panel):
     assert first.status == 200
     assert limited.status == 429
     assert limited_payload["retry_after"] >= 1
+
+
+def test_chat_message_duplicate_reuses_pair_without_search_or_extra_rate_event(mini_panel):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.MEMBER
+    search_calls = {"count": 0}
+
+    def search(query: str, top_k: int = 1):
+        search_calls["count"] += 1
+        return [(types.SimpleNamespace(title="Первый слой", url="https://wiki.example/layer", text=""), 91)]
+
+    status_box["application"].bot_data["wiki_index"] = types.SimpleNamespace(doc_count=42, search=search)
+    session = _create_session(port, user_id=350)
+    headers = {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {session}"}
+    c = _conn(port)
+    c.request("POST", "/api/app/chat/message", urlencode({"text": "как настроить первый слой"}), headers)
+    first = c.getresponse()
+    first_payload = json.loads(first.read())
+    c.close()
+    c = _conn(port)
+    c.request("POST", "/api/app/chat/message", urlencode({"text": "как настроить первый слой"}), headers)
+    duplicate = c.getresponse()
+    duplicate_payload = json.loads(duplicate.read())
+
+    with sqlite3.connect(status_box["chat_store_path"]) as connection:
+        rate_events = connection.execute(
+            "SELECT COUNT(*) FROM rate_limit_events WHERE user_id = ?", (350,)
+        ).fetchone()[0]
+
+    assert first.status == 200
+    assert duplicate.status == 200
+    assert [message["id"] for message in duplicate_payload["messages"]] == [
+        message["id"] for message in first_payload["messages"]
+    ]
+    assert search_calls["count"] == 1
+    assert rate_events == 1
+
+
+def test_chat_message_search_error_is_stored_with_error_source(mini_panel):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.MEMBER
+
+    def search(_query: str, top_k: int = 1):
+        raise RuntimeError("wiki unavailable")
+
+    status_box["application"].bot_data["wiki_index"] = types.SimpleNamespace(doc_count=42, search=search)
+    session = _create_session(port, user_id=360)
+    c = _conn(port)
+    c.request(
+        "POST",
+        "/api/app/chat/message",
+        urlencode({"text": "как настроить первый слой"}),
+        {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {session}"},
+    )
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 503
+    assert payload["messages"][1]["source"] == "error"
+    assert payload["messages"][1]["reply_to_id"] == payload["messages"][0]["id"]
+
+
+def test_chat_history_caps_page_at_fifty_and_uses_before_id(mini_panel):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.MEMBER
+    session = _create_session(port, user_id=370)
+    store = ChatStore(status_box["chat_store_path"])
+    try:
+        messages = [store.add_message(370, "user", f"question {index}", "miniapp") for index in range(55)]
+    finally:
+        store.close()
+
+    c = _conn(port)
+    c.request("GET", "/api/app/chat/history?limit=200", headers={"Authorization": f"Bearer {session}"})
+    first_response = c.getresponse()
+    first_page = json.loads(first_response.read())
+    c.close()
+    oldest_id = first_page["messages"][0]["id"]
+    c = _conn(port)
+    c.request(
+        "GET",
+        f"/api/app/chat/history?before_id={oldest_id}",
+        headers={"Authorization": f"Bearer {session}"},
+    )
+    second_response = c.getresponse()
+    second_page = json.loads(second_response.read())
+
+    assert first_response.status == 200
+    assert len(first_page["messages"]) == 50
+    assert first_page["messages"][0]["id"] == messages[5].id
+    assert first_page["messages"][-1]["id"] == messages[-1].id
+    assert first_page["has_more"] is True
+    assert second_response.status == 200
+    assert [message["id"] for message in second_page["messages"]] == [message.id for message in messages[:5]]
+    assert second_page["has_more"] is False
+
+
+def test_user_session_is_forbidden_from_missed_mutations(mini_panel):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.MEMBER
+    session = _create_session(port, user_id=380)
+    headers = {"Authorization": f"Bearer {session}"}
+    requests = [
+        ("GET", "/api/app/missed", None),
+        ("POST", "/api/app/missed/not-used/answer", urlencode({"title": "x", "answer": "x"})),
+        ("POST", "/api/app/missed/not-used/dismiss", None),
+    ]
+
+    for method, path, body in requests:
+        c = _conn(port)
+        request_headers = dict(headers)
+        if body is not None:
+            request_headers["Content-Type"] = "application/x-www-form-urlencoded"
+        c.request(method, path, body, request_headers)
+        response = c.getresponse()
+
+        assert response.status == 403
+        response.read()

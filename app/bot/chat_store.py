@@ -153,18 +153,27 @@ class ChatStore:
     ) -> tuple[ChatMessage, ChatMessage] | None:
         now = time.time() if now is None else now
         with self._lock:
-            rows = self._connection.execute(
+            question_row = self._connection.execute(
                 """
                 SELECT * FROM chat_messages
-                WHERE user_id = ? AND text = ? AND created_at >= ? AND created_at <= ?
-                ORDER BY id DESC LIMIT 2
+                WHERE user_id = ? AND role = 'user' AND text = ? AND created_at >= ? AND created_at <= ?
+                ORDER BY id DESC LIMIT 1
                 """,
                 (user_id, text, now - 10, now),
-            ).fetchall()
-        if len(rows) < 2:
+            ).fetchone()
+            if question_row is None:
+                return None
+            answer_row = self._connection.execute(
+                """
+                SELECT * FROM chat_messages
+                WHERE user_id = ? AND role = 'bot' AND reply_to_id = ?
+                ORDER BY id DESC LIMIT 1
+                """,
+                (user_id, question_row["id"]),
+            ).fetchone()
+        if answer_row is None:
             return None
-        messages = [self._message_from_row(row) for row in reversed(rows)]
-        return messages[0], messages[1]
+        return self._message_from_row(question_row), self._message_from_row(answer_row)
 
     def prune_user_history(self, user_id: int, keep: int = 500) -> None:
         keep = max(0, keep)

@@ -89,15 +89,16 @@ def test_rate_limit_allows_twenty_requests_per_ten_minutes(tmp_path: Path) -> No
         store.close()
 
 
-def test_find_recent_duplicate_returns_the_two_matching_messages(tmp_path: Path) -> None:
+def test_find_recent_duplicate_returns_matching_user_question_and_bot_reply(tmp_path: Path) -> None:
     store = ChatStore(tmp_path / "chat.sqlite3")
     try:
-        first = store.add_message(1, "user", "same", "miniapp")
-        second = store.add_message(1, "user", "same", "miniapp")
+        question = store.add_message(1, "user", "same", "miniapp")
+        answer = store.add_message(1, "bot", "answer", "wiki", question.id)
+        store.add_message(2, "user", "same", "miniapp")
 
-        assert store.find_recent_duplicate(1, "same", now=first.created_at + 1) == (first, second)
-        assert store.find_recent_duplicate(2, "same", now=first.created_at + 1) is None
-        assert store.find_recent_duplicate(1, "same", now=first.created_at + 11) is None
+        assert store.find_recent_duplicate(1, "same", now=question.created_at + 1) == (question, answer)
+        assert store.find_recent_duplicate(2, "same", now=question.created_at + 1) is None
+        assert store.find_recent_duplicate(1, "same", now=question.created_at + 11) is None
     finally:
         store.close()
 
