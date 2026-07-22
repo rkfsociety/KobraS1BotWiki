@@ -62,6 +62,7 @@ def render_miniapp() -> bytes:
           <article class="miniapp-card"><div class="muted">Ответы бота</div><div class="value">${s.total_answers || 0}</div></article>
           <article class="miniapp-card"><div class="muted">Ручные ответы</div><div class="value">${s.manual_answers || 0}</div></article>
           <article class="miniapp-card"><div class="muted">Вопросы без ответа</div><div class="value">${s.missed_questions || 0}</div></article>
+          <article class="miniapp-card miniapp-card--wide"><h2>Поиск по вики</h2><form onsubmit="searchWiki(event)" class="miniapp-actions"><input id="wiki-query" placeholder="Например: первый слой" style="flex:1;min-width:180px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"><button type="submit">Найти</button></form><div id="search-results" class="muted" style="margin-top:12px"></div></article>
           <article class="miniapp-card miniapp-card--wide"><h2>Очередь разбора</h2><p class="muted">Вопросы, которым нужно добавить ручной ответ или улучшить поиск.</p><div class="miniapp-actions"><button onclick="loadMissed()">Открыть вопросы</button><button class="secondary" onclick="loadDashboard()">Обновить</button></div><div id="missed" class="muted" style="margin-top:12px"></div></article>
         </section>`;
     }
@@ -76,6 +77,15 @@ def render_miniapp() -> bytes:
       fetch('/api/app/missed', {headers:{Authorization:'Bearer ' + token}})
         .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderMissed(data.items); })
         .catch((error) => { const box = document.getElementById('missed'); if (box) box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
+    function searchWiki(event) {
+      event.preventDefault();
+      const query = document.getElementById('wiki-query').value;
+      const box = document.getElementById('search-results');
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/search?q=' + encodeURIComponent(query), {headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка поиска'); box.innerHTML = data.results.length ? data.results.map((item) => '<p><a href="' + escapeHtml(item.url) + '" target="_blank" rel="noopener" style="color:var(--blue)">' + escapeHtml(item.title) + '</a> · ' + item.score + '</p>').join('') : 'Ничего не найдено.'; })
+        .catch((error) => { box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
     function renderMissed(items) {
       const box = document.getElementById('missed');
@@ -195,6 +205,26 @@ def dashboard_payload(state: Any, authorization: str) -> tuple[int, dict[str, An
             "error_codes": len(bot_data.get("error_codes_catalog") or {}),
         },
     }
+
+
+def search_payload(state: Any, authorization: str, query: str) -> tuple[int, dict[str, Any]]:
+    session = _get_session(state, authorization)
+    if session is None:
+        return 401, {"error": "Сессия Mini App отсутствует или истекла."}
+    query = query.strip()
+    if not 2 <= len(query) <= 500:
+        return 400, {"error": "Введите запрос длиной от 2 до 500 символов."}
+    index = (state.application.bot_data if state.application else {}).get("wiki_index")
+    if index is None:
+        return 503, {"error": "Индекс вики ещё не готов."}
+    try:
+        matches = index.search(query, top_k=5)
+    except Exception:
+        return 500, {"error": "Поиск временно недоступен."}
+    results = []
+    for doc, score in matches:
+        results.append({"title": str(getattr(doc, "title", "")), "url": str(getattr(doc, "url", "")), "score": int(score)})
+    return 200, {"role": session["role"], "results": results}
 
 
 def missed_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:

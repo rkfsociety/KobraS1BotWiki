@@ -66,7 +66,12 @@ def mini_panel(monkeypatch, tmp_path):
         bot=types.SimpleNamespace(get_chat_member=get_chat_member),
         bot_data={
             "settings": _Settings(),
-            "wiki_index": types.SimpleNamespace(doc_count=42),
+            "wiki_index": types.SimpleNamespace(
+                doc_count=42,
+                search=lambda query, top_k=5: [
+                    (types.SimpleNamespace(title="Первый слой", url="https://wiki.example/layer", text=""), 91)
+                ],
+            ),
             "wiki_indexer": types.SimpleNamespace(is_done=lambda: True),
             "manual_qa_entries": [],
             "fix_store": {},
@@ -116,6 +121,8 @@ def test_miniapp_shell_has_mobile_admin_dashboard_sections():
     assert "Ответы бота" in body
     assert "Сохранить ответ" in body
     assert "Отметить как оффтоп" in body
+    assert "Поиск по вики" in body
+    assert "searchWiki" in body
     assert "miniapp-card" in body
     assert "env_safe" not in body
 
@@ -205,3 +212,30 @@ def test_empty_manual_answer_does_not_remove_question(mini_panel):
 
     assert response.status == 400
     assert json.loads(response.read())["ok"] is False
+
+
+def test_admin_can_search_wiki_from_miniapp(mini_panel):
+    port, _ = mini_panel
+    session = _create_session(port)
+    c = _conn(port)
+    c.request("GET", "/api/app/search?" + urlencode({"q": "первый слой"}), headers={"Authorization": f"Bearer {session}"})
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 200
+    assert payload["results"][0] == {
+        "title": "Первый слой",
+        "url": "https://wiki.example/layer",
+        "score": 91,
+    }
+
+
+def test_empty_wiki_search_is_rejected(mini_panel):
+    port, _ = mini_panel
+    session = _create_session(port)
+    c = _conn(port)
+    c.request("GET", "/api/app/search?q=", headers={"Authorization": f"Bearer {session}"})
+    response = c.getresponse()
+
+    assert response.status == 400
+    assert "запрос" in json.loads(response.read())["error"].lower()

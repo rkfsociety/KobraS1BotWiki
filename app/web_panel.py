@@ -83,6 +83,7 @@ from app.web_miniapp import (
     dismiss_missed_payload,
     missed_payload,
     render_miniapp,
+    search_payload,
 )
 
 log = logging.getLogger(__name__)
@@ -1658,6 +1659,14 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 return
             if path == "/api/app/missed":
                 status, payload = missed_payload(state, self.headers.get("Authorization", ""))
+                self._send_json(payload, status=status)
+                return
+            if path == "/api/app/search":
+                status, payload = search_payload(
+                    state,
+                    self.headers.get("Authorization", ""),
+                    (qs.get("q") or [""])[0],
+                )
                 self._send_json(payload, status=status)
                 return
 
