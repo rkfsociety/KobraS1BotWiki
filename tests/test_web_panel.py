@@ -7,7 +7,7 @@ import types
 
 import pytest
 
-from app.web_panel import _CSS, _bot_stats_section, start_web_panel
+from app.web_panel import _CSS, _admin_activity_panels, _bot_stats_section, start_web_panel
 
 
 class _StubApp:
@@ -153,6 +153,21 @@ def test_dashboard_uses_amber_circular_activity_cards():
     assert 'Индексация' in body
     assert ".circle-chart-grid" in _CSS
     assert "#f0c674" in _CSS
+
+
+def test_moderator_activity_description_matches_collected_events():
+    body = _admin_activity_panels(
+        {
+            "admin_activity": {
+                "admins": {
+                    "42": {"user_id": 42, "label": "@admin", "counts": {"ban": 1}},
+                },
+                "recent": [],
+            },
+        }
+    )
+    assert "баны, кики, муты, закрепы" in body
+    assert "удаление чужих сообщений API не отдаёт" not in body
 
 
 def test_csrf_required_for_mutations(panel):

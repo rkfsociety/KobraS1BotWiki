@@ -1209,7 +1209,7 @@ def _admin_activity_panels(bot_data: dict[str, Any]) -> str:
     return (
         '<div class="monitor-panel">'
         '<h3 class="monitor-title">Активность модераторов'
-        '<span class="monitor-sub">баны, кики, муты, закрепы; удаление чужих сообщений API не отдаёт</span></h3>'
+        '<span class="monitor-sub">баны, кики, муты, закрепы и другие события, которые Telegram передаёт боту</span></h3>'
         '<div class="monitor-grid monitor-grid--2">'
         '<div>'
         '<h3 class="monitor-title" style="margin-top:4px">По админам</h3>'
@@ -1227,8 +1227,8 @@ def _admin_activity_section(bot_data: dict[str, Any]) -> str:
         '<div class="card monitor-section">'
         '<div class="section-head">'
         "<h2>Активность модераторов</h2>"
-        '<p class="muted">Баны, кики, муты, закрепы. Удаление чужих сообщений Telegram API не передаёт; '
-        "учитывается только удаление ответа бота по /error и /fix.</p>"
+        '<p class="muted">Баны, кики, муты, закрепы и другие события, которые Telegram передаёт боту. '
+        "Удаление чужих сообщений отдельно не приходит; учитывается только удаление ответа бота по /error и /fix.</p>"
         "</div>"
         f"{_admin_activity_panels(bot_data)}"
         "</div>"
