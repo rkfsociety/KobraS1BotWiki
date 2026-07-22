@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import secrets
 import time
@@ -9,7 +10,8 @@ from typing import Any
 
 from app.bot.miniapp_access import is_group_admin
 from app.bot.miniapp_auth import MiniAppAuthError, validate_init_data
-from app.bot.missed_questions import load_missed_questions
+from app.bot.manual_qa import add_manual_qa_entry, load_manual_qa_store
+from app.bot.missed_questions import delete_missed_question_by_text, load_missed_questions
 
 
 class MiniAppAccessError(PermissionError):
@@ -72,7 +74,26 @@ def render_miniapp() -> bytes:
     function loadMissed() {
       const token = sessionStorage.getItem('kobra_app_session');
       fetch('/api/app/missed', {headers:{Authorization:'Bearer ' + token}})
-        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); const box = document.getElementById('missed'); box.innerHTML = data.items.length ? 'В очереди: <b>' + data.items.length + '</b>' : 'Очередь пуста.'; })
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderMissed(data.items); })
+        .catch((error) => { const box = document.getElementById('missed'); if (box) box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
+    function renderMissed(items) {
+      const box = document.getElementById('missed');
+      if (!box) return;
+      if (!items.length) { box.innerHTML = 'Очередь пуста.'; return; }
+      box.innerHTML = items.map((item) => `<article class="miniapp-card" style="margin-top:10px"><p>${escapeHtml(item.text)}</p><input id="title-${item.id}" placeholder="Заголовок" style="width:100%;margin-top:9px;padding:9px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"><textarea id="answer-${item.id}" placeholder="Короткий ручной ответ" style="width:100%;min-height:72px;margin-top:8px;padding:9px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"></textarea><div class="miniapp-actions"><button onclick="submitAnswer('${item.id}')">Сохранить ответ</button><button class="secondary" onclick="dismissQuestion('${item.id}')">Отметить как оффтоп</button></div></article>`).join('');
+    }
+    function submitAnswer(id) {
+      const token = sessionStorage.getItem('kobra_app_session');
+      const body = new URLSearchParams({title: document.getElementById('title-' + id).value, answer: document.getElementById('answer-' + id).value});
+      fetch('/api/app/missed/' + encodeURIComponent(id) + '/answer', {method:'POST', headers:{Authorization:'Bearer ' + token, 'Content-Type':'application/x-www-form-urlencoded'}, body})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Не удалось сохранить'); loadDashboard(); })
+        .catch((error) => { const box = document.getElementById('missed'); if (box) box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
+    function dismissQuestion(id) {
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/missed/' + encodeURIComponent(id) + '/dismiss', {method:'POST', headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Не удалось удалить'); loadDashboard(); })
         .catch((error) => { const box = document.getElementById('missed'); if (box) box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
     if (!tg || !tg.initData) {
@@ -180,5 +201,67 @@ def missed_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]
     session = _get_session(state, authorization)
     if session is None:
         return 401, {"error": "Сессия Mini App отсутствует или истекла."}
-    entries = load_missed_questions()
+    entries = []
+    for entry in load_missed_questions():
+        item = dict(entry)
+        item["id"] = _missed_id(item)
+        entries.append(item)
     return 200, {"role": session["role"], "items": entries}
+
+
+def _missed_id(entry: dict[str, Any]) -> str:
+    raw = f"{entry.get('text', '')}\x00{entry.get('ts', '')}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+def _find_missed(item_id: str) -> dict[str, Any] | None:
+    for entry in load_missed_questions():
+        if _missed_id(entry) == item_id:
+            return entry
+    return None
+
+
+def answer_missed_payload(
+    state: Any,
+    authorization: str,
+    item_id: str,
+    *,
+    title: str,
+    answer: str,
+) -> tuple[int, dict[str, Any]]:
+    session = _get_session(state, authorization)
+    if session is None:
+        return 401, {"ok": False, "error": "Сессия Mini App отсутствует или истекла."}
+    answer = answer.strip()
+    if not answer or len(answer) > 10_000:
+        return 400, {"ok": False, "error": "Ответ должен содержать от 1 до 10000 символов."}
+    entry = _find_missed(item_id)
+    if entry is None:
+        return 404, {"ok": False, "error": "Вопрос уже обработан или не найден."}
+
+    entries = load_manual_qa_store()
+    ok, message = add_manual_qa_entry(
+        entries=entries,
+        raw_keys=[str(entry.get("text", ""))],
+        answer=answer,
+        title=title.strip()[:200],
+    )
+    if not ok:
+        return 400, {"ok": False, "error": message}
+    deleted, delete_message = delete_missed_question_by_text(text=str(entry.get("text", "")))
+    if not deleted:
+        return 500, {"ok": False, "error": f"Ответ сохранён, но вопрос не удалён: {delete_message}"}
+    if state.application is not None:
+        state.application.bot_data["manual_qa_entries"] = entries
+    return 200, {"ok": True, "message": "Ручной ответ сохранён."}
+
+
+def dismiss_missed_payload(state: Any, authorization: str, item_id: str) -> tuple[int, dict[str, Any]]:
+    session = _get_session(state, authorization)
+    if session is None:
+        return 401, {"ok": False, "error": "Сессия Mini App отсутствует или истекла."}
+    entry = _find_missed(item_id)
+    if entry is None:
+        return 404, {"ok": False, "error": "Вопрос уже обработан или не найден."}
+    ok, message = delete_missed_question_by_text(text=str(entry.get("text", "")))
+    return (200 if ok else 500), {"ok": ok, "message": message} if ok else {"ok": False, "error": message}

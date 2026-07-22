@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 import pytest
 from telegram.constants import ChatMemberStatus
 
+from app.bot.manual_qa import load_manual_qa_store
 from app.web_miniapp import render_miniapp
 from app.web_panel import start_web_panel
 
@@ -47,6 +48,13 @@ def mini_panel(monkeypatch, tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text("MIN_SCORE=72\n", encoding="utf-8")
     monkeypatch.setattr("app.web_panel._env_file_path", lambda: env_file)
+    missed_file = tmp_path / "missed_questions.json"
+    missed_file.write_text(
+        json.dumps([{"text": "как настроить первый слой", "score": 12, "count": 1, "ts": 1}]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.bot.missed_questions._path", lambda: missed_file)
+    monkeypatch.setattr("app.bot.manual_qa._manual_qa_path", lambda: tmp_path / "manual_qa.json")
 
     status_box = {"value": ChatMemberStatus.ADMINISTRATOR}
 
@@ -106,6 +114,8 @@ def test_miniapp_shell_has_mobile_admin_dashboard_sections():
     assert "Вопросы без ответа" in body
     assert "Страницы вики" in body
     assert "Ответы бота" in body
+    assert "Сохранить ответ" in body
+    assert "Отметить как оффтоп" in body
     assert "miniapp-card" in body
     assert "env_safe" not in body
 
@@ -142,3 +152,56 @@ def test_miniapp_rejects_non_admin(mini_panel):
 
     assert response.status == 403
     response.read()
+
+
+def test_admin_can_answer_missed_question_from_miniapp(mini_panel):
+    port, _ = mini_panel
+    session = _create_session(port)
+    c = _conn(port)
+    c.request("GET", "/api/app/missed", headers={"Authorization": f"Bearer {session}"})
+    listed = c.getresponse()
+    item = json.loads(listed.read())["items"][0]
+
+    body = urlencode({"title": "Первый слой", "answer": "Проверьте стол и запустите калибровку."})
+    c.request(
+        "POST",
+        f"/api/app/missed/{item['id']}/answer",
+        body,
+        {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {session}"},
+    )
+    response = c.getresponse()
+    assert response.status == 200
+    assert json.loads(response.read())["ok"] is True
+    assert load_manual_qa_store()[0]["answer"] == "Проверьте стол и запустите калибровку."
+
+
+def test_admin_can_dismiss_missed_question_from_miniapp(mini_panel):
+    port, _ = mini_panel
+    session = _create_session(port)
+    c = _conn(port)
+    c.request("GET", "/api/app/missed", headers={"Authorization": f"Bearer {session}"})
+    item = json.loads(c.getresponse().read())["items"][0]
+    c.request("POST", f"/api/app/missed/{item['id']}/dismiss", headers={"Authorization": f"Bearer {session}"})
+    response = c.getresponse()
+
+    assert response.status == 200
+    assert json.loads(response.read())["ok"] is True
+
+
+def test_empty_manual_answer_does_not_remove_question(mini_panel):
+    port, _ = mini_panel
+    session = _create_session(port)
+    c = _conn(port)
+    c.request("GET", "/api/app/missed", headers={"Authorization": f"Bearer {session}"})
+    item = json.loads(c.getresponse().read())["items"][0]
+    body = urlencode({"answer": "   "})
+    c.request(
+        "POST",
+        f"/api/app/missed/{item['id']}/answer",
+        body,
+        {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {session}"},
+    )
+    response = c.getresponse()
+
+    assert response.status == 400
+    assert json.loads(response.read())["ok"] is False

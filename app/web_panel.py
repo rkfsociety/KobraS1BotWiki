@@ -77,8 +77,10 @@ from app.bot.admin_activity import (
 )
 from app.bot.wiki_reindex_handler import handle_reindex_webhook
 from app.web_miniapp import (
+    answer_missed_payload,
     create_miniapp_session,
     dashboard_payload,
+    dismiss_missed_payload,
     missed_payload,
     render_miniapp,
 )
@@ -1737,6 +1739,25 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 status, payload = create_miniapp_session(state, form.get("init_data", ""))
                 self._send_json(payload, status=status)
                 return
+            if path.startswith("/api/app/missed/"):
+                parts = path.split("/")
+                if len(parts) == 6 and parts[5] in {"answer", "dismiss"}:
+                    item_id = parts[4]
+                    form = self._read_form()
+                    if parts[5] == "answer":
+                        status, payload = answer_missed_payload(
+                            state,
+                            self.headers.get("Authorization", ""),
+                            item_id,
+                            title=form.get("title", ""),
+                            answer=form.get("answer", ""),
+                        )
+                    else:
+                        status, payload = dismiss_missed_payload(
+                            state, self.headers.get("Authorization", ""), item_id
+                        )
+                    self._send_json(payload, status=status)
+                    return
 
             if path == "/login":
                 self._handle_login()
