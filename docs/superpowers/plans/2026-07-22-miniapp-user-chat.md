@@ -95,7 +95,9 @@
 
 **Файлы:**
 - Изменить: `app/web_miniapp.py`
+- Изменить: `app/bot/chat_store.py` — только для nullable URL wiki и идемпотентной миграции существующей схемы
 - Изменить: `tests/test_web_miniapp.py`
+- Изменить: `tests/test_chat_store.py` — тест миграции/сохранения URL
 
 **Интерфейсы JavaScript:**
 - `renderUserMode()` — создаёт экран чата и загружает историю.
