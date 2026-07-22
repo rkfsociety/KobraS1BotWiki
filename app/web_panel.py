@@ -295,7 +295,7 @@ h1.page-title { margin: 0 0 20px; font-size: clamp(1.5rem, 2vw, 1.9rem); letter-
 .section-head h2 { margin: 0 0 6px; font-size: 1.15rem; }
 .section-head p { margin: 0; font-size: 13px; line-height: 1.45; }
 .monitor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-.monitor-grid--2 { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+.monitor-grid--2 { grid-template-columns: 1fr; }
 .monitor-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px;
   align-items: start; }
 .monitor-layout__mains, .monitor-layout__side { display: grid; gap: 16px; min-width: 0; }
@@ -330,7 +330,8 @@ h1.page-title { margin: 0 0 20px; font-size: clamp(1.5rem, 2vw, 1.9rem); letter-
 .hourly-col:hover .hourly-bar { filter: brightness(1.12); transform: translateY(-2px); }
 .hourly-label { font-size: 10px; color: #6b7280; }
 .hourly-val { font-size: 11px; color: #cbd5e1; font-weight: 600; min-height: 14px; }
-.monitor-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.monitor-table-wrap { overflow-x: visible; }
+.admin-summary-table { table-layout: fixed; }
 .admin-total { color: #fbbf24; font-weight: 800; }
 .action-pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px;
   font-weight: 600; border: 1px solid transparent; white-space: nowrap; }
@@ -380,8 +381,16 @@ td.q-cell { max-width: min(100%, 520px); word-break: break-word; }
 td.a-cell { max-width: min(100%, 560px); word-break: break-word; }
 @media (max-width: 1100px) {
   .monitor-layout { grid-template-columns: 1fr; }
+  .monitor-grid--2 { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {
+  main { padding-inline: 12px; }
+  .card { padding: 16px 12px; }
+  .monitor-panel { padding: 14px 12px; }
+  .table-compact th, .table-compact td { padding: 8px 5px; font-size: 12px; }
+  .admin-summary-table th, .admin-summary-table td { padding: 7px 3px; font-size: 11px; overflow-wrap: anywhere; }
+  .admin-summary-table th:first-child, .admin-summary-table td:first-child { width: 28%; }
+  .admin-summary-table th:last-child, .admin-summary-table td:last-child { width: 7%; }
   .hourly-chart { height: 120px; gap: 3px; }
   .hourly-bar { max-width: 100%; }
 }
@@ -1120,7 +1129,7 @@ def _admin_activity_panels(bot_data: dict[str, Any]) -> str:
                 "</tr>"
             )
         summary_table = (
-            '<div class="monitor-table-wrap"><table class="table-compact">'
+            '<div class="monitor-table-wrap"><table class="table-compact admin-summary-table">'
             "<tr><th>Админ</th>"
             f"{head}"
             '<th class=right>Σ</th></tr>'

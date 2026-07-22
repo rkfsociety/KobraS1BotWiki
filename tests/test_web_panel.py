@@ -7,7 +7,7 @@ import types
 
 import pytest
 
-from app.web_panel import start_web_panel
+from app.web_panel import _CSS, start_web_panel
 
 
 class _StubApp:
@@ -130,6 +130,14 @@ def test_dashboard_after_login(panel):
     body = r.read()
     assert r.status == 200
     assert b"42" in body  # счётчик страниц вики
+
+
+def test_dashboard_activity_layout_is_responsive_without_horizontal_scrollbar():
+    assert "@media (max-width: 1100px)" in _CSS
+    assert ".monitor-layout { grid-template-columns: 1fr; }" in _CSS
+    assert ".monitor-grid--2 { grid-template-columns: 1fr; }" in _CSS
+    assert ".admin-summary-table { table-layout: fixed; }" in _CSS
+    assert ".monitor-table-wrap { overflow-x: visible; }" in _CSS
 
 
 def test_csrf_required_for_mutations(panel):
