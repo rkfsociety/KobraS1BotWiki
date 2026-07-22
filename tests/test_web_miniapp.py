@@ -148,6 +148,8 @@ def test_miniapp_shell_has_mobile_admin_dashboard_sections():
     assert "sendChatMessage" in body
     assert "appendChatMessage" in body
     assert 'id="chat-input"' in body
+    assert 'id="chat-pagination"' in body
+    assert "history.insertBefore(loadMore" not in body
     assert 'aria-label="Вопрос боту"' in body
     assert "Загрузить предыдущие сообщения" in body
     assert "askQuestion" not in body
@@ -372,6 +374,26 @@ def test_chat_message_returns_wiki_answer_for_group_member(mini_panel):
     assert response.status == 200
     assert payload["messages"][1]["source"] == "wiki"
     assert "Первый слой" in payload["messages"][1]["text"]
+
+
+def test_wiki_url_is_returned_in_chat_message_and_history(mini_panel):
+    port, status_box = mini_panel
+    status_box["value"] = ChatMemberStatus.MEMBER
+    session = _create_session(port, user_id=103)
+    c = _conn(port)
+    headers = {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Bearer {session}"}
+    c.request("POST", "/api/app/chat/message", urlencode({"text": "как настроить первый слой"}), headers)
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 200
+    assert payload["messages"][1]["url"] == "https://wiki.example/layer"
+
+    c.close()
+    c = _conn(port)
+    c.request("GET", "/api/app/chat/history", headers={"Authorization": f"Bearer {session}"})
+    history = json.loads(c.getresponse().read())
+    assert history["messages"][-1]["url"] == "https://wiki.example/layer"
 
 
 def test_chat_message_stores_missing_question_and_fallback(mini_panel):

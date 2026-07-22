@@ -17,6 +17,7 @@ class ChatMessage:
     source: str
     created_at: float
     reply_to_id: int | None
+    url: str | None = None
 
 
 class ChatStore:
@@ -38,7 +39,8 @@ class ChatStore:
                     text TEXT NOT NULL,
                     source TEXT NOT NULL,
                     created_at REAL NOT NULL,
-                    reply_to_id INTEGER
+                    reply_to_id INTEGER,
+                    url TEXT
                 );
                 CREATE TABLE IF NOT EXISTS rate_limit_events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,6 +55,12 @@ class ChatStore:
                     ON rate_limit_events (user_id, created_at);
                 """
             )
+            columns = {
+                row[1]
+                for row in self._connection.execute("PRAGMA table_info(chat_messages)").fetchall()
+            }
+            if "url" not in columns:
+                self._connection.execute("ALTER TABLE chat_messages ADD COLUMN url TEXT")
             self._connection.commit()
 
     def close(self) -> None:
@@ -66,15 +74,16 @@ class ChatStore:
         text: str,
         source: str,
         reply_to_id: int | None = None,
+        url: str | None = None,
     ) -> ChatMessage:
         created_at = time.time()
         with self._lock, self._connection:
             cursor = self._connection.execute(
                 """
-                INSERT INTO chat_messages (user_id, role, text, source, created_at, reply_to_id)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO chat_messages (user_id, role, text, source, created_at, reply_to_id, url)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (user_id, role, text, source, created_at, reply_to_id),
+                (user_id, role, text, source, created_at, reply_to_id, url),
             )
             row = self._connection.execute(
                 "SELECT * FROM chat_messages WHERE id = ?", (cursor.lastrowid,)
@@ -199,4 +208,5 @@ class ChatStore:
             source=row["source"],
             created_at=row["created_at"],
             reply_to_id=row["reply_to_id"],
+            url=row["url"],
         )

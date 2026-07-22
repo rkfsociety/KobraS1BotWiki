@@ -94,6 +94,7 @@ def render_miniapp() -> bytes:
       root.innerHTML = `<div class="miniapp-head"><div><div class="eyebrow">KobraS1Bot</div><h1>Режим пользователя</h1><p class="muted">Задайте вопрос боту.</p></div>${adminButton}</div>
         <section class="miniapp-grid"><article class="miniapp-card miniapp-card--wide chat-card">
           <div id="chat-history" aria-live="polite"></div>
+          <div id="chat-pagination"></div>
           <div id="chat-status" class="chat-status muted" aria-live="polite"></div>
           <form onsubmit="sendChatMessage(event)" class="chat-form"><textarea id="chat-input" aria-label="Вопрос боту" placeholder="Например: как выставить первый слой?"></textarea><button id="chat-send" type="submit">Отправить</button></form>
         </article></section>`;
@@ -140,14 +141,14 @@ def render_miniapp() -> bytes:
           const messages = data.messages || [];
           (prepend ? [...messages].reverse() : messages).forEach((message) => appendChatMessage(message, prepend));
           chatHasMore = Boolean(data.has_more);
-          const button = document.getElementById('chat-load-more');
-          if (button) button.remove();
+          const pagination = document.getElementById('chat-pagination');
+          if (pagination) pagination.textContent = '';
           if (chatHasMore) {
             const loadMore = document.createElement('button');
             loadMore.id = 'chat-load-more'; loadMore.type = 'button'; loadMore.className = 'secondary chat-load-more';
             loadMore.textContent = 'Загрузить предыдущие сообщения';
             loadMore.onclick = () => loadChatHistory(history.querySelector('.chat-message')?.dataset.id || (data.messages || [])[0]?.id);
-            history.insertBefore(loadMore, history.firstChild);
+            if (pagination) pagination.appendChild(loadMore);
           }
           if (prepend) history.scrollTop = history.scrollHeight - oldHeight + oldTop; else history.scrollTop = history.scrollHeight;
         })
@@ -430,6 +431,7 @@ def _chat_message_payload(message: Any) -> dict[str, Any]:
         "source": message.source,
         "created_at": message.created_at,
         "reply_to_id": message.reply_to_id,
+        **({"url": message.url} if message.url else {}),
     }
 
 
@@ -519,7 +521,9 @@ def chat_message_payload(state: Any, authorization: str, text: str) -> tuple[int
         title = str(getattr(doc, "title", ""))
         if int(score) >= int(getattr(state.settings, "min_score", 72)):
             answer = f"Нашёл подходящую страницу: «{title}»." if title else "Нашёл подходящую страницу вики."
-            bot_message = store.add_message(user_id, "bot", answer, "wiki", reply_to_id=user_message.id)
+            bot_message = store.add_message(
+                user_id, "bot", answer, "wiki", reply_to_id=user_message.id, url=str(getattr(doc, "url", "")) or None
+            )
             store.prune_user_history(user_id, keep=500)
             return 200, _chat_pair_payload(session, user_message, bot_message)
         best_url = str(getattr(doc, "url", "")) or None

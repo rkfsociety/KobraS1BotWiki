@@ -32,6 +32,37 @@ def test_creates_database_schema_and_indexes(tmp_path: Path) -> None:
         store.close()
 
 
+def test_existing_schema_is_migrated_and_message_url_is_preserved(tmp_path: Path) -> None:
+    database_path = tmp_path / "legacy.sqlite3"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                text TEXT NOT NULL,
+                source TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                reply_to_id INTEGER
+            )
+            """
+        )
+
+    store = ChatStore(database_path)
+    try:
+        with sqlite3.connect(database_path) as connection:
+            columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(chat_messages)")
+            }
+        assert "url" in columns
+        message = store.add_message(1, "bot", "Откройте wiki", "wiki", url="https://wiki.example/page")
+        assert message.url == "https://wiki.example/page"
+        assert store.list_messages(1)[0].url == "https://wiki.example/page"
+    finally:
+        store.close()
+
+
 def test_messages_are_isolated_and_listed_in_chronological_order(tmp_path: Path) -> None:
     store = ChatStore(tmp_path / "chat.sqlite3")
     try:
