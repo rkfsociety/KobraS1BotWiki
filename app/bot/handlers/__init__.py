@@ -1,5 +1,5 @@
 """Пакет обработчиков Telegram-бота."""
-from ._cmd_basic import cmd_admincheck, cmd_help, cmd_id
+from ._cmd_basic import cmd_admincheck, cmd_app, cmd_help, cmd_id
 from ._cmd_corrections import cmd_error, cmd_fix
 from ._cmd_qa import cmd_qaadd, cmd_qadel, cmd_qalist
 from ._cmd_status import cmd_ping, cmd_status
@@ -11,6 +11,7 @@ from ._routing import on_channel_command
 
 __all__ = [
     "cmd_admincheck",
+    "cmd_app",
     "cmd_error",
     "cmd_fix",
     "cmd_help",

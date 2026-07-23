@@ -106,12 +106,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     args = context.args or []
     settings = context.application.bot_data.get("settings")
     if not args:
-        webapp_url = str(getattr(settings, "panel_webapp_url", "") or "").strip()
-        keyboard = None
-        if webapp_url.startswith("https://"):
-            keyboard = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("Открыть приложение", web_app=WebAppInfo(webapp_url))]]
-            )
+        keyboard = _miniapp_keyboard(settings)
         await msg.reply_text(
             "Привет! Я бот-помощник по вики. Задавайте вопросы в группе — постараюсь подсказать.",
             reply_markup=keyboard,
@@ -119,6 +114,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     payload = (args[0] or "").strip()
+    if payload.lower() == "app":
+        keyboard = _miniapp_keyboard(settings)
+        if keyboard is None:
+            await msg.reply_text("Приложение сейчас недоступно.")
+        else:
+            await msg.reply_text("Откройте приложение поддержки:", reply_markup=keyboard)
+        return
+
     codes, lock = _store(context.application)
     now = time.time()
     with lock:
@@ -157,3 +160,12 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         log.warning("panel_login: отказ (не админ) uid=%s %s", user.id, label)
         await msg.reply_text("⛔ Доступ к панели только для администраторов группы.")
+
+
+def _miniapp_keyboard(settings: Any) -> InlineKeyboardMarkup | None:
+    webapp_url = str(getattr(settings, "panel_webapp_url", "") or "").strip()
+    if not webapp_url.startswith("https://"):
+        return None
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Открыть приложение", web_app=WebAppInfo(webapp_url))]]
+    )

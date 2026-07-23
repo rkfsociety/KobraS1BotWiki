@@ -4,7 +4,7 @@ from __future__ import annotations
 import html
 import logging
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatType, ParseMode
 from telegram.ext import ContextTypes
 
@@ -48,6 +48,31 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     uid = msg.from_user.id if msg.from_user else None
     log_bot_reply_for_message(
         "cmd_help", msg=msg, reply_text=body, sent=sent, user_id=uid, admin=str(is_admin).lower()
+    )
+
+
+async def cmd_app(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Публикует в группе кнопку перехода в личный чат для запуска Mini App."""
+    if not update.effective_message or not update.effective_chat:
+        return
+
+    if update.effective_chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        return
+
+    if await _deny_unless_admin_command_access(update, context, command="app"):
+        return
+
+    bot_username = str(context.application.bot_data.get("bot_username") or "").strip().lstrip("@")
+    if not bot_username:
+        await update.effective_message.reply_text("Приложение пока недоступно: имя бота ещё не определено.")
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("📱 Открыть приложение", url=f"https://t.me/{bot_username}?start=app")]]
+    )
+    await update.effective_message.reply_text(
+        "Открыть приложение поддержки можно в личном чате с ботом:",
+        reply_markup=keyboard,
     )
 
 
