@@ -68,10 +68,10 @@ async def cmd_app(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     keyboard = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("📱 Открыть приложение", url=f"https://t.me/{bot_username}?start=app")]]
+        [[InlineKeyboardButton("📱 Открыть приложение", url=f"https://t.me/{bot_username}?startapp")]]
     )
     await update.effective_message.reply_text(
-        "Открыть приложение поддержки можно в личном чате с ботом:",
+        "Открыть приложение поддержки:",
         reply_markup=keyboard,
     )
 

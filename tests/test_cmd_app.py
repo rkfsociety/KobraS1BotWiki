@@ -6,7 +6,7 @@ from app.bot.handlers import cmd_app
 from app.bot.panel_login import cmd_start
 
 
-def test_cmd_app_publishes_private_bot_deep_link_button():
+def test_cmd_app_publishes_direct_miniapp_button():
     reply_text = AsyncMock()
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(type="supergroup", id=-100123),
@@ -33,7 +33,7 @@ def test_cmd_app_publishes_private_bot_deep_link_button():
     kwargs = reply_text.await_args.kwargs
     button = kwargs["reply_markup"].inline_keyboard[0][0]
     assert button.text == "📱 Открыть приложение"
-    assert button.url == "https://t.me/kobra_help_bot?start=app"
+    assert button.url == "https://t.me/kobra_help_bot?startapp"
 
 
 def test_start_app_payload_opens_miniapp_button():
