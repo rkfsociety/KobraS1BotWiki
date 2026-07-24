@@ -61,6 +61,17 @@ def render_miniapp() -> bytes:
     .miniapp-tabs { display:flex; gap:8px; margin-bottom:16px; border-bottom:1px solid var(--line); overflow-x:auto; padding-bottom:0; }
     .miniapp-tab { padding:10px 14px; border:0; background:none; color:var(--muted); cursor:pointer; font:600 12px inherit; border-bottom:2px solid transparent; white-space:nowrap; }
     .miniapp-tab.active { color:var(--text); border-bottom-color:var(--amber); }
+    .monitor-panel { background:rgba(10,12,18,0.55); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:14px; }
+    .monitor-title { margin:0 0 10px; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#8b95a8; }
+    .table-compact { width:100%; border-collapse:collapse; font-size:12px; }
+    .table-compact th { padding:6px 8px; color:#8b95a8; font-weight:600; font-size:11px; text-align:left; border-bottom:1px solid var(--line); }
+    .table-compact td { padding:6px 8px; border-bottom:1px solid var(--line); color:var(--text); }
+    .table-compact tbody tr:last-child td { border-bottom:0; }
+    .table-compact tbody tr:hover { background:rgba(37,99,235,0.06); }
+    .rank-cell { width:28px; color:#6b7280; font-size:11px; font-weight:700; }
+    .rank-cell--top { color:#fbbf24; font-size:13px; }
+    .count-badge { display:inline-flex; align-items:center; justify-content:center; min-width:24px; padding:1px 7px; border-radius:999px; background:rgba(37,99,235,0.18); color:#93c5fd; border:1px solid rgba(96,165,250,0.25); font-weight:700; font-size:10px; }
+    .right { text-align:right; }
     @media (min-width:560px) { .miniapp-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
   </style>
 </head>
@@ -136,21 +147,27 @@ def render_miniapp() -> bytes:
       if (!content) return;
       let html = '';
       if (data.top_users && data.top_users.length) {
-        html += '<article class="miniapp-card miniapp-card--wide"><h2>Топ участников</h2><div style="margin-top:12px"><table class="table-compact" style="font-size:12px"><tbody>' +
-          data.top_users.map((u, i) => `<tr><td style="color:#8b95a8">#${i+1}</td><td>${escapeHtml(u.name || 'Аноним')}</td><td style="text-align:right;color:#93c5fd">${u.count}</td></tr>`).join('') +
-          '</tbody></table></div></article>';
+        const userRows = data.top_users.map((u, i) => {
+          const rank = i < 3 ? `<span class="rank-cell rank-cell--top">${i+1}</span>` : `<span class="rank-cell">#${i+1}</span>`;
+          return `<tr><td>${rank}</td><td>${escapeHtml(u.name || 'Аноним')}</td><td class="right"><span class="count-badge">${u.count}</span></td></tr>`;
+        }).join('');
+        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Топ участников</h3>' +
+          '<table class="table-compact"><thead><tr><th>#</th><th>Участник</th><th class="right">Сообщ.</th></tr></thead><tbody>' +
+          userRows + '</tbody></table></div></article>';
       }
       if (data.top_questions && data.top_questions.length) {
-        html += '<article class="miniapp-card miniapp-card--wide"><h2>Популярные вопросы</h2><div style="margin-top:12px">' +
-          data.top_questions.map(q => `<div style="padding:8px 0;border-bottom:1px solid #232936"><p style="margin:0;font-size:12px">${escapeHtml(q.text)}</p><p style="margin:4px 0 0;font-size:11px;color:#8b95a8">${q.count} вопрос${q.count % 10 === 1 && q.count % 100 !== 11 ? '' : 'а'}</p></div>`).join('') +
-          '</div></article>';
+        const qRows = data.top_questions.map(q => `<tr><td>${escapeHtml(q.text)}</td><td class="right"><span class="count-badge">${q.count}</span></td></tr>`).join('');
+        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Популярные вопросы</h3>' +
+          '<table class="table-compact"><thead><tr><th>Вопрос</th><th class="right">Раз</th></tr></thead><tbody>' +
+          qRows + '</tbody></table></div></article>';
       }
       if (data.top_wiki_pages && data.top_wiki_pages.length) {
-        html += '<article class="miniapp-card miniapp-card--wide"><h2>Популярные страницы вики</h2><div style="margin-top:12px">' +
-          data.top_wiki_pages.map(p => `<div style="padding:8px 0;border-bottom:1px solid #232936"><p style="margin:0;font-size:12px">${escapeHtml(p.title)}</p><p style="margin:4px 0 0;font-size:11px;color:#8b95a8">${p.count} просмотр${p.count % 10 === 1 && p.count % 100 !== 11 ? '' : 'ов'}</p></div>`).join('') +
-          '</div></article>';
+        const pRows = data.top_wiki_pages.map(p => `<tr><td>${escapeHtml(p.title)}</td><td class="right"><span class="count-badge">${p.count}</span></td></tr>`).join('');
+        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Популярные страницы вики</h3>' +
+          '<table class="table-compact"><thead><tr><th>Страница</th><th class="right">Просм.</th></tr></thead><tbody>' +
+          pRows + '</tbody></table></div></article>';
       }
-      content.innerHTML = html || '<span class="error">Нет данных статистики</span>';
+      content.innerHTML = html || '<article class="miniapp-card miniapp-card--wide"><span class="error">Нет данных статистики</span></article>';
     }
     let currentSessionRole = null;
     let chatHasMore = false;
