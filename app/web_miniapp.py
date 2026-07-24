@@ -153,6 +153,20 @@ def render_miniapp() -> bytes:
       if (!content) return;
       let html = '';
 
+      if (data.metrics) {
+        const m = data.metrics;
+        html += '<div class="miniapp-grid">' +
+          `<article class="miniapp-card"><div class="muted">Ответов дано</div><div class="value">${m.total_answers}</div></article>` +
+          `<article class="miniapp-card"><div class="muted">Сообщений получено</div><div class="value">${m.total_incoming}</div></article>` +
+          `<article class="miniapp-card"><div class="muted">Коэффициент ответов</div><div class="value">${m.answer_rate}%</div></article>` +
+          `<article class="miniapp-card"><div class="muted">Вопросов без ответа</div><div class="value">${m.missed_count}</div></article>` +
+          `<article class="miniapp-card"><div class="muted">Уникальных вопросов</div><div class="value">${m.unique_questions}</div></article>` +
+          `<article class="miniapp-card"><div class="muted">Уникальных пользователей</div><div class="value">${m.unique_users}</div></article>` +
+          `<article class="miniapp-card"><div class="muted">Ответов на пользователя</div><div class="value">${m.avg_answers_per_user}</div></article>` +
+          (data.peak_hours && data.peak_hours.length ? `<article class="miniapp-card"><div class="muted">Пик активности</div><div class="value">${String(data.peak_hours[0].hour).padStart(2, '0')}:00</div></article>` : '') +
+          '</div>';
+      }
+
       if (data.top_wiki_pages && data.top_wiki_pages.length) {
         const wikiRows = data.top_wiki_pages.map(p => `<tr><td>${escapeHtml(p.title)}</td><td class="right"><span class="count-badge">${p.count}</span></td></tr>`).join('');
         html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Топ страниц вики<span class="monitor-sub">по ответам бота</span></h3>' +
@@ -756,29 +770,49 @@ def dismiss_missed_payload(state: Any, authorization: str, item_id: str) -> tupl
 
 
 def stats_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
-    """Возвращает статистику активности группы: топ пользователей, вопросов, страниц вики."""
+    """Возвращает статистику активности группы: топ пользователей, вопросов, страниц вики + метрики качества."""
     session, error = _require_admin_session(state, authorization)
     if error is not None:
         return error
 
-    from app.bot.bot_stats import get_top_users, get_top_questions, get_top_wiki_pages, get_hourly_activity
+    from app.bot.bot_stats import (
+        get_top_users, get_top_questions, get_top_wiki_pages, get_hourly_activity,
+        get_stats_metrics, get_peak_hours
+    )
+    from app.bot.missed_questions import load_missed_questions
 
     bot_data = state.application.bot_data if state.application else {}
+    stats = bot_data.get("bot_stats") or {}
+
     top_wiki_pages = get_top_wiki_pages(bot_data, limit=8)
     top_questions = get_top_questions(bot_data, limit=8)
     top_users = get_top_users(bot_data, limit=10)
     hourly_activity = get_hourly_activity(bot_data)
+    metrics = get_stats_metrics(bot_data)
+    peak_hours = get_peak_hours(bot_data, limit=3)
+    missed = load_missed_questions()
 
-    total_incoming = sum(hourly_activity) if hourly_activity else 0
-    peak_hour = max(range(24), key=lambda h: hourly_activity[h]) if total_incoming else 0
-    peak_val = hourly_activity[peak_hour] if total_incoming else 0
+    total_incoming = int(stats.get("total_incoming", 0))
+    total_answers = int(stats.get("total_answers", 0))
+    peak_hour = peak_hours[0]["hour"] if peak_hours else 0
+    peak_val = peak_hours[0]["count"] if peak_hours else 0
 
     return 200, {
         "role": session["role"],
+        "metrics": {
+            "unique_questions": metrics["unique_questions"],
+            "unique_users": metrics["unique_users"],
+            "answer_rate": metrics["answer_rate"],
+            "avg_answers_per_user": metrics["avg_answers_per_user"],
+            "total_answers": total_answers,
+            "total_incoming": total_incoming,
+            "missed_count": len(missed),
+        },
         "top_wiki_pages": [{"title": title, "count": count} for title, count in top_wiki_pages],
         "top_questions": [{"text": text, "count": count} for text, count in top_questions],
         "top_users": [{"name": u.get("label", "?"), "count": u.get("count", 0)} for u in top_users],
         "hourly_activity": hourly_activity,
+        "peak_hours": [{"hour": h["hour"], "count": h["count"]} for h in peak_hours],
         "total_incoming": total_incoming,
         "peak_hour": peak_hour,
         "peak_val": peak_val,

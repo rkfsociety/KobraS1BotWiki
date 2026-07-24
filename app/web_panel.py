@@ -983,12 +983,22 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
     def stat(n: Any, label: str) -> str:
         return f'<div class="stat"><div class="n">{html.escape(str(n))}</div><div class="l">{html.escape(label)}</div></div>'
 
+    from app.bot.bot_stats import get_stats_metrics, get_peak_hours
+    from app.bot.missed_questions import load_missed_questions
+
     bot_stats = bd.get("bot_stats") or {}
-    total_answers = bot_stats.get("total_answers", 0)
+    total_answers = int(bot_stats.get("total_answers", 0))
+    total_incoming = int(bot_stats.get("total_incoming", 0))
     top_wiki_pages = get_top_wiki_pages(bd)
     top_questions = get_top_questions(bd)
     hourly_activity = get_hourly_activity(bd)
     top_users = get_top_users(bd, limit=10)
+    metrics = get_stats_metrics(bd)
+    missed = load_missed_questions()
+
+    answer_rate = metrics["answer_rate"]
+    unique_questions = metrics["unique_questions"]
+    unique_users = metrics["unique_users"]
 
     stats = (
         stat(doc_count, "страниц вики в индексе")
@@ -997,6 +1007,10 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
         + stat(len(fixes), "фиксов ссылок")
         + stat(len(codes), "кодов ошибок")
         + stat(total_answers, "всего ответов бота")
+        + stat(f"{answer_rate}%", "коэффициент ответов")
+        + stat(len(missed), "вопросов без ответа")
+        + stat(unique_questions, "уникальных вопросов")
+        + stat(unique_users, "активных пользователей")
         + stat(_fmt_uptime(time.time() - state.start_time), "аптайм панели")
     )
     recent_section = _recent_replies_section(state, csrf, page=replies_page) if csrf else ""
