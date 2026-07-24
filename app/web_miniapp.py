@@ -204,13 +204,13 @@ def render_miniapp() -> bytes:
       const token = sessionStorage.getItem('kobra_app_session');
       const body = new URLSearchParams({title: document.getElementById('title-' + id).value, answer: document.getElementById('answer-' + id).value});
       fetch('/api/app/missed/' + encodeURIComponent(id) + '/answer', {method:'POST', headers:{Authorization:'Bearer ' + token, 'Content-Type':'application/x-www-form-urlencoded'}, body})
-        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Не удалось сохранить'); loadDashboard(); })
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Не удалось сохранить'); loadMissed(); })
         .catch((error) => { const box = document.getElementById('missed'); if (box) box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
     function dismissQuestion(id) {
       const token = sessionStorage.getItem('kobra_app_session');
       fetch('/api/app/missed/' + encodeURIComponent(id) + '/dismiss', {method:'POST', headers:{Authorization:'Bearer ' + token}})
-        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Не удалось удалить'); loadDashboard(); })
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Не удалось удалить'); loadMissed(); })
         .catch((error) => { const box = document.getElementById('missed'); if (box) box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
     if (!tg || !tg.initData) {
