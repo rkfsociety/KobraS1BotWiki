@@ -39,11 +39,11 @@ def render_miniapp() -> bytes:
     h1,h2,p { margin:0; } h1 { font-size:25px; letter-spacing:-.02em; } h2 { font-size:14px; }
     .muted { color:var(--muted); } .eyebrow { color:var(--amber); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
     .miniapp-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-    .metrics-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(100px,1fr)); gap:6px; margin-bottom:14px; max-width:100%; }
+    .metrics-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:14px; }
     .metric-card { background:linear-gradient(145deg,#171c27,#11151d); border:1px solid var(--line); border-radius:10px; padding:8px 6px; text-align:center; min-width:0; overflow:hidden; }
     .metric-card .value { color:var(--amber); font-size:18px; font-weight:750; margin:3px 0 2px; line-height:1; }
     .metric-card .label { color:var(--muted); font-size:8px; line-height:1.1; word-break:break-word; }
-    @media (max-width:550px) { .metrics-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .metric-card { padding:8px 4px; } .metric-card .value { font-size:16px; } }
+    @media (max-width:550px) { .metrics-grid { grid-template-columns:repeat(2,1fr); } .metric-card { padding:8px 4px; } .metric-card .value { font-size:16px; } }
     .miniapp-card { background:linear-gradient(145deg,#171c27,#11151d); border:1px solid var(--line); border-radius:16px; padding:15px; box-shadow:0 12px 28px #0003; }
     .miniapp-card .value { color:var(--amber); font-size:25px; font-weight:750; margin:5px 0 1px; }
     .miniapp-card--wide { grid-column:1/-1; } .miniapp-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
