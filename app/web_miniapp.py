@@ -731,7 +731,7 @@ def stats_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
 
     return 200, {
         "role": session["role"],
-        "top_users": [{"name": name, "count": count} for name, count in top_users],
+        "top_users": [{"name": u.get("label", "?"), "count": u.get("count", 0)} for u in top_users],
         "top_questions": [{"text": text, "count": count} for text, count in top_questions],
         "top_wiki_pages": [{"title": title, "count": count} for title, count in top_wiki_pages],
     }
