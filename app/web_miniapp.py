@@ -39,10 +39,11 @@ def render_miniapp() -> bytes:
     h1,h2,p { margin:0; } h1 { font-size:25px; letter-spacing:-.02em; } h2 { font-size:14px; }
     .muted { color:var(--muted); } .eyebrow { color:var(--amber); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
     .miniapp-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
-    .metrics-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-bottom:16px; }
-    .metric-card { background:linear-gradient(145deg,#171c27,#11151d); border:1px solid var(--line); border-radius:12px; padding:10px 8px; text-align:center; }
-    .metric-card .value { color:var(--amber); font-size:20px; font-weight:750; margin:4px 0 2px; line-height:1.1; }
-    .metric-card .label { color:var(--muted); font-size:9px; line-height:1.2; }
+    .metrics-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin-bottom:14px; }
+    .metric-card { background:linear-gradient(145deg,#171c27,#11151d); border:1px solid var(--line); border-radius:10px; padding:8px 6px; text-align:center; min-width:0; }
+    .metric-card .value { color:var(--amber); font-size:18px; font-weight:750; margin:3px 0 2px; line-height:1; }
+    .metric-card .label { color:var(--muted); font-size:8px; line-height:1.1; word-break:break-word; }
+    @media (max-width:480px) { .metrics-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; } .metric-card { padding:8px 4px; } .metric-card .value { font-size:16px; } }
     .miniapp-card { background:linear-gradient(145deg,#171c27,#11151d); border:1px solid var(--line); border-radius:16px; padding:15px; box-shadow:0 12px 28px #0003; }
     .miniapp-card .value { color:var(--amber); font-size:25px; font-weight:750; margin:5px 0 1px; }
     .miniapp-card--wide { grid-column:1/-1; } .miniapp-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
@@ -82,7 +83,6 @@ def render_miniapp() -> bytes:
     .hourly-label { font-size:9px; color:#6b7280; }
     .hourly-val { font-size:9px; color:#cbd5e1; font-weight:600; min-height:12px; }
     .right { text-align:right; }
-    @media (max-width:480px) { .metrics-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
     @media (min-width:560px) { .miniapp-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
   </style>
 </head>
@@ -161,13 +161,13 @@ def render_miniapp() -> bytes:
       if (data.metrics) {
         const m = data.metrics;
         html += '<div class="metrics-grid">' +
-          `<article class="metric-card"><div class="label">Ответов дано</div><div class="value">${m.total_answers}</div></article>` +
+          `<article class="metric-card"><div class="label">Ответов</div><div class="value">${m.total_answers}</div></article>` +
           `<article class="metric-card"><div class="label">Сообщений</div><div class="value">${m.total_incoming}</div></article>` +
-          `<article class="metric-card"><div class="label">% ответов</div><div class="value">${m.answer_rate}%</div></article>` +
+          `<article class="metric-card"><div class="label">% успеха</div><div class="value">${m.answer_rate}%</div></article>` +
           `<article class="metric-card"><div class="label">Без ответа</div><div class="value">${m.missed_count}</div></article>` +
-          `<article class="metric-card"><div class="label">Уникальных Q</div><div class="value">${m.unique_questions}</div></article>` +
-          `<article class="metric-card"><div class="label">Пользователей</div><div class="value">${m.unique_users}</div></article>` +
-          `<article class="metric-card"><div class="label">Ответов/чел</div><div class="value">${m.avg_answers_per_user}</div></article>` +
+          `<article class="metric-card"><div class="label">Вопросов</div><div class="value">${m.unique_questions}</div></article>` +
+          `<article class="metric-card"><div class="label">Людей</div><div class="value">${m.unique_users}</div></article>` +
+          `<article class="metric-card"><div class="label">На чел</div><div class="value">${m.avg_answers_per_user}</div></article>` +
           (data.peak_hours && data.peak_hours.length ? `<article class="metric-card"><div class="label">Пик</div><div class="value">${String(data.peak_hours[0].hour).padStart(2, '0')}:00</div></article>` : '') +
           '</div>';
       }
