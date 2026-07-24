@@ -88,6 +88,7 @@ from app.web_miniapp import (
     question_payload,
     render_miniapp,
     search_payload,
+    stats_payload,
 )
 
 log = logging.getLogger(__name__)
@@ -1694,6 +1695,10 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     self.headers.get("Authorization", ""),
                     (qs.get("q") or [""])[0],
                 )
+                self._send_json(payload, status=status)
+                return
+            if path == "/api/app/stats":
+                status, payload = stats_payload(state, self.headers.get("Authorization", ""))
                 self._send_json(payload, status=status)
                 return
             if path == "/api/app/chat/history":

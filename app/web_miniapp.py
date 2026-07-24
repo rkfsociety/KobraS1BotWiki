@@ -58,6 +58,9 @@ def render_miniapp() -> bytes:
     #chat-input { flex:1; min-width:0; min-height:48px; max-height:140px; padding:10px; border:1px solid var(--line); border-radius:10px; background:#0d1118; color:var(--text); font:inherit; resize:vertical; }
     .chat-status { min-height:20px; margin-top:8px; }
     .miniapp-error { display:grid; place-items:center; min-height:60vh; padding:24px; text-align:center; }
+    .miniapp-tabs { display:flex; gap:8px; margin-bottom:16px; border-bottom:1px solid var(--line); overflow-x:auto; padding-bottom:0; }
+    .miniapp-tab { padding:10px 14px; border:0; background:none; color:var(--muted); cursor:pointer; font:600 12px inherit; border-bottom:2px solid transparent; white-space:nowrap; }
+    .miniapp-tab.active { color:var(--text); border-bottom-color:var(--amber); }
     @media (min-width:560px) { .miniapp-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
   </style>
 </head>
@@ -70,17 +73,84 @@ def render_miniapp() -> bytes:
     function escapeHtml(value) {
       return String(value).replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
     }
+    let currentTab = 'overview';
     function renderDashboard(data) {
       const s = data.stats || {};
       root.innerHTML = `<div class="miniapp-head"><div><div class="eyebrow">KobraS1Bot</div><h1>Панель администратора</h1><p class="muted">${escapeHtml(data.user.first_name || 'Администратор')}</p></div><div class="miniapp-head__actions"><div class="eyebrow">ADMIN</div><button class="secondary" onclick="setUserMode()">Режим пользователя</button></div></div>
-        <section class="miniapp-grid">
-          <article class="miniapp-card"><div class="muted">Страницы вики</div><div class="value">${s.wiki_pages || 0}</div></article>
-          <article class="miniapp-card"><div class="muted">Ответы бота</div><div class="value">${s.total_answers || 0}</div></article>
-          <article class="miniapp-card"><div class="muted">Ручные ответы</div><div class="value">${s.manual_answers || 0}</div></article>
-          <article class="miniapp-card"><div class="muted">Вопросы без ответа</div><div class="value">${s.missed_questions || 0}</div></article>
-          <article class="miniapp-card miniapp-card--wide"><h2>Поиск по вики</h2><form onsubmit="searchWiki(event)" class="miniapp-actions"><input id="wiki-query" placeholder="Например: первый слой" style="flex:1;min-width:180px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"><button type="submit">Найти</button></form><div id="search-results" class="muted" style="margin-top:12px"></div></article>
-          <article class="miniapp-card miniapp-card--wide"><h2>Очередь разбора</h2><p class="muted">Вопросы, которым нужно добавить ручной ответ или улучшить поиск.</p><div class="miniapp-actions"><button onclick="loadMissed()">Открыть вопросы</button><button class="secondary" onclick="loadDashboard()">Обновить</button></div><div id="missed" class="muted" style="margin-top:12px"></div></article>
-        </section>`;
+        <nav class="miniapp-tabs">
+          <button class="miniapp-tab ${currentTab === 'overview' ? 'active' : ''}" onclick="switchTab('overview')">Основное</button>
+          <button class="miniapp-tab ${currentTab === 'stats' ? 'active' : ''}" onclick="switchTab('stats')">Статистика</button>
+          <button class="miniapp-tab ${currentTab === 'tools' ? 'active' : ''}" onclick="switchTab('tools')">Инструменты</button>
+          <button class="miniapp-tab ${currentTab === 'queue' ? 'active' : ''}" onclick="switchTab('queue')">Очередь</button>
+        </nav>
+        <section class="miniapp-grid" id="dashboard-content"></section>`;
+      showDashboardTab();
+    }
+    function showDashboardTab() {
+      const content = document.getElementById('dashboard-content');
+      if (!content) return;
+      if (currentTab === 'overview') {
+        const token = sessionStorage.getItem('kobra_app_session');
+        fetch('/api/app/dashboard', {headers:{Authorization:'Bearer ' + token}})
+          .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); const s = data.stats || {}; content.innerHTML = `
+            <article class="miniapp-card"><div class="muted">Страницы вики</div><div class="value">${s.wiki_pages || 0}</div></article>
+            <article class="miniapp-card"><div class="muted">Ответы бота</div><div class="value">${s.total_answers || 0}</div></article>
+            <article class="miniapp-card"><div class="muted">Ручные ответы</div><div class="value">${s.manual_answers || 0}</div></article>
+            <article class="miniapp-card"><div class="muted">Вопросы без ответа</div><div class="value">${s.missed_questions || 0}</div></article>
+            <article class="miniapp-card miniapp-card--wide"><h2>Поиск по вики</h2><form onsubmit="searchWiki(event)" class="miniapp-actions"><input id="wiki-query" placeholder="Например: первый слой" style="flex:1;min-width:180px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"><button type="submit">Найти</button></form><div id="search-results" class="muted" style="margin-top:12px"></div></article>
+          `; })
+          .catch((error) => { content.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+      } else if (currentTab === 'stats') {
+        loadGroupStats();
+      } else if (currentTab === 'tools') {
+        content.innerHTML = '<article class="miniapp-card miniapp-card--wide"><h2>Поиск по вики</h2><form onsubmit="searchWiki(event)" class="miniapp-actions"><input id="wiki-query" placeholder="Например: первый слой" style="flex:1;min-width:180px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"><button type="submit">Найти</button></form><div id="search-results" class="muted" style="margin-top:12px"></div></article>';
+      } else if (currentTab === 'queue') {
+        content.innerHTML = '<article class="miniapp-card miniapp-card--wide"><h2>Очередь разбора</h2><p class="muted">Вопросы, которым нужно добавить ручной ответ или улучшить поиск.</p><div class="miniapp-actions"><button onclick="loadMissedList()">Открыть вопросы</button></div><div id="missed" class="muted" style="margin-top:12px"></div></article>';
+      }
+    }
+    function switchTab(tab) {
+      currentTab = tab;
+      const tabs = document.querySelectorAll('.miniapp-tab');
+      tabs.forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+      showDashboardTab();
+    }
+    function loadMissedList() {
+      const box = document.getElementById('missed');
+      if (!box) return;
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/missed', {headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderMissed(data.items); })
+        .catch((error) => { box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
+    function loadGroupStats() {
+      const content = document.getElementById('dashboard-content');
+      if (!content) return;
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/stats', {headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderGroupStats(data); })
+        .catch((error) => { content.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
+    function renderGroupStats(data) {
+      const content = document.getElementById('dashboard-content');
+      if (!content) return;
+      let html = '';
+      if (data.top_users && data.top_users.length) {
+        html += '<article class="miniapp-card miniapp-card--wide"><h2>Топ участников</h2><div style="margin-top:12px"><table class="table-compact" style="font-size:12px"><tbody>' +
+          data.top_users.map((u, i) => `<tr><td style="color:#8b95a8">#${i+1}</td><td>${escapeHtml(u.name || 'Аноним')}</td><td style="text-align:right;color:#93c5fd">${u.count}</td></tr>`).join('') +
+          '</tbody></table></div></article>';
+      }
+      if (data.top_questions && data.top_questions.length) {
+        html += '<article class="miniapp-card miniapp-card--wide"><h2>Популярные вопросы</h2><div style="margin-top:12px">' +
+          data.top_questions.map(q => `<div style="padding:8px 0;border-bottom:1px solid #232936"><p style="margin:0;font-size:12px">${escapeHtml(q.text)}</p><p style="margin:4px 0 0;font-size:11px;color:#8b95a8">${q.count} вопрос${q.count % 10 === 1 && q.count % 100 !== 11 ? '' : 'а'}</p></div>`).join('') +
+          '</div></article>';
+      }
+      if (data.top_wiki_pages && data.top_wiki_pages.length) {
+        html += '<article class="miniapp-card miniapp-card--wide"><h2>Популярные страницы вики</h2><div style="margin-top:12px">' +
+          data.top_wiki_pages.map(p => `<div style="padding:8px 0;border-bottom:1px solid #232936"><p style="margin:0;font-size:12px">${escapeHtml(p.title)}</p><p style="margin:4px 0 0;font-size:11px;color:#8b95a8">${p.count} просмотр${p.count % 10 === 1 && p.count % 100 !== 11 ? '' : 'ов'}</p></div>`).join('') +
+          '</div></article>';
+      }
+      content.innerHTML = html || '<span class="error">Нет данных статистики</span>';
     }
     let currentSessionRole = null;
     let chatHasMore = false;
@@ -644,3 +714,24 @@ def dismiss_missed_payload(state: Any, authorization: str, item_id: str) -> tupl
         return 404, {"ok": False, "error": "Вопрос уже обработан или не найден."}
     ok, message = delete_missed_question_by_text(text=str(entry.get("text", "")))
     return (200 if ok else 500), {"ok": ok, "message": message} if ok else {"ok": False, "error": message}
+
+
+def stats_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
+    """Возвращает статистику активности группы: топ пользователей, вопросов, страниц вики."""
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        return error
+
+    from app.bot.bot_stats import get_top_users, get_top_questions, get_top_wiki_pages
+
+    bot_data = state.application.bot_data if state.application else {}
+    top_users = get_top_users(bot_data, limit=10)
+    top_questions = get_top_questions(bot_data, limit=8)
+    top_wiki_pages = get_top_wiki_pages(bot_data, limit=8)
+
+    return 200, {
+        "role": session["role"],
+        "top_users": [{"name": name, "count": count} for name, count in top_users],
+        "top_questions": [{"text": text, "count": count} for text, count in top_questions],
+        "top_wiki_pages": [{"title": title, "count": count} for title, count in top_wiki_pages],
+    }
