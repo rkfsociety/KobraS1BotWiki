@@ -63,6 +63,7 @@ def render_miniapp() -> bytes:
     .miniapp-tab.active { color:var(--text); border-bottom-color:var(--amber); }
     .monitor-panel { background:rgba(10,12,18,0.55); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:14px; }
     .monitor-title { margin:0 0 10px; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#8b95a8; }
+    .monitor-sub { display:block; margin-top:2px; font-size:10px; font-weight:400; text-transform:none; letter-spacing:normal; color:#6b7280; }
     .table-compact { width:100%; border-collapse:collapse; font-size:12px; }
     .table-compact th { padding:6px 8px; color:#8b95a8; font-weight:600; font-size:11px; text-align:left; border-bottom:1px solid var(--line); }
     .table-compact td { padding:6px 8px; border-bottom:1px solid var(--line); color:var(--text); }
@@ -71,6 +72,11 @@ def render_miniapp() -> bytes:
     .rank-cell { width:28px; color:#6b7280; font-size:11px; font-weight:700; }
     .rank-cell--top { color:#fbbf24; font-size:13px; }
     .count-badge { display:inline-flex; align-items:center; justify-content:center; min-width:24px; padding:1px 7px; border-radius:999px; background:rgba(37,99,235,0.18); color:#93c5fd; border:1px solid rgba(96,165,250,0.25); font-weight:700; font-size:10px; }
+    .hourly-chart { display:grid; grid-template-columns:repeat(24,minmax(0,1fr)); gap:3px; align-items:flex-end; height:80px; padding:4px 0 0; margin-top:10px; }
+    .hourly-col { display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:2px; min-width:0; }
+    .hourly-bar { width:100%; max-width:18px; min-height:1px; border-radius:3px 3px 1px 1px; background:linear-gradient(180deg,#60a5fa 0%,#2563eb 55%,#1d4ed8 100%); box-shadow:0 0 8px rgba(37,99,235,0.3); }
+    .hourly-label { font-size:9px; color:#6b7280; }
+    .hourly-val { font-size:9px; color:#cbd5e1; font-weight:600; min-height:12px; }
     .right { text-align:right; }
     @media (min-width:560px) { .miniapp-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
   </style>
@@ -146,27 +152,43 @@ def render_miniapp() -> bytes:
       const content = document.getElementById('dashboard-content');
       if (!content) return;
       let html = '';
+
+      if (data.top_wiki_pages && data.top_wiki_pages.length) {
+        const wikiRows = data.top_wiki_pages.map(p => `<tr><td>${escapeHtml(p.title)}</td><td class="right"><span class="count-badge">${p.count}</span></td></tr>`).join('');
+        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Топ страниц вики<span class="monitor-sub">по ответам бота</span></h3>' +
+          '<table class="table-compact"><thead><tr><th>Страница</th><th class="right">Ответов</th></tr></thead><tbody>' +
+          wikiRows + '</tbody></table></div></article>';
+      }
+
+      if (data.top_questions && data.top_questions.length) {
+        const qRows = data.top_questions.map(q => `<tr><td>${escapeHtml(q.text)}</td><td class="right"><span class="count-badge">${q.count}</span></td></tr>`).join('');
+        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Топ вопросов<span class="monitor-sub">частые формулировки</span></h3>' +
+          '<table class="table-compact"><thead><tr><th>Вопрос</th><th class="right">Раз</th></tr></thead><tbody>' +
+          qRows + '</tbody></table></div></article>';
+      }
+
       if (data.top_users && data.top_users.length) {
         const userRows = data.top_users.map((u, i) => {
           const rank = i < 3 ? `<span class="rank-cell rank-cell--top">${i+1}</span>` : `<span class="rank-cell">#${i+1}</span>`;
           return `<tr><td>${rank}</td><td>${escapeHtml(u.name || 'Аноним')}</td><td class="right"><span class="count-badge">${u.count}</span></td></tr>`;
         }).join('');
-        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Топ участников</h3>' +
+        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Топ участников<span class="monitor-sub">сообщения в чате</span></h3>' +
           '<table class="table-compact"><thead><tr><th>#</th><th>Участник</th><th class="right">Сообщ.</th></tr></thead><tbody>' +
           userRows + '</tbody></table></div></article>';
       }
-      if (data.top_questions && data.top_questions.length) {
-        const qRows = data.top_questions.map(q => `<tr><td>${escapeHtml(q.text)}</td><td class="right"><span class="count-badge">${q.count}</span></td></tr>`).join('');
-        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Популярные вопросы</h3>' +
-          '<table class="table-compact"><thead><tr><th>Вопрос</th><th class="right">Раз</th></tr></thead><tbody>' +
-          qRows + '</tbody></table></div></article>';
+
+      if (data.hourly_activity && data.hourly_activity.length === 24) {
+        const maxVal = Math.max(...data.hourly_activity, 1);
+        const hourlyBars = data.hourly_activity.map((val, h) => {
+          const pct = (val / maxVal * 100);
+          const label = String(h).padStart(2, '0');
+          return `<div class="hourly-col"><div class="hourly-bar" style="height:${Math.max(pct, 2)}%"></div><div class="hourly-label">${label}</div><div class="hourly-val">${val}</div></div>`;
+        }).join('');
+        const peakNote = data.total_incoming ? ` • пик ${String(data.peak_hour).padStart(2, '0')}:00 — ${data.peak_val}` : '';
+        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Активность по часам<span class="monitor-sub">всего ' + data.total_incoming + peakNote + '</span></h3>' +
+          '<div class="hourly-chart">' + hourlyBars + '</div></div></article>';
       }
-      if (data.top_wiki_pages && data.top_wiki_pages.length) {
-        const pRows = data.top_wiki_pages.map(p => `<tr><td>${escapeHtml(p.title)}</td><td class="right"><span class="count-badge">${p.count}</span></td></tr>`).join('');
-        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Популярные страницы вики</h3>' +
-          '<table class="table-compact"><thead><tr><th>Страница</th><th class="right">Просм.</th></tr></thead><tbody>' +
-          pRows + '</tbody></table></div></article>';
-      }
+
       content.innerHTML = html || '<article class="miniapp-card miniapp-card--wide"><span class="error">Нет данных статистики</span></article>';
     }
     let currentSessionRole = null;
@@ -739,16 +761,25 @@ def stats_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
     if error is not None:
         return error
 
-    from app.bot.bot_stats import get_top_users, get_top_questions, get_top_wiki_pages
+    from app.bot.bot_stats import get_top_users, get_top_questions, get_top_wiki_pages, get_hourly_activity
 
     bot_data = state.application.bot_data if state.application else {}
-    top_users = get_top_users(bot_data, limit=10)
-    top_questions = get_top_questions(bot_data, limit=8)
     top_wiki_pages = get_top_wiki_pages(bot_data, limit=8)
+    top_questions = get_top_questions(bot_data, limit=8)
+    top_users = get_top_users(bot_data, limit=10)
+    hourly_activity = get_hourly_activity(bot_data)
+
+    total_incoming = sum(hourly_activity) if hourly_activity else 0
+    peak_hour = max(range(24), key=lambda h: hourly_activity[h]) if total_incoming else 0
+    peak_val = hourly_activity[peak_hour] if total_incoming else 0
 
     return 200, {
         "role": session["role"],
-        "top_users": [{"name": u.get("label", "?"), "count": u.get("count", 0)} for u in top_users],
-        "top_questions": [{"text": text, "count": count} for text, count in top_questions],
         "top_wiki_pages": [{"title": title, "count": count} for title, count in top_wiki_pages],
+        "top_questions": [{"text": text, "count": count} for text, count in top_questions],
+        "top_users": [{"name": u.get("label", "?"), "count": u.get("count", 0)} for u in top_users],
+        "hourly_activity": hourly_activity,
+        "total_incoming": total_incoming,
+        "peak_hour": peak_hour,
+        "peak_val": peak_val,
     }
