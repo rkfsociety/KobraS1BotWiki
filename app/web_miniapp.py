@@ -40,10 +40,7 @@ def render_miniapp() -> bytes:
     .muted { color:var(--muted); } .eyebrow { color:var(--amber); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
     .miniapp-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
     .metrics-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin-bottom:12px; }
-    .metric-card { background:linear-gradient(145deg,#171c27,#11151d); border:1px solid var(--line); border-radius:8px; padding:6px 4px; text-align:center; min-width:0; }
-    .metric-card:nth-child(1) { justify-self:start; }
-    .metric-card:nth-child(4) { justify-self:end; }
-    .metric-card:nth-child(n+2):nth-child(-n+3) { justify-self:center; }
+    .metric-card { background:linear-gradient(145deg,#171c27,#11151d); border:1px solid var(--line); border-radius:8px; padding:6px 4px; text-align:center; min-width:0; width:100%; box-sizing:border-box; }
     .metric-card .value { color:var(--amber); font-size:14px; font-weight:750; margin:2px 0 1px; line-height:1; }
     .metric-card .label { color:var(--muted); font-size:7px; line-height:1; }
     @media (min-width:480px) { .metrics-grid { gap:8px; margin-bottom:16px; } .metric-card { padding:10px 8px; border-radius:10px; } .metric-card .value { font-size:18px; margin:3px 0 2px; } .metric-card .label { font-size:8px; line-height:1.1; } }
