@@ -1,16 +1,1 @@
-[
-  {
-    "text": "Есть подозрения что от обновления принтера, тк он после обновления автоматом ещё и АСЕ обновил в придачу",
-    "answer": "Photon M3 Premium-Firmware update tutorial | Anycubic Wiki",
-    "issue": "wrong_printer_model",
-    "note": "КРИТИЧНО: Вопрос про Kobra/FDM, ответ про Photon M3 (смола-принтер). Нужен фильтр по типу принтера перед поиском",
-    "ts": 1785056048.517869
-  },
-  {
-    "text": "Вот какая печать без той штуки. Что могло выпасть?",
-    "answer": "Resin 3D Printer:The print platform is empty after printing | Anycubic Wiki",
-    "issue": "wrong_printer_type",
-    "note": "КРИТИЧНО: Вопрос про FDM, ответ про Resin. Нужна проверка контекста перед возвратом ответа",
-    "ts": 1784643031.52827
-  }
-]
+[]
