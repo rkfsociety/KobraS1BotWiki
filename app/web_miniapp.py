@@ -884,3 +884,46 @@ def recent_answers_payload(state: Any, authorization: str, limit: int) -> tuple[
         "role": session["role"],
         "items": items,
     }
+
+
+def export_answers_to_json(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
+    """Экспортирует все пары (вопрос, ответ) в JSON для анализа."""
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        return error
+    store = _chat_store(state)
+    if store is None:
+        return 503, {"error": "История чата временно недоступна."}
+
+    pairs = store.list_recent_answers(limit=10000)
+
+    items = []
+    for question, answer in pairs:
+        items.append({
+            "ts": answer.created_at,
+            "question": question.text,
+            "answer": answer.text,
+            "source": answer.source,
+            "url": answer.url or "",
+            "user_id": answer.user_id,
+            "q_id": question.id,
+            "a_id": answer.id,
+        })
+
+    # Экспортируем в файл для дальнейшего анализа
+    from pathlib import Path
+    from app.bot.git_autopull import project_repo_root
+
+    cache_path = project_repo_root() / ".cache" / "chat_answers_export.json"
+    try:
+        cache_path.write_text(
+            json.dumps(items, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+        return 200, {
+            "ok": True,
+            "message": f"Экспортировано {len(items)} ответов в {cache_path}",
+            "count": len(items),
+        }
+    except Exception as e:
+        return 500, {"ok": False, "error": str(e)}

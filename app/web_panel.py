@@ -84,6 +84,7 @@ from app.web_miniapp import (
     create_miniapp_session,
     dashboard_payload,
     dismiss_missed_payload,
+    export_answers_to_json,
     missed_payload,
     question_payload,
     recent_answers_payload,
@@ -1723,6 +1724,10 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     self._send_json({"error": "Параметр limit должен быть числом."}, status=400)
                     return
                 status, payload = recent_answers_payload(state, self.headers.get("Authorization", ""), limit)
+                self._send_json(payload, status=status)
+                return
+            if path == "/api/app/answers/export":
+                status, payload = export_answers_to_json(state, self.headers.get("Authorization", ""))
                 self._send_json(payload, status=status)
                 return
             if path == "/api/app/chat/history":
