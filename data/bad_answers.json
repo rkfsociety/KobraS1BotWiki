@@ -1,1 +1,51 @@
-[]
+[
+  {
+    "text": "Есть подозрения что от обновления принтера, тк он после обновления автоматом ещё и АСЕ обновил в придачу",
+    "answer": "Photon M3 Premium-Firmware update tutorial | Anycubic Wiki",
+    "issue": "wrong_printer_model",
+    "note": "Вопрос про Kobra/FDM-принтер, ответ про Photon M3 (смола-принтер)",
+    "ts": 1785056048.517869
+  },
+  {
+    "text": "Вот какая печать без той штуки. Что могло выпасть?",
+    "answer": "Resin 3D Printer:The print platform is empty after printing | Anycubic Wiki",
+    "issue": "wrong_printer_type",
+    "note": "Вопрос про FDM-печать, ответ про Resin (смола-принтер)",
+    "ts": 1784643031.52827
+  },
+  {
+    "text": "Ну хот то уж перебор, мое мнение. Это ж расходник. А что дальше просить новую катушку филамента, когда закончится?)",
+    "answer": "Kobra:Install the filament sensor | Anycubic Wiki",
+    "issue": "chatter_not_question",
+    "note": "Болтовня/мнение, не вопрос к боту",
+    "ts": 1784808800.1311414
+  },
+  {
+    "text": "Тупо блоком?)))",
+    "answer": "FDM 3D Printing: Filament Guide for Beginners | Anycubic Wiki",
+    "issue": "chatter_not_question",
+    "note": "Болтовня/шутка, не вопрос",
+    "ts": 1784645250.2478557
+  },
+  {
+    "text": "Температуры какие?",
+    "answer": "FDM 3D Printing: Filament Guide for Beginners | Anycubic Wiki",
+    "issue": "fragment_reply_in_chat",
+    "note": "Реплика в конверсации (ответ на чужой вопрос), не самостоятельный вопрос",
+    "ts": 1784645250.2478557
+  },
+  {
+    "text": "Это интересно как получилось",
+    "answer": "Vyper:Replace the nozzle | Anycubic Wiki",
+    "issue": "chatter_not_question",
+    "note": "Болтовня/любопытство, не вопрос",
+    "ts": 1784483741.6972497
+  },
+  {
+    "text": "Блин, прикол в том что даже не ныл)\nОни такие ну тип это норм такое может быть, можем выслать вам для утешения пластик, я такой ну ок, лан.",
+    "answer": "Filament & Resin | Anycubic Wiki",
+    "issue": "chatter_story",
+    "note": "История/рассказ о сервисе, не вопрос",
+    "ts": 1784366038.9750543
+  }
+]
