@@ -102,6 +102,7 @@ def render_miniapp() -> bytes:
         <nav class="miniapp-tabs">
           <button class="miniapp-tab ${currentTab === 'overview' ? 'active' : ''}" onclick="switchTab('overview')">Основное</button>
           <button class="miniapp-tab ${currentTab === 'stats' ? 'active' : ''}" onclick="switchTab('stats')">Статистика</button>
+          <button class="miniapp-tab ${currentTab === 'answers' ? 'active' : ''}" onclick="switchTab('answers')">Ответы</button>
           <button class="miniapp-tab ${currentTab === 'tools' ? 'active' : ''}" onclick="switchTab('tools')">Инструменты</button>
           <button class="miniapp-tab ${currentTab === 'queue' ? 'active' : ''}" onclick="switchTab('queue')">Очередь</button>
         </nav>
@@ -124,6 +125,8 @@ def render_miniapp() -> bytes:
           .catch((error) => { content.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
       } else if (currentTab === 'stats') {
         loadGroupStats();
+      } else if (currentTab === 'answers') {
+        loadRecentAnswers();
       } else if (currentTab === 'tools') {
         content.innerHTML = '<article class="miniapp-card miniapp-card--wide"><h2>Поиск по вики</h2><form onsubmit="searchWiki(event)" class="miniapp-actions"><input id="wiki-query" placeholder="Например: первый слой" style="flex:1;min-width:180px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"><button type="submit">Найти</button></form><div id="search-results" class="muted" style="margin-top:12px"></div></article>';
       } else if (currentTab === 'queue') {
@@ -209,6 +212,29 @@ def render_miniapp() -> bytes:
       }
 
       content.innerHTML = html || '<article class="miniapp-card miniapp-card--wide"><span class="error">Нет данных статистики</span></article>';
+    }
+    function loadRecentAnswers() {
+      const content = document.getElementById('dashboard-content');
+      if (!content) return;
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/answers?limit=20', {headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderRecentAnswers(data); })
+        .catch((error) => { content.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
+    function renderRecentAnswers(data) {
+      const content = document.getElementById('dashboard-content');
+      if (!content) return;
+      const items = data.items || [];
+      if (!items.length) { content.innerHTML = '<article class="miniapp-card miniapp-card--wide"><span class="muted">Ещё нет ответов</span></article>'; return; }
+      let html = '';
+      items.forEach((item) => {
+        const q = item.question || {};
+        const a = item.answer || {};
+        const ts = new Date(a.created_at * 1000).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+        const badge = a.source === 'manual' ? ' <span style="color:var(--amber);font-size:11px;font-weight:600">[РУЧНОЙ]</span>' : (a.source === 'wiki' ? ' <span style="color:#5c9cff;font-size:11px;font-weight:600">[ВИКИ]</span>' : '');
+        html += `<article class="miniapp-card miniapp-card--wide"><div><div class="eyebrow">${ts}</div><p style="margin:8px 0 0;font-size:13px">${escapeHtml(q.text)}</p><div style="background:#252d3a;border-radius:8px;padding:10px;margin-top:10px;font-size:12px"><strong>Ответ:</strong>${badge}<p style="margin:6px 0 0">${escapeHtml(a.text)}</p>` + (a.url ? `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="color:var(--blue);font-size:11px">→ Открыть страницу</a>` : '') + '</div></div></article>';
+      });
+      content.innerHTML = html;
     }
     let currentSessionRole = null;
     let chatHasMore = false;
@@ -821,4 +847,40 @@ def stats_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
         "total_incoming": total_incoming,
         "peak_hour": peak_hour,
         "peak_val": peak_val,
+    }
+
+
+def recent_answers_payload(state: Any, authorization: str, limit: int) -> tuple[int, dict[str, Any]]:
+    """Возвращает последние пары (вопрос, ответ) для всей группы."""
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        return error
+    store = _chat_store(state)
+    if store is None:
+        return 503, {"error": "История чата временно недоступна."}
+
+    limit = max(1, min(50, limit))
+    pairs = store.list_recent_answers(limit=limit)
+
+    items = []
+    for question, answer in pairs:
+        items.append({
+            "question": {
+                "id": question.id,
+                "text": question.text,
+                "user_id": question.user_id,
+                "created_at": question.created_at,
+            },
+            "answer": {
+                "id": answer.id,
+                "text": answer.text,
+                "source": answer.source,
+                "url": answer.url or None,
+                "created_at": answer.created_at,
+            }
+        })
+
+    return 200, {
+        "role": session["role"],
+        "items": items,
     }

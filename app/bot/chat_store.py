@@ -263,6 +263,48 @@ class ChatStore:
         short_remaining = 0 if latest is None else max(0, math.ceil(3 - (now - latest[0])))
         return {"short_remaining": short_remaining, "window_remaining": max(0, 20 - int(count))}
 
+    def list_recent_answers(self, limit: int = 50) -> list[tuple[ChatMessage, ChatMessage]]:
+        """Возвращает последние пары (вопрос, ответ) для всей группы в порядке убывания id."""
+        if limit <= 0:
+            return []
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT a.id as a_id, a.user_id as a_user, a.role as a_role, a.text as a_text,
+                       a.source as a_source, a.created_at as a_created, a.reply_to_id, a.url,
+                       q.id as q_id, q.user_id as q_user, q.role as q_role, q.text as q_text,
+                       q.source as q_source, q.created_at as q_created
+                FROM chat_messages a
+                JOIN chat_messages q ON q.id = a.reply_to_id
+                WHERE a.role = 'bot' AND q.role = 'user'
+                ORDER BY a.id DESC LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        result = []
+        for row in reversed(rows):
+            question = ChatMessage(
+                id=row["q_id"],
+                user_id=row["q_user"],
+                role=row["q_role"],
+                text=row["q_text"],
+                source=row["q_source"],
+                created_at=row["q_created"],
+                reply_to_id=None,
+            )
+            answer = ChatMessage(
+                id=row["a_id"],
+                user_id=row["a_user"],
+                role=row["a_role"],
+                text=row["a_text"],
+                source=row["a_source"],
+                created_at=row["a_created"],
+                reply_to_id=row["reply_to_id"],
+                url=row["url"],
+            )
+            result.append((question, answer))
+        return result
+
     def prune_user_history(self, user_id: int, keep: int = 500) -> None:
         keep = max(0, keep)
         with self._lock, self._connection:
