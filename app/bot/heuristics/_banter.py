@@ -3814,3 +3814,26 @@ def _is_missed_jul24_thread_noise(text: str) -> bool:
         return True
 
     return False
+
+
+def _is_missed_jul27_thread_noise(text: str) -> bool:
+    """Реплики из ветки про питание/прогрев и настройку головы, 2026-07-27."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|помоги|подскаж|куда\s+лезть|как\s+(?:настро|откалибр|почин|исправ|убрать)|"
+        r"что\s+делать|не\s+работает|не\s+могу|ошибк\w*\s+засор)",
+        t,
+    ):
+        return False
+
+    power_or_camera = bool(
+        re.search(r"\b(?:подстанц\w*|проводк\w*|розетк\w*|ибп|скачк\w*\s+напряж|узм)\b", t)
+        or re.search(r"\b(?:прогре\w*|догоня\w*|нагре\w*|градус\w*|камер\w*)\b", t)
+    )
+    thread_ack = bool(
+        re.search(r"\b(?:спасибо|принял|не\s+нашел|нечем\s+замерить|фото\s+голов\w*|карту\s+снимал)\b", t)
+        or re.search(r"\b(?:у\s+меня|был\s+такой|печатал\s+я|какие\s+температур\w*|что\s+за\s+хотенд)\b", t)
+    )
+    return (power_or_camera or thread_ack) and len(t) < 180

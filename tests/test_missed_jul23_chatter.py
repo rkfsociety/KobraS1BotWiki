@@ -99,3 +99,29 @@ def test_jul24_help_request_not_noise():
     assert not _is_missed_jul24_thread_noise("У меня не работает принтер, помогите")
     assert not _is_missed_jul24_thread_noise("Что делать, горит ошибка?")
     assert not _is_missed_jul24_thread_noise("Подскажите как откалибровать стол")
+
+
+def test_jul27_power_and_camera_thread_replies_are_noise():
+    from app.bot.text_heuristics import _is_missed_jul27_thread_noise
+
+    assert _is_missed_jul27_thread_noise("У меня новострой с хорошей проводкой и хорошей подстанцией)")
+    assert _is_missed_jul27_thread_noise("Минут 7 со столом на 100 градусов догоняет 65 градусов камеру")
+    assert _is_missed_jul27_thread_noise("Спасибо огромное, проверю т.к. есть косяки съёма карты стола")
+
+
+def test_jul27_real_technical_questions_are_not_noise():
+    from app.bot.text_heuristics import _is_missed_jul27_thread_noise
+
+    assert not _is_missed_jul27_thread_noise(
+        "Здравствуйте! Поменял температуру на 245 для PETG, через 6 минут ошибка засорение — куда лезть?"
+    )
+    assert not _is_missed_jul27_thread_noise(
+        "При цветной печати сопло пачкает модель, как убрать подсирание после очистки?"
+    )
+
+
+def test_jul27_new_manual_answers_match_real_questions():
+    store = load_manual_qa_store()
+    assert find_manual_qa_answer(store, "ошибка засорение PETG, куда лезть?")
+    assert find_manual_qa_answer(store, "как боролись с подсиранием при мультицветной печати?")
+    assert find_manual_qa_answer(store, "крышка не плотно прилегает, прокладка отлепливается")
