@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+from telegram.error import BadRequest
 from telegram.constants import ChatMemberStatus
 
 from app.bot.miniapp_access import is_group_admin, is_group_member
@@ -48,3 +49,23 @@ def test_restricted_member_without_membership_is_denied():
 
 def test_telegram_api_error_denies_access():
     assert asyncio.run(is_group_admin(_application(error=RuntimeError("network")), 42)) is False
+
+
+def test_participant_id_invalid_is_not_retried_or_logged_as_warning(caplog):
+    attempts = 0
+
+    async def get_chat_member(*, chat_id: int, user_id: int):
+        nonlocal attempts
+        attempts += 1
+        raise BadRequest("Participant_id_invalid")
+
+    application = SimpleNamespace(
+        bot=SimpleNamespace(get_chat_member=get_chat_member),
+        bot_data={"settings": SimpleNamespace(panel_admin_chat_id=-100123)},
+    )
+
+    with caplog.at_level("WARNING"):
+        assert asyncio.run(is_group_member(application, 42)) is False
+
+    assert attempts == 1
+    assert not caplog.records

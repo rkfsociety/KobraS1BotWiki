@@ -6,6 +6,7 @@ import asyncio
 from typing import Any
 
 from telegram.constants import ChatMemberStatus
+from telegram.error import BadRequest
 
 log = logging.getLogger(__name__)
 
@@ -24,6 +25,22 @@ async def _get_group_member(application: Any, user_id: int) -> Any | None:
             member = await bot.get_chat_member(chat_id=chat_id, user_id=user_id)
             break
         except Exception as exc:
+            if isinstance(exc, BadRequest):
+                if "participant_id_invalid" in str(exc).lower():
+                    log.debug(
+                        "Пользователь %s не найден среди участников Mini App чата %s: %s",
+                        user_id,
+                        chat_id,
+                        exc,
+                    )
+                else:
+                    log.warning(
+                        "Не удалось проверить статус Mini App пользователя %s в чате %s: %s",
+                        user_id,
+                        chat_id,
+                        exc,
+                    )
+                return None
             if attempt == 0:
                 await asyncio.sleep(0.25)
                 continue
