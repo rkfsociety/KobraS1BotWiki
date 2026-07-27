@@ -1,1 +1,82 @@
-[]
+[
+  {
+    "text": "Еще что-то готовят ?",
+    "score": 14,
+    "best_url": "https://wiki.anycubic.com/en/faq",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1785152273.8245504
+  },
+  {
+    "text": "А еще чтобы само печатало и модели снимало и все по 1 кнопке?😁",
+    "score": 16,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/10118-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1785152187.4229681
+  },
+  {
+    "text": "Нет взял просто когда принтер покупал подешевше, что было на Озоне.",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1785150292.5621376
+  },
+  {
+    "text": "В вики орки указано , что просто запускаешь тест с выключенным па и все",
+    "score": 57,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2/leveling-calibration-guide",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1785150292.2139885
+  },
+  {
+    "text": "А ты поток на 1 ставишь при тесте?",
+    "score": 57,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2/leveling-calibration-guide",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1785150219.4828658
+  },
+  {
+    "text": "Вот и на? Ты абразивом печатаешь?",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1785149887.0444245
+  },
+  {
+    "text": "Приехало Озон глобал из поднебесной 0,25 медно цирконовое.",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1785147152.5004768
+  },
+  {
+    "text": "Видел сейчас попробую",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1785146041.506176
+  },
+  {
+    "text": "Я убрал обдувы и уже смог вкрутить винты! Но когда вкручивал и проверял то вынимал нижнюю часть бошки и втулка отломилась((( теперь опять перепечатывать",
+    "score": 57,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-2/leveling-calibration-guide",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1785145405.495793
+  },
+  {
+    "text": "Вон же сверху инфа, отключать датчик засора",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1785143807.4219394
+  }
+]
