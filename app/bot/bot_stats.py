@@ -279,3 +279,48 @@ def get_top_users(bot_data: dict[str, Any], limit: int = 10) -> list[dict[str, A
         )
     rows.sort(key=lambda r: (r["count"], r.get("label") or ""), reverse=True)
     return rows[:limit]
+
+
+def get_stats_metrics(bot_data: dict[str, Any]) -> dict[str, Any]:
+    """Возвращает метрики качества: уникальные вопросы/пользователи, коэффициент ответов."""
+    stats = bot_data.get(_STATS_KEY) or {}
+    total_answers = int(stats.get("total_answers", 0))
+    total_incoming = int(stats.get("total_incoming", 0))
+    unique_questions = len(stats.get("questions") or {})
+    unique_users = len(stats.get("user_messages") or {})
+
+    answer_rate = 0
+    if total_incoming > 0:
+        answer_rate = int((total_answers / total_incoming) * 100)
+
+    return {
+        "unique_questions": unique_questions,
+        "unique_users": unique_users,
+        "answer_rate": answer_rate,
+        "avg_answers_per_user": int(total_answers / unique_users) if unique_users > 0 else 0,
+    }
+
+
+def get_peak_hours(bot_data: dict[str, Any], limit: int = 3) -> list[dict[str, Any]]:
+    """Возвращает топ часов по активности."""
+    hourly = get_hourly_activity(bot_data)
+    if not hourly:
+        return []
+
+    hours = [
+        {"hour": h, "count": hourly[h]}
+        for h in range(24)
+    ]
+    hours.sort(key=lambda x: x["count"], reverse=True)
+    return hours[:limit]
+
+
+def get_daily_distribution(bot_data: dict[str, Any]) -> dict[str, int]:
+    """Возвращает распределение активности по дням недели (если данные собираются)."""
+    stats = bot_data.get(_STATS_KEY) or {}
+    daily = stats.get("daily_activity") or {}
+    days = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
+    return {
+        days[i] if i < len(days) else f"день_{i}": int(daily.get(str(i), 0))
+        for i in range(7)
+    }

@@ -33,12 +33,17 @@ def render_miniapp() -> bytes:
     :root { color-scheme: dark; --bg:#0b0d11; --panel:#141821; --line:#29303b; --text:#f5f7fb; --muted:#8d98aa; --amber:#f0c674; --blue:#5c9cff; }
     * { box-sizing:border-box; }
     body { margin:0; min-height:100vh; background:radial-gradient(circle at 15% 0%,#202331 0,#0b0d11 42%); color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif; }
-    .miniapp-shell { width:min(100%,720px); margin:0 auto; padding:20px 16px 32px; }
+    .miniapp-shell { width:min(100%,720px); margin:0 auto; padding:20px 14px 32px; }
     .miniapp-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:20px; }
     .miniapp-head__actions { display:flex; flex-direction:column; align-items:flex-end; gap:8px; }
     h1,h2,p { margin:0; } h1 { font-size:25px; letter-spacing:-.02em; } h2 { font-size:14px; }
     .muted { color:var(--muted); } .eyebrow { color:var(--amber); font-size:11px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; }
     .miniapp-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+    .metrics-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; }
+    .metric-card { background:rgba(255,255,255,0.03); border:1px solid var(--line); border-radius:8px; padding:8px 4px; text-align:center; min-width:0; }
+    .metric-card .value { color:var(--amber); font-size:15px; font-weight:750; margin:2px 0 1px; line-height:1; }
+    .metric-card .label { color:var(--muted); font-size:8px; line-height:1.1; }
+    @media (max-width:380px) { .metrics-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
     .miniapp-card { background:linear-gradient(145deg,#171c27,#11151d); border:1px solid var(--line); border-radius:16px; padding:15px; box-shadow:0 12px 28px #0003; }
     .miniapp-card .value { color:var(--amber); font-size:25px; font-weight:750; margin:5px 0 1px; }
     .miniapp-card--wide { grid-column:1/-1; } .miniapp-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
@@ -58,6 +63,26 @@ def render_miniapp() -> bytes:
     #chat-input { flex:1; min-width:0; min-height:48px; max-height:140px; padding:10px; border:1px solid var(--line); border-radius:10px; background:#0d1118; color:var(--text); font:inherit; resize:vertical; }
     .chat-status { min-height:20px; margin-top:8px; }
     .miniapp-error { display:grid; place-items:center; min-height:60vh; padding:24px; text-align:center; }
+    .miniapp-tabs { display:flex; gap:8px; margin-bottom:16px; border-bottom:1px solid var(--line); overflow-x:auto; padding-bottom:0; }
+    .miniapp-tab { padding:10px 14px; border:0; background:none; color:var(--muted); cursor:pointer; font:600 12px inherit; border-bottom:2px solid transparent; white-space:nowrap; }
+    .miniapp-tab.active { color:var(--text); border-bottom-color:var(--amber); }
+    .monitor-panel { background:rgba(10,12,18,0.55); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:14px; }
+    .monitor-title { margin:0 0 10px; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:#8b95a8; }
+    .monitor-sub { display:block; margin-top:2px; font-size:10px; font-weight:400; text-transform:none; letter-spacing:normal; color:#6b7280; }
+    .table-compact { width:100%; border-collapse:collapse; font-size:12px; }
+    .table-compact th { padding:6px 8px; color:#8b95a8; font-weight:600; font-size:11px; text-align:left; border-bottom:1px solid var(--line); }
+    .table-compact td { padding:6px 8px; border-bottom:1px solid var(--line); color:var(--text); }
+    .table-compact tbody tr:last-child td { border-bottom:0; }
+    .table-compact tbody tr:hover { background:rgba(37,99,235,0.06); }
+    .rank-cell { width:28px; color:#6b7280; font-size:11px; font-weight:700; }
+    .rank-cell--top { color:#fbbf24; font-size:13px; }
+    .count-badge { display:inline-flex; align-items:center; justify-content:center; min-width:24px; padding:1px 7px; border-radius:999px; background:rgba(37,99,235,0.18); color:#93c5fd; border:1px solid rgba(96,165,250,0.25); font-weight:700; font-size:10px; }
+    .hourly-chart { display:grid; grid-template-columns:repeat(24,minmax(0,1fr)); gap:3px; align-items:flex-end; height:80px; padding:4px 0 0; margin-top:10px; }
+    .hourly-col { display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; gap:2px; min-width:0; }
+    .hourly-bar { width:100%; max-width:18px; min-height:1px; border-radius:3px 3px 1px 1px; background:linear-gradient(180deg,#60a5fa 0%,#2563eb 55%,#1d4ed8 100%); box-shadow:0 0 8px rgba(37,99,235,0.3); }
+    .hourly-label { font-size:9px; color:#6b7280; }
+    .hourly-val { font-size:9px; color:#cbd5e1; font-weight:600; min-height:12px; }
+    .right { text-align:right; }
     @media (min-width:560px) { .miniapp-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
   </style>
 </head>
@@ -70,17 +95,146 @@ def render_miniapp() -> bytes:
     function escapeHtml(value) {
       return String(value).replace(/[&<>"']/g, (char) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[char]));
     }
+    let currentTab = 'overview';
     function renderDashboard(data) {
       const s = data.stats || {};
       root.innerHTML = `<div class="miniapp-head"><div><div class="eyebrow">KobraS1Bot</div><h1>Панель администратора</h1><p class="muted">${escapeHtml(data.user.first_name || 'Администратор')}</p></div><div class="miniapp-head__actions"><div class="eyebrow">ADMIN</div><button class="secondary" onclick="setUserMode()">Режим пользователя</button></div></div>
-        <section class="miniapp-grid">
-          <article class="miniapp-card"><div class="muted">Страницы вики</div><div class="value">${s.wiki_pages || 0}</div></article>
-          <article class="miniapp-card"><div class="muted">Ответы бота</div><div class="value">${s.total_answers || 0}</div></article>
-          <article class="miniapp-card"><div class="muted">Ручные ответы</div><div class="value">${s.manual_answers || 0}</div></article>
-          <article class="miniapp-card"><div class="muted">Вопросы без ответа</div><div class="value">${s.missed_questions || 0}</div></article>
-          <article class="miniapp-card miniapp-card--wide"><h2>Поиск по вики</h2><form onsubmit="searchWiki(event)" class="miniapp-actions"><input id="wiki-query" placeholder="Например: первый слой" style="flex:1;min-width:180px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"><button type="submit">Найти</button></form><div id="search-results" class="muted" style="margin-top:12px"></div></article>
-          <article class="miniapp-card miniapp-card--wide"><h2>Очередь разбора</h2><p class="muted">Вопросы, которым нужно добавить ручной ответ или улучшить поиск.</p><div class="miniapp-actions"><button onclick="loadMissed()">Открыть вопросы</button><button class="secondary" onclick="loadDashboard()">Обновить</button></div><div id="missed" class="muted" style="margin-top:12px"></div></article>
-        </section>`;
+        <nav class="miniapp-tabs">
+          <button class="miniapp-tab ${currentTab === 'overview' ? 'active' : ''}" onclick="switchTab('overview')">Основное</button>
+          <button class="miniapp-tab ${currentTab === 'stats' ? 'active' : ''}" onclick="switchTab('stats')">Статистика</button>
+          <button class="miniapp-tab ${currentTab === 'answers' ? 'active' : ''}" onclick="switchTab('answers')">Ответы</button>
+          <button class="miniapp-tab ${currentTab === 'tools' ? 'active' : ''}" onclick="switchTab('tools')">Инструменты</button>
+          <button class="miniapp-tab ${currentTab === 'queue' ? 'active' : ''}" onclick="switchTab('queue')">Очередь</button>
+        </nav>
+        <section class="miniapp-grid" id="dashboard-content"></section>`;
+      showDashboardTab();
+    }
+    function showDashboardTab() {
+      const content = document.getElementById('dashboard-content');
+      if (!content) return;
+      if (currentTab === 'overview') {
+        const token = sessionStorage.getItem('kobra_app_session');
+        fetch('/api/app/dashboard', {headers:{Authorization:'Bearer ' + token}})
+          .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); const s = data.stats || {}; content.innerHTML = `
+            <article class="miniapp-card"><div class="muted">Страницы вики</div><div class="value">${s.wiki_pages || 0}</div></article>
+            <article class="miniapp-card"><div class="muted">Ответы бота</div><div class="value">${s.total_answers || 0}</div></article>
+            <article class="miniapp-card"><div class="muted">Ручные ответы</div><div class="value">${s.manual_answers || 0}</div></article>
+            <article class="miniapp-card"><div class="muted">Вопросы без ответа</div><div class="value">${s.missed_questions || 0}</div></article>
+            <article class="miniapp-card miniapp-card--wide"><h2>Поиск по вики</h2><form onsubmit="searchWiki(event)" class="miniapp-actions"><input id="wiki-query" placeholder="Например: первый слой" style="flex:1;min-width:180px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"><button type="submit">Найти</button></form><div id="search-results" class="muted" style="margin-top:12px"></div></article>
+          `; })
+          .catch((error) => { content.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+      } else if (currentTab === 'stats') {
+        loadGroupStats();
+      } else if (currentTab === 'answers') {
+        loadRecentAnswers();
+      } else if (currentTab === 'tools') {
+        content.innerHTML = '<article class="miniapp-card miniapp-card--wide"><h2>Поиск по вики</h2><form onsubmit="searchWiki(event)" class="miniapp-actions"><input id="wiki-query" placeholder="Например: первый слой" style="flex:1;min-width:180px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"><button type="submit">Найти</button></form><div id="search-results" class="muted" style="margin-top:12px"></div></article>';
+      } else if (currentTab === 'queue') {
+        content.innerHTML = '<article class="miniapp-card miniapp-card--wide"><h2>Очередь разбора</h2><p class="muted">Вопросы, которым нужно добавить ручной ответ или улучшить поиск.</p><div class="miniapp-actions"><button onclick="loadMissedList()">Открыть вопросы</button></div><div id="missed" class="muted" style="margin-top:12px"></div></article>';
+      }
+    }
+    function switchTab(tab) {
+      currentTab = tab;
+      const tabs = document.querySelectorAll('.miniapp-tab');
+      tabs.forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+      showDashboardTab();
+    }
+    function loadMissedList() {
+      const box = document.getElementById('missed');
+      if (!box) return;
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/missed', {headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderMissed(data.items); })
+        .catch((error) => { box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
+    function loadGroupStats() {
+      const content = document.getElementById('dashboard-content');
+      if (!content) return;
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/stats', {headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderGroupStats(data); })
+        .catch((error) => { content.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
+    function renderGroupStats(data) {
+      const content = document.getElementById('dashboard-content');
+      if (!content) return;
+      let html = '';
+
+      if (data.metrics) {
+        const m = data.metrics;
+        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Ключевые метрики</h3><div class="metrics-grid">' +
+          `<div class="metric-card"><div class="label">Ответов</div><div class="value">${m.total_answers}</div></div>` +
+          `<div class="metric-card"><div class="label">Сообщений</div><div class="value">${m.total_incoming}</div></div>` +
+          `<div class="metric-card"><div class="label">% успеха</div><div class="value">${m.answer_rate}%</div></div>` +
+          `<div class="metric-card"><div class="label">Без ответа</div><div class="value">${m.missed_count}</div></div>` +
+          `<div class="metric-card"><div class="label">Вопросов</div><div class="value">${m.unique_questions}</div></div>` +
+          `<div class="metric-card"><div class="label">Людей</div><div class="value">${m.unique_users}</div></div>` +
+          `<div class="metric-card"><div class="label">На чел</div><div class="value">${m.avg_answers_per_user}</div></div>` +
+          (data.peak_hours && data.peak_hours.length ? `<div class="metric-card"><div class="label">Пик</div><div class="value">${String(data.peak_hours[0].hour).padStart(2, '0')}:00</div></div>` : '') +
+          '</div></div></article>';
+      }
+
+      if (data.top_wiki_pages && data.top_wiki_pages.length) {
+        const wikiRows = data.top_wiki_pages.map(p => `<tr><td>${escapeHtml(p.title)}</td><td class="right"><span class="count-badge">${p.count}</span></td></tr>`).join('');
+        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Топ страниц вики<span class="monitor-sub">по ответам бота</span></h3>' +
+          '<table class="table-compact"><thead><tr><th>Страница</th><th class="right">Ответов</th></tr></thead><tbody>' +
+          wikiRows + '</tbody></table></div></article>';
+      }
+
+      if (data.top_questions && data.top_questions.length) {
+        const qRows = data.top_questions.map(q => `<tr><td>${escapeHtml(q.text)}</td><td class="right"><span class="count-badge">${q.count}</span></td></tr>`).join('');
+        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Топ вопросов<span class="monitor-sub">частые формулировки</span></h3>' +
+          '<table class="table-compact"><thead><tr><th>Вопрос</th><th class="right">Раз</th></tr></thead><tbody>' +
+          qRows + '</tbody></table></div></article>';
+      }
+
+      if (data.top_users && data.top_users.length) {
+        const userRows = data.top_users.map((u, i) => {
+          const rank = i < 3 ? `<span class="rank-cell rank-cell--top">${i+1}</span>` : `<span class="rank-cell">#${i+1}</span>`;
+          return `<tr><td>${rank}</td><td>${escapeHtml(u.name || 'Аноним')}</td><td class="right"><span class="count-badge">${u.count}</span></td></tr>`;
+        }).join('');
+        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Топ участников<span class="monitor-sub">сообщения в чате</span></h3>' +
+          '<table class="table-compact"><thead><tr><th>#</th><th>Участник</th><th class="right">Сообщ.</th></tr></thead><tbody>' +
+          userRows + '</tbody></table></div></article>';
+      }
+
+      if (data.hourly_activity && data.hourly_activity.length === 24) {
+        const maxVal = Math.max(...data.hourly_activity, 1);
+        const hourlyBars = data.hourly_activity.map((val, h) => {
+          const pct = (val / maxVal * 100);
+          const label = String(h).padStart(2, '0');
+          return `<div class="hourly-col"><div class="hourly-bar" style="height:${Math.max(pct, 2)}%"></div><div class="hourly-label">${label}</div><div class="hourly-val">${val}</div></div>`;
+        }).join('');
+        const peakNote = data.total_incoming ? ` • пик ${String(data.peak_hour).padStart(2, '0')}:00 — ${data.peak_val}` : '';
+        html += '<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><h3 class="monitor-title">Активность по часам<span class="monitor-sub">всего ' + data.total_incoming + peakNote + '</span></h3>' +
+          '<div class="hourly-chart">' + hourlyBars + '</div></div></article>';
+      }
+
+      content.innerHTML = html || '<article class="miniapp-card miniapp-card--wide"><span class="error">Нет данных статистики</span></article>';
+    }
+    function loadRecentAnswers() {
+      const content = document.getElementById('dashboard-content');
+      if (!content) return;
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/answers?limit=20', {headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderRecentAnswers(data); })
+        .catch((error) => { content.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
+    function renderRecentAnswers(data) {
+      const content = document.getElementById('dashboard-content');
+      if (!content) return;
+      const items = data.items || [];
+      if (!items.length) { content.innerHTML = '<article class="miniapp-card miniapp-card--wide"><span class="muted">Ещё нет ответов</span></article>'; return; }
+      let html = '';
+      items.forEach((item) => {
+        const q = item.question || {};
+        const a = item.answer || {};
+        const ts = new Date(a.created_at * 1000).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'});
+        const badge = a.source === 'manual' ? ' <span style="color:var(--amber);font-size:11px;font-weight:600">[РУЧНОЙ]</span>' : (a.source === 'wiki' ? ' <span style="color:#5c9cff;font-size:11px;font-weight:600">[ВИКИ]</span>' : '');
+        html += `<article class="miniapp-card miniapp-card--wide"><div><div class="eyebrow">${ts}</div><p style="margin:8px 0 0;font-size:13px">${escapeHtml(q.text)}</p><div style="background:#252d3a;border-radius:8px;padding:10px;margin-top:10px;font-size:12px"><strong>Ответ:</strong>${badge}<p style="margin:6px 0 0">${escapeHtml(a.text)}</p>` + (a.url ? `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="color:var(--blue);font-size:11px">→ Открыть страницу</a>` : '') + '</div></div></article>';
+      });
+      content.innerHTML = html;
     }
     let currentSessionRole = null;
     let chatHasMore = false;
@@ -204,13 +358,13 @@ def render_miniapp() -> bytes:
       const token = sessionStorage.getItem('kobra_app_session');
       const body = new URLSearchParams({title: document.getElementById('title-' + id).value, answer: document.getElementById('answer-' + id).value});
       fetch('/api/app/missed/' + encodeURIComponent(id) + '/answer', {method:'POST', headers:{Authorization:'Bearer ' + token, 'Content-Type':'application/x-www-form-urlencoded'}, body})
-        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Не удалось сохранить'); loadDashboard(); })
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Не удалось сохранить'); loadMissed(); })
         .catch((error) => { const box = document.getElementById('missed'); if (box) box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
     function dismissQuestion(id) {
       const token = sessionStorage.getItem('kobra_app_session');
       fetch('/api/app/missed/' + encodeURIComponent(id) + '/dismiss', {method:'POST', headers:{Authorization:'Bearer ' + token}})
-        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Не удалось удалить'); loadDashboard(); })
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Не удалось удалить'); loadMissed(); })
         .catch((error) => { const box = document.getElementById('missed'); if (box) box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
     if (!tg || !tg.initData) {
@@ -644,3 +798,132 @@ def dismiss_missed_payload(state: Any, authorization: str, item_id: str) -> tupl
         return 404, {"ok": False, "error": "Вопрос уже обработан или не найден."}
     ok, message = delete_missed_question_by_text(text=str(entry.get("text", "")))
     return (200 if ok else 500), {"ok": ok, "message": message} if ok else {"ok": False, "error": message}
+
+
+def stats_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
+    """Возвращает статистику активности группы: топ пользователей, вопросов, страниц вики + метрики качества."""
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        return error
+
+    from app.bot.bot_stats import (
+        get_top_users, get_top_questions, get_top_wiki_pages, get_hourly_activity,
+        get_stats_metrics, get_peak_hours
+    )
+    from app.bot.missed_questions import load_missed_questions
+
+    bot_data = state.application.bot_data if state.application else {}
+    stats = bot_data.get("bot_stats") or {}
+
+    top_wiki_pages = get_top_wiki_pages(bot_data, limit=8)
+    top_questions = get_top_questions(bot_data, limit=8)
+    top_users = get_top_users(bot_data, limit=10)
+    hourly_activity = get_hourly_activity(bot_data)
+    metrics = get_stats_metrics(bot_data)
+    peak_hours = get_peak_hours(bot_data, limit=3)
+    missed = load_missed_questions()
+
+    total_incoming = int(stats.get("total_incoming", 0))
+    total_answers = int(stats.get("total_answers", 0))
+    peak_hour = peak_hours[0]["hour"] if peak_hours else 0
+    peak_val = peak_hours[0]["count"] if peak_hours else 0
+
+    return 200, {
+        "role": session["role"],
+        "metrics": {
+            "unique_questions": metrics["unique_questions"],
+            "unique_users": metrics["unique_users"],
+            "answer_rate": metrics["answer_rate"],
+            "avg_answers_per_user": metrics["avg_answers_per_user"],
+            "total_answers": total_answers,
+            "total_incoming": total_incoming,
+            "missed_count": len(missed),
+        },
+        "top_wiki_pages": [{"title": title, "count": count} for title, count in top_wiki_pages],
+        "top_questions": [{"text": text, "count": count} for text, count in top_questions],
+        "top_users": [{"name": u.get("label", "?"), "count": u.get("count", 0)} for u in top_users],
+        "hourly_activity": hourly_activity,
+        "peak_hours": [{"hour": h["hour"], "count": h["count"]} for h in peak_hours],
+        "total_incoming": total_incoming,
+        "peak_hour": peak_hour,
+        "peak_val": peak_val,
+    }
+
+
+def recent_answers_payload(state: Any, authorization: str, limit: int) -> tuple[int, dict[str, Any]]:
+    """Возвращает последние пары (вопрос, ответ) для всей группы."""
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        return error
+    store = _chat_store(state)
+    if store is None:
+        return 503, {"error": "История чата временно недоступна."}
+
+    limit = max(1, min(50, limit))
+    pairs = store.list_recent_answers(limit=limit)
+
+    items = []
+    for question, answer in pairs:
+        items.append({
+            "question": {
+                "id": question.id,
+                "text": question.text,
+                "user_id": question.user_id,
+                "created_at": question.created_at,
+            },
+            "answer": {
+                "id": answer.id,
+                "text": answer.text,
+                "source": answer.source,
+                "url": answer.url or None,
+                "created_at": answer.created_at,
+            }
+        })
+
+    return 200, {
+        "role": session["role"],
+        "items": items,
+    }
+
+
+def export_answers_to_json(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
+    """Экспортирует все пары (вопрос, ответ) в JSON для анализа."""
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        return error
+    store = _chat_store(state)
+    if store is None:
+        return 503, {"error": "История чата временно недоступна."}
+
+    pairs = store.list_recent_answers(limit=10000)
+
+    items = []
+    for question, answer in pairs:
+        items.append({
+            "ts": answer.created_at,
+            "question": question.text,
+            "answer": answer.text,
+            "source": answer.source,
+            "url": answer.url or "",
+            "user_id": answer.user_id,
+            "q_id": question.id,
+            "a_id": answer.id,
+        })
+
+    # Экспортируем в файл для дальнейшего анализа
+    from pathlib import Path
+    from app.bot.git_autopull import project_repo_root
+
+    cache_path = project_repo_root() / ".cache" / "chat_answers_export.json"
+    try:
+        cache_path.write_text(
+            json.dumps(items, ensure_ascii=False, indent=2),
+            encoding="utf-8"
+        )
+        return 200, {
+            "ok": True,
+            "message": f"Экспортировано {len(items)} ответов в {cache_path}",
+            "count": len(items),
+        }
+    except Exception as e:
+        return 500, {"ok": False, "error": str(e)}
