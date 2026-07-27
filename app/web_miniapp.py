@@ -425,7 +425,9 @@ def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, A
     elif _check_group_member(application, user_id):
         role = "user"
     else:
-        return 403, {"error": "Доступ доступен только участникам группы."}
+        return 403, {
+            "error": "Сначала вступите в группу поддержки Anycubic, затем снова откройте Mini App."
+        }
 
     token = secrets.token_urlsafe(32)
     ttl = min(max(300, int(getattr(state.settings, "panel_session_ttl_seconds", 1800))), 3600)

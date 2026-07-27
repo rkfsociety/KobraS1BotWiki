@@ -225,9 +225,12 @@ def test_miniapp_rejects_user_outside_group(mini_panel):
     port, status_box = mini_panel
     status_box["value"] = ChatMemberStatus.LEFT
 
-    response, _payload = _create_session_response(port)
+    response, payload = _create_session_response(port)
 
     assert response.status == 403
+    assert payload["error"] == (
+        "Сначала вступите в группу поддержки Anycubic, затем снова откройте Mini App."
+    )
 
 
 def test_admin_can_answer_missed_question_from_miniapp(mini_panel):
