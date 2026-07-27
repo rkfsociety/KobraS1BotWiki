@@ -125,3 +125,26 @@ def test_jul27_new_manual_answers_match_real_questions():
     assert find_manual_qa_answer(store, "ошибка засорение PETG, куда лезть?")
     assert find_manual_qa_answer(store, "как боролись с подсиранием при мультицветной печати?")
     assert find_manual_qa_answer(store, "крышка не плотно прилегает, прокладка отлепливается")
+
+
+def test_jul27_resume_print_manual_answer_matches():
+    store = load_manual_qa_store()
+    assert find_manual_qa_answer(store, "после включения выдало уведомление о продолжении печати, что нажимать?")
+
+
+def test_jul27_more_thread_replies_are_noise():
+    from app.bot.text_heuristics import _is_missed_jul27_thread_noise
+
+    assert _is_missed_jul27_thread_noise("А как ты сам себя в чате будешь ненавидеть?")
+    assert _is_missed_jul27_thread_noise("Вот же ж он подстраховщик, как низко опустил")
+    assert _is_missed_jul27_thread_noise("А я про что?)")
+    assert _is_missed_jul27_thread_noise("Отменять — типа было долгое отключение, и ты осознал, что будет бракованный стык")
+    assert _is_missed_jul27_thread_noise("Ой не хочешь как хочешь")
+
+
+def test_jul27_resume_question_is_not_noise():
+    from app.bot.text_heuristics import _is_missed_jul27_thread_noise
+
+    assert not _is_missed_jul27_thread_noise(
+        "После включения он выдаст уведомление о продолжении или окончании печати, что нажимать?"
+    )

@@ -3836,4 +3836,8 @@ def _is_missed_jul27_thread_noise(text: str) -> bool:
         re.search(r"\b(?:спасибо|принял|не\s+нашел|нечем\s+замерить|фото\s+голов\w*|карту\s+снимал)\b", t)
         or re.search(r"\b(?:у\s+меня|был\s+такой|печатал\s+я|какие\s+температур\w*|что\s+за\s+хотенд)\b", t)
     )
-    return (power_or_camera or thread_ack) and len(t) < 180
+    thread_meta = bool(
+        re.search(r"\b(?:сам\s+себя\s+в\s+чате|подстраховщик|а\s+я\s+про\s+что|не\s+хочешь\s+как\s+хочешь)\b", t)
+        or re.search(r"\bотменя\w*\b.*\b(?:долг\w*\s+отключен|бракованн\w*\s+стык|отруб\w*)\b", t)
+    )
+    return (power_or_camera or thread_ack or thread_meta) and len(t) < 180
