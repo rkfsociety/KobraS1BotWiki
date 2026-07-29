@@ -3866,6 +3866,12 @@ def _is_missed_jul29_thread_noise(text: str) -> bool:
     ):
         return False
     if re.search(
+        r"\bможно\s+ли\b.*\b(?:печат\w*|tpu|тпу|ace|аськ\w*|филамент\w*|"
+        r"сопл\w*|экструдер\w*|принтер\w*)\b",
+        t,
+    ):
+        return False
+    if re.search(
         r"\b(?:не\s+могу\s+найти\s+инструкц\w*|инструкц\w*.*как\s+\w+|"
         r"шестерн\w*\s+не\s+тянут)\b",
         t,
@@ -4023,3 +4029,70 @@ def _is_missed_jul29_thread_noise(text: str) -> bool:
         "сверху инфа, отключать датчик",
     )
     return any(fragment in t for fragment in thread_fragments)
+
+
+def _is_all_data_jul29_thread_noise(text: str) -> bool:
+    """Контекстные реплики из recent_replies и новых missed 2026-07-29."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+
+    # Группа обслуживает Anycubic FDM, а не Photon/LCD/MSLA.
+    if re.search(r"\b(?:sla|msla|photon|фотополимер\w*|смолян\w*)\b", t):
+        return True
+    if re.search(
+        r"\bосваиват\w*\s+так\s+печат\w*\b.*\bмаксимальн\w*\s+скорост\w*\s+так\b",
+        t,
+    ):
+        return True
+
+    if re.search(
+        r"\b(?:помогите|подскаж\w*|что\s+делать|как\s+(?:почин|исправ|замен|"
+        r"разобрат|настро)|ошибк\w*\s+\d{4,5}|не\s+(?:работает|печатает|"
+        r"загружает|пода[её]т))\b",
+        t,
+    ):
+        return False
+
+    if re.search(
+        r"\bперв\w*\s+засор\w*\s+на\s+\d+\s+час\w*\b.*\bкандидат\s+на\s+"
+        r"(?:cold\s*pull|колдпул|кодпул)\b",
+        t,
+    ):
+        return True
+    if re.fullmatch(r"оно\s+\d+\s+дн(?:я|ей)\s+карту\s+снимало\s*\??", t):
+        return True
+    if re.fullmatch(r"(?:а\s+)?почему\s*\??", t):
+        return True
+    if re.search(r"\bкак\s+будто\s+этот\s+тест\b.*\bхрень\b", t):
+        return True
+    if re.search(r"\bто\s+есть\s+это\s+не\s+кор+ектн\w*\s+тест\s+пластик\w*\b", t):
+        return True
+    if re.search(r"\bпродолжить\b.*\bпосле\s+этого\s+на\s+отмен", t):
+        return True
+    if re.search(r"\bтебе\s+с1\s+с\s+двумя\s+аськ\w*\b.*\bп2с\b", t):
+        return True
+    if re.search(
+        r"\bдруг\s+за\s+друг\w*\s+стоять\s+буд\w*\b.*\bна\s+пауз\w*\s+постав",
+        t,
+    ):
+        return True
+    if re.search(
+        r"\bне\s+липнет\s*[-—:]\s*потому\s+что\b.*\b(?:пластин|пластик|"
+        r"температур|карту)\b",
+        t,
+    ):
+        return True
+    if re.search(
+        r"\bиз-за\s+того\s+что\s+надо\s+было\s+вынимать\b.*\bпечать\s+"
+        r"перестала\s+липнуть\b",
+        t,
+    ):
+        return True
+    if re.search(
+        r"\bя\s+потыкал\s+сопоставлени\w*\s+цвет\w*\b.*\bкалибровк\w*\s+"
+        r"перед\s+стартом\s+печат\w*\s+выключ",
+        t,
+    ):
+        return True
+    return False

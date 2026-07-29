@@ -48,9 +48,10 @@ def test_static_ip_manual_qa():
     assert find_manual_qa_answer(load_manual_qa_store(), msg)
 
 
-def test_sla_speed_manual_qa():
+def test_sla_speed_is_out_of_scope_for_fdm_group():
     msg = "Приветствую. Недавно начал осваивать так печать. Не подскажите максимальную скорость так?"
-    assert find_manual_qa_answer(load_manual_qa_store(), msg)
+    assert find_manual_qa_answer(load_manual_qa_store(), msg) is None
+    assert _is_non_wiki_chatter_message(msg)
 
 
 def test_ace_temp_sensor_manual_qa():

@@ -912,6 +912,11 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
     """Не слать ссылку, если модель в URL не та или тема (например дверь) явно не совпадает со slug статьи."""
 
+    # Этот бот работает в группе Anycubic FDM. Страницы Photon/LCD/MSLA здесь
+    # всегда ложноположительны, даже если нечёткий поиск дал высокий score.
+    if "/resin-3d-printer/" in url.lower():
+        return False
+
     # Для запросов по коду ошибки отдаём только точные страницы /error-codes/<code>-code...
 
     code = _extract_error_code(question)
