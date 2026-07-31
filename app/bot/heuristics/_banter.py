@@ -4096,3 +4096,68 @@ def _is_all_data_jul29_thread_noise(text: str) -> bool:
     ):
         return True
     return False
+
+
+def _is_experience_or_assertion_chat(text: str) -> bool:
+    """Experience sharing, soft assertions, advice — not a question.
+
+    Patterns: «я печатаю и всё нормально», «можно», «проще», «нужно»,
+    «согласен», «верно», «дискуссия окончена» — реплики в чате, не вопросы к боту.
+    """
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+
+    # Фильтры исключения — это всё-таки вопросы
+    if "?" in text:
+        return False
+    if re.search(r"\b(?:помогите|подскаж\w*|как\s+(?:настро|исправ|почин|замен|убрать))\b", t):
+        return False
+
+    # Experience-sharing starts: «Я с X печатаю и...» или «Я печатаю X»
+    if re.match(r"^я\s+(?:с\s+)?(?:\w+\s+)?печата\w*\b", t):
+        if not re.search(r"\b(?:не\s+)?(?:работает|печатает|может|нужно|должно|помогает)\b", t):
+            return True
+
+    # Личный опыт: «Я пробовал/пишу/заказал»
+    if re.match(r"^я\s+(?:пробовал|пишу|делал|заказал|вижу|видел|помню)\b", t):
+        if not re.search(r"\b(?:как|что|почему|сколько|помогает|работает)\b", t):
+            return True
+
+    # Мы-опыт: «Мы используем», «У нас получается»
+    if re.match(r"^(?:мы|у\s+нас)\b", t):
+        if re.search(r"\b(?:используем|получается|печатаем|делаем)\b", t):
+            return True
+
+    # Dismissals and discourse enders: «дискуссия окончена», «конец»
+    if re.search(r"\b(?:дискусси\w*\s+(?:окончена|завершена|закончена)|тема\s+закрыта|конец|хватит|стоп)\b", t):
+        return True
+
+    # Soft assertions without basis: «можно», «проще», «дорого», «нормально»
+    # But only at the start/end or as standalone statements
+    if re.fullmatch(r"(?:можно|проще|дорого|нормально|всё\s+хорошо|всё\s+нормально|нет\s+проблем|проблем\s+нет|точно\s+нельзя|точно\s+можно)", t):
+        return True
+
+    # Agreements without new info: «согласен», «верно», «правильно»
+    if re.fullmatch(r"(?:согласен|согласна|верно|правильно|точно|да|ну\s+да|конечно|эм|мхм)", t):
+        return True
+
+    # Rhetorical dismissal: «Как скажешь», «Всё как хочешь», «Мне пофиг»
+    if re.match(r"^(?:как\s+скажешь|как\s+хочешь|всё\s+как\s+хочешь|мне\s+пофиг|делайте\s+(?:что\s+)?хотите)", t):
+        return True
+
+    # Pure negation/pessimism without constructive aim: «Проще выкинуть», «Нечего не будет»
+    if re.search(r"\b(?:проще\s+выкинуть|выкинуть|пересдача|переработка)\b", t):
+        if not re.search(r"\b(?:как|помогает|вариант|способ)\b", t):
+            return True
+
+    # Short material/price opinions: «Дорогой и с мусором», «Дорого еще»
+    if re.match(r"^(?:дорог\w*|дешев\w*|дорог\w*\s+(?:и|а)|\w+\s+дорог\w*)", t):
+        if len(t.split()) <= 5 and "?" not in t:
+            return True
+
+    # Contradiction without constructive content: «Вообще нет», «Вообще ничего», «Не правильно»
+    if re.fullmatch(r"(?:вообще\s+(?:нет|ничего|нету)|не\s+правильн\w*|не\s+факт|всё\s+равно|и\s+то\s+не\s+факт)", t):
+        return True
+
+    return False

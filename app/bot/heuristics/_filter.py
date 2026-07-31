@@ -28,6 +28,7 @@ from app.bot.heuristics._banter import (
     _is_cross_chat_tip_sharing,
     _is_design_feature_car_sarcasm,
     _is_expert_deferral_chatter,
+    _is_experience_or_assertion_chat,
     _is_filament_brand_quality_opinion,
     _is_filament_feed_test_probe,
     _is_filament_testing_plan_sharing,
@@ -260,6 +261,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_missed_jul27_thread_noise(text)
         or _is_missed_jul29_thread_noise(text)
         or _is_all_data_jul29_thread_noise(text)
+        or _is_experience_or_assertion_chat(text)
     )
 
 

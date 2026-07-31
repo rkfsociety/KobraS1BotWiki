@@ -46,6 +46,7 @@ from app.bot.heuristics._banter import (
     _is_conversational_skepticism,
     _is_cross_chat_tip_sharing,
     _is_design_feature_car_sarcasm,
+    _is_experience_or_assertion_chat,
     _is_expert_deferral_chatter,
     _is_filament_brand_quality_opinion,
     _is_filament_feed_test_probe,

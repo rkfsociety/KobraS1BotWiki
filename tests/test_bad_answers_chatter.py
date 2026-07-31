@@ -291,3 +291,43 @@ def test_vague_fix_without_symptom_is_chatter():
 def test_real_asa_outdoor_not_chatter():
     assert not _is_conversational_chatter("ASA филамент для улицы какая температура?")
     assert not _is_thread_bed_surface_opinion("как наклеить каптон на стол kobra s1?")
+
+
+# --- опыт и утверждения (ambiguous entries 2026-07-31) ---
+
+def test_experience_printing_is_chatter():
+    from app.bot.text_heuristics import _is_experience_or_assertion_chat
+
+    # Experience sharing
+    assert _is_experience_or_assertion_chat("Я с мейкерволд печатаю и все нормально")
+    assert _is_experience_or_assertion_chat("Я печатаю PETG и проблем нет")
+    assert _is_experience_or_assertion_chat("Я пробовал ABS и не вышло")
+    assert _is_conversational_chatter("Я печатаю и всё нормально")
+
+
+def test_soft_assertions_is_chatter():
+    from app.bot.text_heuristics import _is_experience_or_assertion_chat
+
+    assert _is_experience_or_assertion_chat("Можно")
+    assert _is_experience_or_assertion_chat("Проще выкинуть")
+    assert _is_experience_or_assertion_chat("Дорого и с мусором")
+    assert _is_experience_or_assertion_chat("Согласен")
+    assert _is_experience_or_assertion_chat("Верно")
+
+
+def test_dismissals_is_chatter():
+    from app.bot.text_heuristics import _is_experience_or_assertion_chat
+
+    assert _is_experience_or_assertion_chat("Дискуссия окончена")
+    assert _is_experience_or_assertion_chat("Как скажешь")
+    assert _is_experience_or_assertion_chat("Всё как хочешь")
+
+
+def test_real_questions_not_experience_chatter():
+    from app.bot.text_heuristics import _is_experience_or_assertion_chat
+
+    # Questions should NOT be filtered
+    assert not _is_experience_or_assertion_chat("Я печатаю PETG, почему не прилипает?")
+    assert not _is_experience_or_assertion_chat("Как я должен печатать TPU?")
+    assert not _is_experience_or_assertion_chat("Можно ли использовать ABS?")
+    assert not _is_experience_or_assertion_chat("Согласны ли вы что это лучше?")  # has opinion word but asking agreement
