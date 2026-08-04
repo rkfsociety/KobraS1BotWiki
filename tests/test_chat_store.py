@@ -175,6 +175,22 @@ def test_prune_user_history_keeps_only_the_newest_500_messages(tmp_path: Path) -
         store.close()
 
 
+def test_clear_all_history_removes_messages_and_rate_limit_events(tmp_path: Path) -> None:
+    store = ChatStore(tmp_path / "chat.sqlite3")
+    try:
+        store.add_exchange(1, "question", "answer", "wiki")
+        store.allow_request(1, now=100.0)
+
+        removed = store.clear_all_history()
+
+        assert removed == 2
+        assert store.list_recent_answers() == []
+        assert store.list_messages(1) == []
+        assert store.rate_limit_remaining(1, now=100.0)["window_remaining"] == 20
+    finally:
+        store.close()
+
+
 def test_store_is_safe_for_concurrent_writes(tmp_path: Path) -> None:
     store = ChatStore(tmp_path / "chat.sqlite3")
     errors: list[BaseException] = []

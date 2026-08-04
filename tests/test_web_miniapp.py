@@ -137,6 +137,8 @@ def test_miniapp_shell_has_mobile_admin_dashboard_sections():
     assert "Вопросы без ответа" in body
     assert "Страницы вики" in body
     assert "Ответы бота" in body
+    assert "Очистить обработанные" in body
+    assert "api/app/answers/clear" in body
     assert "Сохранить ответ" in body
     assert "Отметить как оффтоп" in body
     assert "Поиск по вики" in body
@@ -170,6 +172,34 @@ def test_admin_session_and_dashboard_are_available(mini_panel):
     assert payload["role"] == "admin"
     assert payload["user"]["id"] == 42
     assert payload["stats"]["wiki_pages"] == 42
+
+
+def test_admin_can_clear_processed_miniapp_answers(mini_panel):
+    port, status_box = mini_panel
+    store = ChatStore(status_box["chat_store_path"])
+    try:
+        store.add_exchange(42, "обработанный вопрос", "обработанный ответ", "wiki")
+    finally:
+        store.close()
+
+    session = _create_session(port)
+    c = _conn(port)
+    c.request("GET", "/api/app/answers?limit=20", headers={"Authorization": f"Bearer {session}"})
+    listed = c.getresponse()
+    assert len(json.loads(listed.read())["items"]) == 1
+
+    c = _conn(port)
+    c.request("POST", "/api/app/answers/clear", headers={"Authorization": f"Bearer {session}"})
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 200
+    assert payload["ok"] is True
+    assert payload["cleared"] == 2
+
+    c = _conn(port)
+    c.request("GET", "/api/app/answers?limit=20", headers={"Authorization": f"Bearer {session}"})
+    assert json.loads(c.getresponse().read())["items"] == []
 
 
 def test_miniapp_dashboard_rejects_missing_session(mini_panel):

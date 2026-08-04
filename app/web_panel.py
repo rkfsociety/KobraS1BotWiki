@@ -81,6 +81,7 @@ from app.web_miniapp import (
     answer_missed_payload,
     chat_history_payload,
     chat_message_payload,
+    clear_answers_payload,
     create_miniapp_session,
     dashboard_payload,
     dismiss_missed_payload,
@@ -1852,6 +1853,12 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                     state,
                     self.headers.get("Authorization", ""),
                     form.get("text", ""),
+                )
+                self._send_json(payload, status=status)
+                return
+            if path == "/api/app/answers/clear":
+                status, payload = clear_answers_payload(
+                    state, self.headers.get("Authorization", "")
                 )
                 self._send_json(payload, status=status)
                 return

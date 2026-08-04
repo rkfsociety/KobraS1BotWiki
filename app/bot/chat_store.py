@@ -319,6 +319,13 @@ class ChatStore:
                 (user_id, user_id, keep),
             )
 
+    def clear_all_history(self) -> int:
+        """Удаляет историю Mini App и связанные события ограничения запросов."""
+        with self._lock, self._connection:
+            deleted = self._connection.execute("DELETE FROM chat_messages").rowcount
+            self._connection.execute("DELETE FROM rate_limit_events")
+        return int(deleted)
+
     @staticmethod
     def _message_from_row(row: sqlite3.Row) -> ChatMessage:
         return ChatMessage(

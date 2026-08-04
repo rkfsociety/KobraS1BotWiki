@@ -225,8 +225,8 @@ def render_miniapp() -> bytes:
       const content = document.getElementById('dashboard-content');
       if (!content) return;
       const items = data.items || [];
-      if (!items.length) { content.innerHTML = '<article class="miniapp-card miniapp-card--wide"><span class="muted">Ещё нет ответов</span></article>'; return; }
-      let html = '';
+      let html = '<article class="miniapp-card miniapp-card--wide"><div class="miniapp-actions" style="justify-content:space-between;align-items:center"><h2 style="margin:0">Обработанные ответы</h2><button class="secondary" onclick="clearRecentAnswers()">Очистить обработанные</button></div></article>';
+      if (!items.length) { content.innerHTML = html + '<article class="miniapp-card miniapp-card--wide"><span class="muted">Обработанных ответов нет</span></article>'; return; }
       items.forEach((item) => {
         const q = item.question || {};
         const a = item.answer || {};
@@ -235,6 +235,13 @@ def render_miniapp() -> bytes:
         html += `<article class="miniapp-card miniapp-card--wide"><div><div class="eyebrow">${ts}</div><p style="margin:8px 0 0;font-size:13px">${escapeHtml(q.text)}</p><div style="background:#252d3a;border-radius:8px;padding:10px;margin-top:10px;font-size:12px"><strong>Ответ:</strong>${badge}<p style="margin:6px 0 0">${escapeHtml(a.text)}</p>` + (a.url ? `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="color:var(--blue);font-size:11px">→ Открыть страницу</a>` : '') + '</div></div></article>';
       });
       content.innerHTML = html;
+    }
+    function clearRecentAnswers() {
+      if (!confirm('Удалить всю историю обработанных вопросов и ответов Mini App?')) return;
+      const token = sessionStorage.getItem('kobra_app_session');
+      fetch('/api/app/answers/clear', {method:'POST', headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка очистки'); loadRecentAnswers(); })
+        .catch((error) => { const content = document.getElementById('dashboard-content'); if (content) content.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
     let currentSessionRole = null;
     let chatHasMore = false;
@@ -886,6 +893,18 @@ def recent_answers_payload(state: Any, authorization: str, limit: int) -> tuple[
         "role": session["role"],
         "items": items,
     }
+
+
+def clear_answers_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
+    """Очищает обработанную историю вопросов и ответов Mini App для админа."""
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        return error
+    store = _chat_store(state)
+    if store is None:
+        return 503, {"error": "История чата временно недоступна."}
+    cleared = store.clear_all_history()
+    return 200, {"role": session["role"], "ok": True, "cleared": cleared}
 
 
 def export_answers_to_json(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
