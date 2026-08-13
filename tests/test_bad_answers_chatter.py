@@ -33,6 +33,11 @@ def test_profanity_exclamation_is_chatter():
     assert _is_conversational_chatter("Ахуели совсем?")
 
 
+def test_short_profanity_question_is_chatter():
+    assert _is_profanity_outburst_chatter("Ебу дали?")
+    assert _is_conversational_chatter("Ебу дали?")
+
+
 def test_profanity_rant_about_person_is_chatter():
     msg = "Как меня этот Николай заеееебааал"
     assert _is_profanity_outburst_chatter(msg)
