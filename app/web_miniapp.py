@@ -932,7 +932,6 @@ def export_answers_to_json(state: Any, authorization: str) -> tuple[int, dict[st
         })
 
     # Экспортируем в файл для дальнейшего анализа
-    from pathlib import Path
     from app.bot.git_autopull import project_repo_root
 
     cache_path = project_repo_root() / ".cache" / "chat_answers_export.json"

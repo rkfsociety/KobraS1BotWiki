@@ -5,7 +5,6 @@ from app.bot.manual_qa import find_manual_qa_answer, load_manual_qa_store
 from app.bot.text_heuristics import (
     _is_conversational_chatter,
     _is_missed_jul23_thread_noise,
-    _is_non_wiki_chatter_message,
 )
 
 

@@ -2,23 +2,26 @@ name-template: v$RESOLVED_VERSION
 tag-template: v$RESOLVED_VERSION
 categories:
   - title: Features
-    labels:
-      - enhancement
-      - feature
+    when:
+      labels:
+        - enhancement
+        - feature
   - title: Bug fixes
-    labels:
-      - bug
-      - fix
+    when:
+      labels:
+        - bug
+        - fix
   - title: Bot
-    labels:
-      - bot
+    when:
+      label: bot
   - title: Dependencies
-    labels:
-      - dependencies
+    when:
+      label: dependencies
   - title: Maintenance
-    labels:
-      - ci
-      - chore
+    when:
+      labels:
+        - ci
+        - chore
 change-template: "- $TITLE @$AUTHOR (#$NUMBER)"
 no-changes-template: "Нет изменений в этой версии."
 template: |

@@ -986,12 +986,11 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
     def stat(n: Any, label: str) -> str:
         return f'<div class="stat"><div class="n">{html.escape(str(n))}</div><div class="l">{html.escape(label)}</div></div>'
 
-    from app.bot.bot_stats import get_stats_metrics, get_peak_hours
+    from app.bot.bot_stats import get_stats_metrics
     from app.bot.missed_questions import load_missed_questions
 
     bot_stats = bd.get("bot_stats") or {}
     total_answers = int(bot_stats.get("total_answers", 0))
-    total_incoming = int(bot_stats.get("total_incoming", 0))
     top_wiki_pages = get_top_wiki_pages(bd)
     top_questions = get_top_questions(bd)
     hourly_activity = get_hourly_activity(bd)
