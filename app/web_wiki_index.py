@@ -341,6 +341,11 @@ class WebWikiDoc:
 
 
 _SEARCH_CACHE_SIZE = 500
+_INDEX_CACHE_VERSION = 2
+_DEFAULT_EXTRA_WIKI_URLS = (
+    "https://wiki.anycubic.com/en/fdm-3d-printer/anycubic-kobra-x",
+    "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-4-combo",
+)
 
 
 class WebWikiIndex:
@@ -491,6 +496,12 @@ class WebWikiIndex:
 
             self._search_cache.clear()
 
+    def replace_docs(self, docs: list[WebWikiDoc]) -> None:
+        with self._lock:
+            self._docs = list(docs)
+            self._blobs = [_make_search_blob(d) for d in self._docs]
+            self._search_cache.clear()
+
 
 
 
@@ -510,6 +521,8 @@ class WikiState:
     next_idx: int
 
     done_notified: bool = False
+
+    cache_version: int = 0
 
 
 
@@ -543,6 +556,8 @@ class WebWikiIndexer:
 
         max_pages: int,
 
+        extra_urls: tuple[str, ...] = (),
+
     ) -> None:
 
         self.index = index
@@ -556,6 +571,8 @@ class WebWikiIndexer:
         self.base_url = base_url
 
         self.max_pages = max_pages
+
+        self.extra_urls = tuple(dict.fromkeys(_DEFAULT_EXTRA_WIKI_URLS + tuple(extra_urls)))
 
 
 
@@ -577,6 +594,7 @@ class WebWikiIndexer:
 
                 raw = json.loads(self.state_file.read_text(encoding="utf-8"))
 
+                cache_version = int(raw.get("cache_version") or 0)
                 st = WikiState(
 
                     sitemap_url=str(raw.get("sitemap_url") or self.sitemap_url),
@@ -590,10 +608,15 @@ class WebWikiIndexer:
                     next_idx=int(raw.get("next_idx") or 0),
 
                     done_notified=bool(raw.get("done_notified") or False),
+                    cache_version=cache_version,
 
                 )
 
-                if st.urls:
+                if st.urls and cache_version >= _INDEX_CACHE_VERSION:
+
+                    st.urls = _dedupe_urls(st.urls + list(self.extra_urls), base_url=self.base_url)
+
+                    st.next_idx = min(st.next_idx, len(st.urls))
 
                     return st
 
@@ -603,7 +626,12 @@ class WebWikiIndexer:
 
 
 
-        urls = _read_sitemap_urls(self.sitemap_url, max_pages=self.max_pages, base_url=self.base_url)
+        urls = _read_sitemap_urls(
+            self.sitemap_url,
+            max_pages=self.max_pages,
+            base_url=self.base_url,
+            extra_urls=self.extra_urls,
+        )
 
         st = WikiState(
 
@@ -618,6 +646,7 @@ class WebWikiIndexer:
             next_idx=0,
 
             done_notified=False,
+            cache_version=0,
 
         )
 
@@ -643,6 +672,8 @@ class WebWikiIndexer:
 
             "done_notified": st.done_notified,
 
+            "cache_version": st.cache_version,
+
         }
 
         self.state_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
@@ -651,8 +682,27 @@ class WebWikiIndexer:
 
     def load_cached_docs(self) -> None:
 
-        if not self.cache_file.exists():
+        if self._state.cache_version < _INDEX_CACHE_VERSION:
 
+            self.index.replace_docs([])
+
+            self.cache_file.write_text("[]\n", encoding="utf-8")
+
+            self._state.next_idx = 0
+
+            self._state.done_notified = False
+
+            self._state.cache_version = _INDEX_CACHE_VERSION
+
+            self._save_state(self._state)
+
+            logging.info("Старый кэш индекса сброшен для полной перестройки")
+
+            return
+
+        if not self.cache_file.exists():
+            self._state.next_idx = 0
+            self._save_state(self._state)
             return
 
         docs = _load_cache(self.cache_file)
@@ -662,16 +712,6 @@ class WebWikiIndexer:
             self.index.add_docs(docs)
 
             logging.info("Загружен кэш индекса: %s (страниц: %d)", self.cache_file.as_posix(), len(docs))
-
-            # если кэш больше, чем next_idx — подвинем курсор вперёд
-
-            if self._state.next_idx < len(docs):
-
-                self._state.next_idx = len(docs)
-
-                self._save_state(self._state)
-
-
 
     def is_done(self) -> bool:
 
@@ -715,21 +755,29 @@ class WebWikiIndexer:
 
         for url in batch:
 
-            try:
+            for attempt in range(3):
 
-                r = client.get(url)
+                try:
 
-                if r.status_code != 200:
+                    r = client.get(url)
 
-                    continue
+                    if r.status_code == 200:
 
-                title, text = _extract_text_from_html(r.text)
+                        title, text = _extract_text_from_html(r.text)
 
-                new_docs.append(WebWikiDoc(title=title, url=url, text=text))
+                        new_docs.append(WebWikiDoc(title=title, url=url, text=text))
 
-            except Exception:
+                        break
 
-                continue
+                    if r.status_code not in {408, 429, 500, 502, 503, 504}:
+
+                        break
+
+                except Exception:
+
+                    if attempt == 2:
+
+                        break
 
 
 
@@ -765,7 +813,40 @@ class WebWikiIndexer:
 
 
 
-def _read_sitemap_urls(sitemap_url: str, *, max_pages: int, base_url: str) -> list[str]:
+def _dedupe_urls(urls: list[str], *, base_url: str, max_pages: int = 0) -> list[str]:
+
+    result: list[str] = []
+
+    seen: set[str] = set()
+
+    prefix = base_url.rstrip("/")
+
+    for raw_url in urls:
+
+        url = raw_url.strip()
+
+        if not url or (url != prefix and not url.startswith(prefix + "/")) or url in seen:
+
+            continue
+
+        seen.add(url)
+
+        result.append(url)
+
+        if max_pages > 0 and len(result) >= max_pages:
+
+            break
+
+    return result
+
+
+def _read_sitemap_urls(
+    sitemap_url: str,
+    *,
+    max_pages: int,
+    base_url: str,
+    extra_urls: tuple[str, ...] = (),
+) -> list[str]:
 
     client = httpx.Client(timeout=30.0, follow_redirects=True, headers={"User-Agent": "WikiLinkBot/1.0"})
 
@@ -795,9 +876,11 @@ def _read_sitemap_urls(sitemap_url: str, *, max_pages: int, base_url: str) -> li
 
             urls.append(url)
 
-            if max_pages > 0 and len(urls) >= max_pages:
+    urls = _dedupe_urls(urls, base_url=base_url, max_pages=max_pages)
 
-                break
+    for url in _dedupe_urls(list(extra_urls), base_url=base_url):
+        if url not in urls:
+            urls.append(url)
 
     return urls
 
@@ -813,13 +896,17 @@ def _extract_text_from_html(html: str) -> tuple[str, str]:
 
 
 
-    for tag in soup(["script", "style", "noscript"]):
+    content = soup.find("template", attrs={"slot": "contents"})
+
+    source = content if content is not None else (soup.body or soup)
+
+    for tag in source(["script", "style", "noscript"]):
 
         tag.decompose()
 
 
 
-    body = soup.body.get_text(" ", strip=True) if soup.body else soup.get_text(" ", strip=True)
+    body = source.get_text(" ", strip=True)
 
     text = _normalize(f"{title}\n{body}")
 
@@ -889,7 +976,7 @@ def _load_cache(path: Path) -> list[WebWikiDoc]:
 
         raw = json.loads(path.read_text(encoding="utf-8"))
 
-        docs: list[WebWikiDoc] = []
+        by_url: dict[str, WebWikiDoc] = {}
 
         for item in raw:
 
@@ -901,9 +988,15 @@ def _load_cache(path: Path) -> list[WebWikiDoc]:
 
             if url and text:
 
-                docs.append(WebWikiDoc(title=title, url=url, text=text))
+                doc = WebWikiDoc(title=title, url=url, text=text)
 
-        return docs
+                previous = by_url.get(url)
+
+                if previous is None or len(doc.text) > len(previous.text):
+
+                    by_url[url] = doc
+
+        return list(by_url.values())
 
     except Exception:
 

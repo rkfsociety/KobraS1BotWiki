@@ -122,7 +122,10 @@ class WikiReindexer:
             self.indexer._state.next_idx = 0
             self.indexer._state.done_notified = False
             self.indexer._state.urls = []
-            self.indexer._save_state()
+            self.indexer.index.replace_docs([])
+            self.indexer.cache_file.write_text("[]\n", encoding="utf-8")
+            self.indexer._state.cache_version = 2
+            self.indexer._save_state(self.indexer._state)
 
             # Перезагружаем список URL из sitemap
             from app.web_wiki_index import _read_sitemap_urls
@@ -132,6 +135,7 @@ class WikiReindexer:
                 self.indexer.sitemap_url,
                 max_pages=self.indexer.max_pages,
                 base_url=self.indexer.base_url,
+                extra_urls=self.indexer.extra_urls,
             )
 
             self.indexer._state.urls = new_urls

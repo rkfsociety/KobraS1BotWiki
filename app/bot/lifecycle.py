@@ -129,6 +129,7 @@ def main() -> None:
         sitemap_url=settings.wiki_sitemap_url,
         base_url=settings.wiki_base_url,
         max_pages=settings.wiki_max_pages,
+        extra_urls=settings.extra_wiki_urls,
     )
     indexer.load_cached_docs()
 

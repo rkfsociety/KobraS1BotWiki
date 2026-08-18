@@ -98,6 +98,8 @@ class Settings:
 
     wiki_max_pages: int
 
+    extra_wiki_urls: tuple[str, ...]
+
     min_score: int
 
     top_k: int
@@ -280,6 +282,9 @@ def load_settings() -> Settings:
     wiki_refresh_hours = _get_int("WIKI_REFRESH_HOURS", 24)
 
     wiki_max_pages = _get_int("WIKI_MAX_PAGES", 2000)
+
+    extra_wiki_urls_raw = (os.getenv("WIKI_EXTRA_URLS") or "").strip()
+    extra_wiki_urls = tuple(url.strip() for url in extra_wiki_urls_raw.split(",") if url.strip())
 
     min_score = _get_int("MIN_SCORE", 72)
 
@@ -563,6 +568,8 @@ def load_settings() -> Settings:
         wiki_refresh_hours=wiki_refresh_hours,
 
         wiki_max_pages=wiki_max_pages,
+
+        extra_wiki_urls=extra_wiki_urls,
 
         min_score=min_score,
 
