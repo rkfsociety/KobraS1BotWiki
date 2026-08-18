@@ -17,7 +17,6 @@ from typing import Any
 
 from app.bot.git_autopull import project_repo_root
 
-_MAX_ENTRIES = 500
 _LOCK = threading.Lock()
 
 # --- Санитайзер: чистим приватные/запрещённые данные перед сохранением (файл уходит в публичный git) ---
@@ -139,8 +138,6 @@ def add_missed_question(
             "count": 1,
             "ts": time.time(),
         })
-        if len(entries) > _MAX_ENTRIES:
-            del entries[_MAX_ENTRIES:]
         _save(entries)
 
 

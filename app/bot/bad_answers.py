@@ -14,9 +14,6 @@ from typing import Any
 
 from app.bot.git_autopull import project_repo_root
 
-_MAX_ENTRIES = 500
-
-
 def _bad_answers_path() -> Path:
     return project_repo_root() / "data" / "bad_answers.json"
 
@@ -58,8 +55,6 @@ def flag_bad_answer(
         "note": note,
         "ts": time.time(),
     })
-    if len(entries) > _MAX_ENTRIES:
-        del entries[_MAX_ENTRIES:]
     save_bad_answers(entries)
 
 

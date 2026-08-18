@@ -18,7 +18,6 @@ from app.bot.decision_log import LOG_MIRROR_TEXT_MAX, _msg_ids, incoming_text_fo
 
 # --- буфер последних ответов (для дашборда веб-панели) ---
 _RECENT_REPLIES_KEY = "recent_replies"
-_RECENT_REPLIES_MAX = 50
 _REPLIES_SAVE_LOCK = threading.Lock()
 
 
@@ -42,7 +41,6 @@ def load_recent_replies(bot_data: dict[str, Any]) -> None:
             if isinstance(item, dict) and item.get("ts") not in existing_ts:
                 existing.append(item)
         existing.sort(key=lambda m: float(m.get("ts", 0)), reverse=True)
-        del existing[_RECENT_REPLIES_MAX:]
         logging.info("recent_replies: загружено %d записей с диска", len(existing))
     except Exception as exc:
         logging.warning("recent_replies: ошибка загрузки — %s", exc)
@@ -83,8 +81,6 @@ def add_to_recent_replies(
         "source": source,
         "chat_id": chat_id,
     })
-    if len(buf) > _RECENT_REPLIES_MAX:
-        del buf[_RECENT_REPLIES_MAX:]
     save_recent_replies(bot_data)
 
 _TAG_RE = re.compile(r"<[^>]+>")
