@@ -1,5 +1,45 @@
 [
   {
+    "text": "Как начнете почковаться поделю на М4 М7 и что там у нас сейчас еще нового крутого))",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787164588.604591
+  },
+  {
+    "text": "{timestamp}- такой эффект дает",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787163448.9856136
+  },
+  {
+    "text": "а во, {if plate_name==\"\" then input_filename_base+\"_plate\" else plate_name endif}{\"(\"+plate_number+\")\"}_{filament_type[initial_tool]}_{layer_height}_{print_time}.gcode - и тогда имя файла норм",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787163437.5753284
+  },
+  {
+    "text": "подскажите плз, что в формате имени файла убрать, чтобы кучу цифр не ставило вначале?",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787163329.8886619
+  },
+  {
+    "text": "Она ж у вас выше на ступеньке",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787163271.9585023
+  },
+  {
     "text": "Сутки печатал, качество отличное. Но самый верх с какой-то проплешиной вышел, как так?",
     "score": null,
     "best_url": null,
