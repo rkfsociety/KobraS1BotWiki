@@ -4162,3 +4162,86 @@ def _is_experience_or_assertion_chat(text: str) -> bool:
         return True
 
     return False
+
+
+def _is_missed_aug20_thread_noise(text: str) -> bool:
+    """Болтовня из recent_replies и missed за 2026-08-18…20 — бот отвечал зря."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+
+    # Группа обслуживает FDM-принтеры Anycubic, а не фотополимерники.
+    if re.search(r"\b(?:моно|mono)\s*\d\b", t):
+        return True
+    if re.search(r"\bсмол[аыуой]\b", t) and re.search(
+        r"\b(?:ванн\w*|стол\w*|платформ\w*|напечат\w*|застыл\w*)\b", t
+    ):
+        return True
+
+    # Явная просьба о помощи с симптомом — не глушим.
+    if re.search(
+        r"\b(?:помогите|спасите|подскаж\w*|что\s+делать|как\s+(?:почин|исправ|"
+        r"замен|настро|убрать)|ошибк\w*\s+\d{4,5}|не\s+(?:работает|печатает|"
+        r"включается|загружает))\b",
+        t,
+    ):
+        return False
+
+    # «Вас этот тип не ругает/пугает?» — реплика про человека, не про принтер.
+    if re.search(r"\b(?:вас|тебя)\s+этот\s+тип\s+не\s+\w+", t):
+        return True
+
+    # Жалоба на чужую модель: зазоры/болтается, а не на принтер.
+    if re.search(r"\b(?:платн\w*|бесплатн\w*)\s+модел\w*\b", t) and re.search(
+        r"\bзазор\w*\b|\bболтается\b", t
+    ):
+        return True
+
+    # «Система похоже бережёт» — догадка о поведении прошивки.
+    if re.search(r"\bсистема\s+похоже\s+береж\w*\b", t):
+        return True
+    if re.search(r"\bможет\s+просто\s+система\s+ережетс\w*\b", t):
+        return True
+
+    # Продолжение чужой ветки без симптома: «поставил эти галочки… куда копать?»
+    if re.search(r"\bпоставил\s+эти\s+галочк\w*\b", t):
+        return True
+
+    # Опрос «кто какой фирмой пользуется» перед закупкой.
+    if re.search(r"\bкто\s+как(?:ой|ими|ую)\s+(?:\w+\s+){1,2}пользует\w*\b", t):
+        return True
+
+    # Гипербола про поведение принтера на скорости.
+    if re.search(r"\bпрыгать\s+как\s+собака\b", t):
+        return True
+
+    # «Избалован Камп/смарт-очисткой… удивился что тут нет» — рассказ об опыте.
+    if re.search(r"\bизбалован\b", t) and re.search(r"\bудивил\w*\b", t):
+        return True
+
+    # «Реклама?))» — односложная подколка.
+    if re.fullmatch(r"реклама\s*[?!)]*", t):
+        return True
+
+    # «Было где то что …» — пересказ услышанного, не вопрос.
+    if re.match(r"^было\s+где\s*-?\s*то\s+что\b", t):
+        return True
+
+    # «Есть ли смысл в двух аськах» — опрос мнений о покупке второго блока.
+    if re.search(r"\bесть\s+ли\s+смысл\s+в\s+двух\b", t):
+        return True
+
+    # «ТПУ ещё и мазать? у ТПУ адгезия…» — возражение соседа по ветке.
+    if re.search(r"\bеще\s+и\s+мазать\b", t) and re.search(r"\bадгези\w*\b", t):
+        return True
+
+    # «Мне как комп поставят… я вам покажу» — обещание показать позже.
+    if re.search(r"\bя\s+вам\s+покажу\b", t):
+        return True
+
+    # Обрывок в две-три коротких слова с вопросом: «Кайму ?», «скока рисует?».
+    if "?" in t and len(t.split()) <= 3 and len(t.rstrip("? ")) <= 16:
+        if not re.search(r"\d{4,5}", t):
+            return True
+
+    return False
