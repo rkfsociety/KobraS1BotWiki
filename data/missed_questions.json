@@ -1,5 +1,85 @@
 [
   {
+    "text": "Может лапа сломалась",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787314471.1569471
+  },
+  {
+    "text": "[ник] тебе в Псов везти?",
+    "score": 16,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/vyper/vyper-source-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787314408.7057467
+  },
+  {
+    "text": "У вас тоже лада Веста по 2 ляма?",
+    "score": 10,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/302-msgcode",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787314389.9267256
+  },
+  {
+    "text": "Видит бог, я хотел как лучше... Теперь придется А1 брать",
+    "score": 11,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/312-msgcode",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787314228.3887444
+  },
+  {
+    "text": "Дядя Андрей, где принтеры?",
+    "score": 6,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/302-msgcode",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787313491.812819
+  },
+  {
+    "text": "Дада хотенда",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787313484.239025
+  },
+  {
+    "text": "Эээ, в смысле нет в наличии?",
+    "score": 8,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/302-msgcode",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787313473.7493186
+  },
+  {
+    "text": "Аа не, я думал про гнездо куда вставляется штекер экструдера",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787313447.2687616
+  },
+  {
+    "text": "Бун это как йен?",
+    "score": 10,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/312-msgcode",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787313363.3423064
+  },
+  {
+    "text": "Поделитесь ссылкой, немогу найти(",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787313047.4838295
+  },
+  {
     "text": "Зато точно уверен что не оторвет во время печати",
     "score": 9,
     "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/kobra-max-source-code",
