@@ -1,5 +1,21 @@
 [
   {
+    "text": "Дилдак не распечатал",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1787418970.3714058
+  },
+  {
+    "text": "Получается, архаика?",
+    "score": 8,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/312-msgcode",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787417437.7144206
+  },
+  {
     "text": "Вроде, директ, но на пальцах глупышу Вики, есть ответ?",
     "score": 10,
     "best_url": "https://wiki.anycubic.com/en/error-codes/302-msgcode",
