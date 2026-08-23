@@ -1,5 +1,45 @@
 [
   {
+    "text": "Он не моет не выбранные катушки",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1787492025.9921794
+  },
+  {
+    "text": "Неть еще",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1787491438.2021863
+  },
+  {
+    "text": "Датчика наличия",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1787491416.9719276
+  },
+  {
+    "text": "Чем лапу датчика печатать? Я вот думаю абс +",
+    "score": 9,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/kobra-max-source-code",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1787491363.2675722
+  },
+  {
+    "text": "Слышал я его когда запускал другам",
+    "score": 10,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/kobra-max-source-code",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1787491228.742403
+  },
+  {
     "text": "а это тоже защита от дурака?, почему при начале печати с любой катушки он сначала прогоняет фаламент и делает purge из 1 катушки а потом уже из требуемой? такова последовательность? можно сделать чтобы он сразу брал нужную катушку без лишних purge?",
     "score": null,
     "best_url": null,
