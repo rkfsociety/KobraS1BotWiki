@@ -59,6 +59,7 @@ chown -R user:user /путь/к/KobraS1BotWiki
 ## Тесты
 
 ```bash
+pip install -r requirements.lock
 pip install pytest pytest-cov
 python -m pytest tests/ -v
 ```

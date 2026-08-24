@@ -64,6 +64,33 @@ from app.resource_limits import apply_posix_virtual_memory_limit_mb
 from app.web_wiki_index import WebWikiIndex, WebWikiIndexer
 
 
+def _register_handlers(app: Application) -> None:
+    """Регистрирует Telegram-обработчики в порядке, используемом ботом."""
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("help", cmd_help))
+    app.add_handler(CommandHandler("id", cmd_id))
+    app.add_handler(CommandHandler("admincheck", cmd_admincheck))
+    app.add_handler(CommandHandler("app", cmd_app))
+    app.add_handler(CommandHandler("wiki", cmd_wiki))
+    app.add_handler(CommandHandler("ping", cmd_ping))
+    app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("error", cmd_error))
+    app.add_handler(CommandHandler("fix", cmd_fix))
+    app.add_handler(CommandHandler("qaadd", cmd_qaadd))
+    app.add_handler(CommandHandler("qalist", cmd_qalist))
+    app.add_handler(CommandHandler("qadel", cmd_qadel))
+    app.add_handler(CommandHandler("update", cmd_update))
+    # В канале команды приходят как channel_post — CommandHandler их не видит.
+    app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POSTS & filters.COMMAND, on_channel_command))
+    app.add_handler(TypeHandler(Update, on_any_update), group=-1)
+    app.add_handler(MessageHandler((filters.TEXT | filters.CAPTION), on_message))
+    app.add_handler(ChatMemberHandler(on_chat_member_updated, ChatMemberHandler.CHAT_MEMBER))
+    app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, on_left_chat_member_service))
+    app.add_handler(MessageHandler(filters.StatusUpdate.PINNED_MESSAGE, on_pinned_message))
+    app.add_handler(MessageReactionHandler(on_message_reaction))
+    app.add_error_handler(on_error)
+
+
 def main() -> None:
     log_dir = Path("logs")
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -162,34 +189,7 @@ def main() -> None:
     # Стор одноразовых кодов входа в веб-панель (общий для бота и потока панели).
     app.bot_data["panel_login_codes"] = {}
     app.bot_data["panel_login_lock"] = threading.Lock()
-    app.add_handler(CommandHandler("start", cmd_start))
-    app.add_handler(CommandHandler("help", cmd_help))
-    app.add_handler(CommandHandler("id", cmd_id))
-    app.add_handler(CommandHandler("admincheck", cmd_admincheck))
-    app.add_handler(CommandHandler("app", cmd_app))
-    app.add_handler(CommandHandler("wiki", cmd_wiki))
-    app.add_handler(CommandHandler("ping", cmd_ping))
-    app.add_handler(CommandHandler("status", cmd_status))
-    app.add_handler(CommandHandler("error", cmd_error))
-    app.add_handler(CommandHandler("fix", cmd_fix))
-    app.add_handler(CommandHandler("qaadd", cmd_qaadd))
-    app.add_handler(CommandHandler("qalist", cmd_qalist))
-    app.add_handler(CommandHandler("qadel", cmd_qadel))
-    app.add_handler(CommandHandler("update", cmd_update))
-    # В канале (паблик) команды приходят как channel_post — CommandHandler их не видит (PTB).
-    app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POSTS & filters.COMMAND, on_channel_command))
-    # Диагностика: первым делом логируем любой update
-    app.add_handler(TypeHandler(Update, on_any_update), group=-1)
-    # filters.UpdateType.* здесь не используем, чтобы не "отрезать" обычные сообщения.
-    # Без & ~filters.COMMAND: на части апдейтов (пустой text/caption) комбинация ломалась на PTB 21 + Py 3.14.
-    # Команды всё равно отсекаются в on_message по префиксу "/" и отдельными CommandHandler.
-    app.add_handler(MessageHandler((filters.TEXT | filters.CAPTION), on_message))
-    app.add_handler(ChatMemberHandler(on_chat_member_updated, ChatMemberHandler.CHAT_MEMBER))
-    app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, on_left_chat_member_service))
-    app.add_handler(MessageHandler(filters.StatusUpdate.PINNED_MESSAGE, on_pinned_message))
-    # Реакции-эмодзи на сообщения бота (💩/👎 от админа → отметка в лог-зеркале)
-    app.add_handler(MessageReactionHandler(on_message_reaction))
-    app.add_error_handler(on_error)
+    _register_handlers(app)
 
     async def _post_init(application: Application) -> None:
         me = await application.bot.get_me()

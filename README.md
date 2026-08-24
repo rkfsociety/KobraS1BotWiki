@@ -6,10 +6,13 @@ Telegram-бот для групп поддержки Anycubic. Читает во
 
 ```bash
 python -m venv .venv && .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements.lock
 cp .env.example .env   # задать TELEGRAM_BOT_TOKEN, WIKI_BASE_URL, WIKI_SITEMAP_URL
 python -m app.bot
 ```
+
+`requirements.txt` содержит диапазоны версий для обновления зависимостей, а
+`requirements.lock` — проверенный набор точных версий для воспроизводимого запуска.
 
 ## Документация
 
@@ -25,6 +28,9 @@ python -m app.bot
 Разбор «отвеченных»: лента `.cache/recent_replies.json` (веб-панель) и помеченные плохие ответы `data/bad_answers.json` — те же шаги; скрипт `scripts/apply_replies_jun2026_qa.py` (июнь 2026).
 
 ## Дорожная карта
+
+В репозитории 58 тестовых файлов; проверки запускаются через `pytest`, Ruff,
+Bandit и `pip-audit` в CI.
 
 ### Качество поиска
 - [x] Сбор вопросов без ответа (`score < MIN_SCORE`) в отдельный файл для анализа и пополнения `manual_qa.json`
