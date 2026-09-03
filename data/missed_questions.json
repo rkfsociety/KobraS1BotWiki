@@ -1,5 +1,93 @@
 [
   {
+    "text": "Товарищи подскажите, пожалуйста. Печатал корзину такую 150х150. После печати на нижнем слое обнаружил такие дефекты. Куда копать?",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788439540.3371649
+  },
+  {
+    "text": "Короче, я нагуглил для интересующихся. Полный стартовый gcode с линией. Можете проверять. G9111 bedTemp=[first_layer_bed_temperature] extruderTemp=[first_layer_temperature[initial_tool]] M117 ; print_bed_min = {print_bed_min[0]},{print_bed_min[1]} ; print_bed_max = {print_bed_max[0]},{print_bed_max[1]} ; print_bed_size = {print_bed_size[0]},{print_bed_size[1]} ; first_layer_print_min = {first_layer_print_min[0]},{first_layer_print_min[1]} ; first_layer_print_max = {first_layer_print_max[0]},{first_layer_print_max[1]} ; first_layer_print_size = {first_layer_print_size[0]},{first_layer_print_size[1]} ; PURGE LINE FRONTALE CENTRALE G92 E0 G1 Z0.28 F3000 G1 X75 Y4 F5000 G1 X83 Y4 E1.5 F600 G1 X175 Y4 E10 F1200 G1 X175 Y5 F5000 G1 X171 Y5 E10.7 F500 G1 X75 Y5 E19.7 F1200 G92 E0",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788439463.4159508
+  },
+  {
+    "text": "Чтоб пруток аж трескался как пятки 😂😂😂",
+    "score": 7,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/kobra-max-source-code",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1788438905.7745373
+  },
+  {
+    "text": "Хорошо сенсей",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1788438875.7838118
+  },
+  {
+    "text": "я скажу когда можно",
+    "score": 4,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/kobra-max-source-code",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1788438760.361622
+  },
+  {
+    "text": "Ну это не мода , это опыт тысяч печатников .. Ни один принт не идеален .. Какая-нибудь сопля на сопле в первый слой и перезапускай по новой , а тут высмаркает ее в юбку и на чистую печать уедет",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788438756.961094
+  },
+  {
+    "text": "еще нет",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1788438743.7418053
+  },
+  {
+    "text": "Ну это не мода , это опыт тысяч печатников .. Ни один принт не идеален .. Какая-нибудь сопля на сопле в первый слой и перезапускай по новой , а тт высмаркает ее в юбку и на чистую печать уедет",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788438701.997787
+  },
+  {
+    "text": "Печатать уже можно или еще не стоит?",
+    "score": 8,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/kobra-max-source-code",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1788438645.7716513
+  },
+  {
+    "text": "Только если у поддержки через Китай просить",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788438112.3211389
+  },
+  {
+    "text": "Нету к сожалению",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788438094.3003538
+  },
+  {
     "text": "Дык юбку поставить профиль сохранить делов на две минуты зато всегда чистое сопло перед печатью",
     "score": null,
     "best_url": null,
