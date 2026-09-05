@@ -1,5 +1,61 @@
 [
   {
+    "text": "Как сопла от к3 и от с1",
+    "score": 11,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/310-msgcode",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788641183.2986636
+  },
+  {
+    "text": "Ооо как флэш",
+    "score": 7,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/kobra-max-source-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788640696.477272
+  },
+  {
+    "text": "Был у кого печальный опыт?",
+    "score": 6,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/302-msgcode",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788640683.2985196
+  },
+  {
+    "text": "Кароч как не крути выходит как p2s по бабкам",
+    "score": 11,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/kobra-max-source-code",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788640370.8774705
+  },
+  {
+    "text": "Еще скажи что там есть термокамера активная",
+    "score": 10,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/302-msgcode",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788640156.4502208
+  },
+  {
+    "text": "Теперь стало интересно, у кобры есть какое то отслеживание внутренней температуры?",
+    "score": 12,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/312-msgcode",
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788640054.6687703
+  },
+  {
+    "text": "Лучше на втулки собрать",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1788640030.2697952
+  },
+  {
     "text": "Next с болью кое как может переварить stl файл до 2гб, orca что то подобное, но точнее не помню. До 1гб вывозит все без проблем.",
     "score": 22,
     "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-3-combo/orca-import-k3-parameter-steps",
