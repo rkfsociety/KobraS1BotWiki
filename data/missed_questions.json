@@ -1,5 +1,21 @@
 [
   {
+    "text": "сам рисуешь в этом каде",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1788630151.1184485
+  },
+  {
+    "text": "который еще можно регулировать как хош",
+    "score": 6,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/kobra-max-source-code",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1788630062.2602909
+  },
+  {
     "text": "YOLO: A simplified method that adjusts the flow ratio in a single pass using the formula OldFlowRatio ± modifier",
     "score": null,
     "best_url": null,
