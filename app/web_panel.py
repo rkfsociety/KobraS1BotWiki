@@ -198,7 +198,7 @@ class _PanelState:
             now = time.time()
             self.sessions = {
                 t: s for t, s in raw.items()
-                if isinstance(s, dict) and isinstance(s.get("exp"), (int, float)) and s["exp"] > now
+                if isinstance(t, str) and isinstance(s, dict) and _safe_float(s.get("exp")) > now
             }
         except Exception:
             pass
@@ -215,7 +215,7 @@ class _PanelState:
     def new_session(self, user: str = "") -> tuple[str, str]:
         token = secrets.token_urlsafe(32)
         csrf = secrets.token_urlsafe(16)
-        ttl = max(60, int(getattr(self.settings, "panel_session_ttl_seconds", 86400)))
+        ttl = max(60, _safe_int(getattr(self.settings, "panel_session_ttl_seconds", 86400), 86400))
         with self.lock:
             self.sessions[token] = {"exp": time.time() + ttl, "csrf": csrf, "user": user}
             self._gc_locked()
@@ -251,7 +251,7 @@ class _PanelState:
             s = self.sessions.get(token)
             if not s:
                 return None
-            if s["exp"] < time.time():
+            if _safe_float(s.get("exp")) <= time.time():
                 self.sessions.pop(token, None)
                 return None
             return s
@@ -284,7 +284,7 @@ class _PanelState:
 
     def _gc_locked(self) -> None:
         now = time.time()
-        dead = [t for t, s in self.sessions.items() if s["exp"] < now]
+        dead = [t for t, s in self.sessions.items() if _safe_float(s.get("exp")) <= now]
         for t in dead:
             self.sessions.pop(t, None)
 
@@ -2038,7 +2038,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             self._redirect("/", cookie=self._session_cookie(token))
 
         def _session_cookie(self, token: str) -> str:
-            ttl = max(60, int(getattr(state.settings, "panel_session_ttl_seconds", 86400)))
+            ttl = max(60, _safe_int(getattr(state.settings, "panel_session_ttl_seconds", 86400), 86400))
             return f"{_COOKIE_NAME}={token}; Path=/; Max-Age={ttl}; HttpOnly; SameSite=Lax"
 
         def _handle_tg_auth(self, data: dict[str, str]) -> None:

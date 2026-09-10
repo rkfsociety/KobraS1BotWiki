@@ -143,6 +143,29 @@ def test_panel_session_save_is_atomic(tmp_path, monkeypatch):
     assert not list(tmp_path.glob(".panel_sessions.json.*.tmp"))
 
 
+def test_panel_sessions_ignore_corrupted_or_infinite_expiry(tmp_path, monkeypatch):
+    import app.web_panel as panel
+
+    path = tmp_path / "panel_sessions.json"
+    path.write_text(
+        '{"valid":{"exp":2000,"csrf":"c","user":"u"},'
+        '"broken":{"exp":"bad"},"infinite":{"exp":1e999}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(panel, "_sessions_file", lambda: path)
+    monkeypatch.setattr(panel.time, "time", lambda: 1000.0)
+    state = panel._PanelState.__new__(panel._PanelState)
+    state.sessions = {}
+    import threading
+    state.lock = threading.Lock()
+
+    state._load_sessions()
+
+    assert set(state.sessions) == {"valid"}
+    state.sessions["broken"] = {"exp": "bad"}
+    assert state.get_session("broken") is None
+
+
 def _login(c: http.client.HTTPConnection) -> str:
     c.request(
         "POST",
