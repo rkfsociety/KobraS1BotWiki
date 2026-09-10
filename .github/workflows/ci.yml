@@ -25,6 +25,9 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q app tests scripts
 
+      - name: Validate deploy scripts
+        run: bash -n deploy/*.sh
+
       - name: Bandit
         run: bandit -r app -c .github/bandit.yaml
 
