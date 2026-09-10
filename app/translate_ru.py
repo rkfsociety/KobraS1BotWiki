@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
+import tempfile
 import time
 import urllib.parse
 from dataclasses import dataclass
@@ -41,7 +43,23 @@ class Translator:
     def _save(self) -> None:
         try:
             self.cache_path.parent.mkdir(parents=True, exist_ok=True)
-            self.cache_path.write_text(json.dumps(self._cache, ensure_ascii=False, indent=2), encoding="utf-8")
+            temporary_name: str | None = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w",
+                    encoding="utf-8",
+                    dir=self.cache_path.parent,
+                    prefix=f".{self.cache_path.name}.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as temporary:
+                    temporary_name = temporary.name
+                    json.dump(self._cache, temporary, ensure_ascii=False, indent=2)
+                    temporary.flush()
+                Path(temporary_name).replace(self.cache_path)
+            finally:
+                if temporary_name is not None:
+                    Path(temporary_name).unlink(missing_ok=True)
         except Exception:
             # кэш — необязательный; если диск/права сломаны, просто молчим
             return
@@ -51,7 +69,12 @@ class Translator:
         ent = self._cache.get(text)
         if not isinstance(ent, dict):
             return None
-        ts = float(ent.get("ts") or 0.0)
+        try:
+            ts = float(ent.get("ts") or 0.0)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(ts):
+            return None
         if ts and (time.time() - ts) > float(self.ttl_seconds):
             return None
         val = ent.get("ru")
@@ -114,4 +137,3 @@ class Translator:
             return ru_s
         except Exception:
             return t
-
