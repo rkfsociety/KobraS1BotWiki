@@ -26,6 +26,7 @@ from pathlib import Path
 from telegram.ext import Application
 
 from app.bot.ops_notify import notify_ops
+from app.bot.stores import _save_json_atomic
 
 
 def project_repo_root() -> Path:
@@ -96,8 +97,7 @@ def _restore_manual_qa_after_reset(repo: Path, backup: list[dict]) -> int:
     merged = missing + current  # локальные (неотправленные) — наверх, как более новые
     p = _manual_qa_file(repo)
     try:
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+        _save_json_atomic(p, merged, indent=2)
     except Exception as e:
         logging.warning("git: не удалось восстановить ручные ответы после reset: %s", e)
         return 0

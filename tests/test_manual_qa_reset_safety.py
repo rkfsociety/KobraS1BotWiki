@@ -27,6 +27,7 @@ def test_restore_readds_missing_entry(tmp_path):
     assert titles == {"A", "B"}
     # локальный — наверху (более новый)
     assert entries[0]["title"] == "B"
+    assert not list((tmp_path / "data").glob(".manual_qa.json.*.tmp"))
 
 
 def test_restore_no_duplicates_when_present(tmp_path):
