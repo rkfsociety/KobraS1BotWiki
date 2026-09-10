@@ -6,6 +6,7 @@ import hmac
 import http.client
 import json
 import sqlite3
+import threading
 import time
 import types
 from urllib.parse import urlencode
@@ -16,7 +17,7 @@ from telegram.constants import ChatMemberStatus
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.missed_questions import load_missed_questions
 from app.bot.chat_store import ChatStore
-from app.web_miniapp import render_miniapp
+from app.web_miniapp import create_miniapp_session, render_miniapp
 from app.web_panel import start_web_panel
 
 
@@ -127,6 +128,25 @@ def test_miniapp_page_is_public_and_contains_telegram_sdk(mini_panel):
     assert response.status == 200
     assert response.getheader("Cache-Control") == "no-store"
     assert "telegram-web-app.js" in body
+
+
+def test_miniapp_session_store_is_bounded(monkeypatch):
+    state = types.SimpleNamespace(
+        settings=_Settings(),
+        application=types.SimpleNamespace(bot_data={}),
+        miniapp_sessions={},
+        lock=threading.Lock(),
+    )
+    monkeypatch.setattr("app.web_miniapp._check_group_admin", lambda application, user_id: True)
+    monkeypatch.setattr("app.web_miniapp._MAX_MINIAPP_SESSIONS", 1)
+
+    status, first = create_miniapp_session(state, _signed_init_data(user_id=42))
+    status2, second = create_miniapp_session(state, _signed_init_data(user_id=43))
+
+    assert status == status2 == 200
+    assert len(state.miniapp_sessions) == 1
+    assert first["session"] not in state.miniapp_sessions
+    assert second["session"] in state.miniapp_sessions
 
 
 def test_miniapp_shell_has_mobile_admin_dashboard_sections():

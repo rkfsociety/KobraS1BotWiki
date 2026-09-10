@@ -410,6 +410,9 @@ def _session_store(state: Any) -> dict[str, dict[str, Any]]:
     return sessions
 
 
+_MAX_MINIAPP_SESSIONS = 4096
+
+
 def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, Any]]:
     """Проверяет Telegram initData и создаёт короткую сессию участника группы."""
     try:
@@ -443,6 +446,13 @@ def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, A
         now = time.time()
         for old_token, session in list(sessions.items()):
             if float(session.get("exp", 0)) <= now:
+                sessions.pop(old_token, None)
+        if len(sessions) >= _MAX_MINIAPP_SESSIONS:
+            overflow = len(sessions) - _MAX_MINIAPP_SESSIONS + 1
+            for old_token in sorted(
+                sessions,
+                key=lambda token: float(sessions[token].get("exp", 0)),
+            )[:overflow]:
                 sessions.pop(old_token, None)
         sessions[token] = {"exp": now + ttl, "user": user, "role": role}
     return 200, {"session": token, "user": user, "role": role, "capabilities": {"admin": role == "admin"}}
