@@ -62,3 +62,15 @@ def test_recent_replies_keeps_more_than_50_entries(tmp_path, monkeypatch):
     assert len(bot_data["recent_replies"]) == 51
     assert bot_data["recent_replies"][-1]["question"] == "Вопрос 0"
     assert json.loads(path.read_text(encoding="utf-8"))[-1]["question"] == "Вопрос 0"
+
+
+def test_bad_answers_save_replaces_file_atomically(tmp_path, monkeypatch):
+    from app.bot.bad_answers import save_bad_answers
+
+    path = tmp_path / "bad_answers.json"
+    monkeypatch.setattr("app.bot.bad_answers._bad_answers_path", lambda: path)
+
+    save_bad_answers([{"question": "тест"}])
+
+    assert json.loads(path.read_text(encoding="utf-8")) == [{"question": "тест"}]
+    assert not list(tmp_path.glob("*.tmp"))

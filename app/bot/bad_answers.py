@@ -8,33 +8,41 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
 from app.bot.git_autopull import project_repo_root
 
+_LOCK = threading.RLock()
+
+
 def _bad_answers_path() -> Path:
     return project_repo_root() / "data" / "bad_answers.json"
 
 
 def load_bad_answers() -> list[dict[str, Any]]:
-    p = _bad_answers_path()
-    try:
-        if not p.exists():
-            return []
-        raw = json.loads(p.read_text(encoding="utf-8"))
-        if isinstance(raw, list):
-            return [x for x in raw if isinstance(x, dict)]
-    except Exception:
-        pass
-    return []
+    with _LOCK:
+        p = _bad_answers_path()
+        try:
+            if not p.exists():
+                return []
+            raw = json.loads(p.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                return [x for x in raw if isinstance(x, dict)]
+        except Exception:
+            pass
+        return []
 
 
 def save_bad_answers(entries: list[dict[str, Any]]) -> None:
-    p = _bad_answers_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+    with _LOCK:
+        p = _bad_answers_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        temporary = p.with_name(f".{p.name}.{os.getpid()}.tmp")
+        temporary.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(p)
 
 
 def flag_bad_answer(
@@ -46,25 +54,27 @@ def flag_bad_answer(
     note: str = "",
 ) -> None:
     """Добавляет запись об ошибочном ответе в начало списка."""
-    entries = load_bad_answers()
-    entries.insert(0, {
-        "question": question,
-        "answer": answer,
-        "url": url,
-        "source": source,
-        "note": note,
-        "ts": time.time(),
-    })
-    save_bad_answers(entries)
+    with _LOCK:
+        entries = load_bad_answers()
+        entries.insert(0, {
+            "question": question,
+            "answer": answer,
+            "url": url,
+            "source": source,
+            "note": note,
+            "ts": time.time(),
+        })
+        save_bad_answers(entries)
 
 
 def delete_bad_answer(*, idx: int) -> tuple[bool, str]:
     """Удаляет запись по индексу (0-based)."""
-    entries = load_bad_answers()
-    if idx < 0 or idx >= len(entries):
-        return False, "нет такого номера"
-    entries.pop(idx)
-    save_bad_answers(entries)
+    with _LOCK:
+        entries = load_bad_answers()
+        if idx < 0 or idx >= len(entries):
+            return False, "нет такого номера"
+        entries.pop(idx)
+        save_bad_answers(entries)
     return True, "удалено"
 
 
