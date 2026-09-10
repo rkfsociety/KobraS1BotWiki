@@ -21,6 +21,7 @@ class SitemapMonitor:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.state_file = self.cache_dir / "sitemap_state.json"
         self._state = self._load_state()
+        self._check_lock = asyncio.Lock()
 
     def _load_state(self) -> dict[str, Any]:
         """Загружает сохранённое состояние sitemap."""
@@ -36,6 +37,11 @@ class SitemapMonitor:
         _atomic_write_text(self.state_file, json.dumps(self._state, ensure_ascii=False))
 
     async def check_for_changes(self) -> tuple[bool, str]:
+        """Проверяет sitemap, не допуская параллельных запросов и записей state."""
+        async with self._check_lock:
+            return await self._check_for_changes()
+
+    async def _check_for_changes(self) -> tuple[bool, str]:
         """
         Проверяет, изменился ли sitemap.
 
