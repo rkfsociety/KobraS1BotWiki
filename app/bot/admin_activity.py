@@ -158,18 +158,24 @@ def record_admin_action(
     if action not in _ACTION_LABELS:
         return
 
-    activity: dict[str, Any] = bot_data.setdefault(_ACTIVITY_KEY, _empty_activity())
+    activity = bot_data.get(_ACTIVITY_KEY)
+    if not isinstance(activity, dict):
+        activity = _empty_activity()
+        bot_data[_ACTIVITY_KEY] = activity
     now = time.time()
     key = str(admin_id)
-    admins: dict[str, dict[str, Any]] = activity.setdefault("admins", {})
-    entry = admins.setdefault(
-        key,
-        {
+    admins = activity.get("admins")
+    if not isinstance(admins, dict):
+        admins = {}
+        activity["admins"] = admins
+    entry = admins.get(key)
+    if not isinstance(entry, dict):
+        entry = {
             "user_id": admin_id,
             "label": _admin_label(user_id=admin_id, username=admin_username, first_name=admin_first_name),
             "counts": {},
-        },
-    )
+        }
+        admins[key] = entry
     entry["label"] = _admin_label(
         user_id=admin_id,
         username=admin_username or entry.get("username"),
@@ -180,13 +186,23 @@ def record_admin_action(
     if admin_first_name:
         entry["first_name"] = admin_first_name
 
-    counts: dict[str, int] = entry.setdefault("counts", {})
-    counts[action] = int(counts.get(action, 0)) + 1
+    counts = entry.get("counts")
+    if not isinstance(counts, dict):
+        counts = {}
+        entry["counts"] = counts
+    counts[action] = max(0, _safe_int(counts.get(action, 0))) + 1
 
-    totals: dict[str, int] = activity.setdefault("totals", {})
-    totals[action] = int(totals.get(action, 0)) + 1
+    totals = activity.get("totals")
+    if not isinstance(totals, dict):
+        totals = {}
+        activity["totals"] = totals
+    totals[action] = max(0, _safe_int(totals.get(action, 0))) + 1
 
-    recent: list[dict[str, Any]] = activity.setdefault("recent", [])
+    recent = activity.get("recent")
+    if not isinstance(recent, list):
+        recent = []
+        activity["recent"] = recent
+    recent[:] = [item for item in recent if isinstance(item, dict)]
     recent.append(
         {
             "ts": now,
@@ -204,7 +220,10 @@ def record_admin_action(
     if len(admins) > _MAX_ADMINS:
         ranked = sorted(
             admins.items(),
-            key=lambda kv: sum(int(v) for v in (kv[1].get("counts") or {}).values()),
+            key=lambda kv: sum(
+                max(0, _safe_int(v))
+                for v in (kv[1].get("counts") or {}).values()
+            ) if isinstance(kv[1], dict) and isinstance(kv[1].get("counts") or {}, dict) else 0,
         )
         for drop_key, _ in ranked[: len(admins) - _MAX_ADMINS]:
             admins.pop(drop_key, None)

@@ -94,6 +94,22 @@ def test_readers_tolerate_corrupted_runtime_activity():
     assert get_recent_admin_actions(bd, limit=0) == []
 
 
+def test_writer_recovers_from_corrupted_runtime_containers():
+    bd = {
+        "admin_activity": {
+            "admins": [],
+            "totals": "broken",
+            "recent": {"broken": True},
+        }
+    }
+
+    record_admin_action(bd, action="ban", admin_id=7)
+
+    assert get_admin_activity_totals(bd) == {"ban": 1}
+    assert get_admin_activity_summary(bd)[0]["user_id"] == 7
+    assert len(get_recent_admin_actions(bd)) == 1
+
+
 def test_admin_activity_persistence_is_throttled_and_flushable(tmp_path, monkeypatch):
     import app.bot.admin_activity as aa
 
