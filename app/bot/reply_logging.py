@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import re
+import tempfile
 import threading
 import time
 
@@ -85,9 +86,18 @@ def save_recent_replies(bot_data: dict[str, Any]) -> None:
             p = _replies_path()
             p.parent.mkdir(parents=True, exist_ok=True)
             buf = list(bot_data.get(_RECENT_REPLIES_KEY) or [])
-            tmp = p.with_suffix(".tmp")
-            tmp.write_bytes(json.dumps(buf, ensure_ascii=False).encode("utf-8"))
-            tmp.replace(p)
+            temporary_name: str | None = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="w", encoding="utf-8", dir=p.parent, prefix=f".{p.name}.", suffix=".tmp", delete=False
+                ) as temporary:
+                    temporary_name = temporary.name
+                    json.dump(buf, temporary, ensure_ascii=False)
+                    temporary.flush()
+                Path(temporary_name).replace(p)
+            finally:
+                if temporary_name is not None:
+                    Path(temporary_name).unlink(missing_ok=True)
         except Exception as exc:
             logging.warning("recent_replies: ошибка сохранения — %s", exc)
 

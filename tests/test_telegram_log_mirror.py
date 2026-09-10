@@ -7,6 +7,7 @@ import logging
 from app.bot.decision_log import incoming_text_for_log, telegram_message_link
 from app.bot.telegram_log_mirror import LOG_MIRROR_TEXT_MAX, format_log_for_telegram
 from app.bot.reply_logging import load_recent_replies
+from app.web_panel import _recent_replies_section
 
 
 def test_log_mirror_text_max_reasonable():
@@ -46,6 +47,20 @@ def test_load_recent_replies_tolerates_malformed_timestamps(tmp_path, monkeypatc
         "bad",
         "also-bad",
     ]
+
+
+def test_recent_replies_panel_tolerates_malformed_timestamp():
+    class _Application:
+        bot_data = {
+            "recent_replies": [{"ts": {"broken": True}, "question": "q", "answer": "a"}],
+        }
+
+    class _State:
+        application = _Application()
+
+    html = _recent_replies_section(_State(), "csrf")
+
+    assert "q" in html
 
 
 def test_telegram_message_link_supergroup():

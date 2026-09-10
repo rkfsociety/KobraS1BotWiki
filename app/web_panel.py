@@ -681,7 +681,7 @@ def _recent_replies_section(state: _PanelState, csrf: str, page: int = 1) -> str
     rows = []
     for local_i, r in enumerate(page_replies):
         global_idx = offset + local_i
-        ts = time.strftime("%d.%m %H:%M", time.localtime(float(r.get("ts", 0) or 0)))
+        ts = time.strftime("%d.%m %H:%M", time.localtime(_safe_float(r.get("ts", 0) or 0)))
         q = html.escape(str(r.get("question", ""))[:300])
         ans = str(r.get("answer", ""))
         url = str(r.get("url", ""))
