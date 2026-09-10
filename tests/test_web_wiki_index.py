@@ -116,9 +116,15 @@ def test_sitemap_urls_are_deduplicated_and_extra_urls_are_added(monkeypatch):
         def raise_for_status(self):
             return None
 
+    clients = []
+
     class Client:
         def __init__(self, **kwargs):
-            pass
+            clients.append(self)
+            self.closed = False
+
+        def close(self):
+            self.closed = True
 
         def get(self, url):
             return Response()
@@ -133,3 +139,4 @@ def test_sitemap_urls_are_deduplicated_and_extra_urls_are_added(monkeypatch):
     )
 
     assert urls == ["https://wiki.test/en/a", "https://wiki.test/en/extra"]
+    assert clients and clients[0].closed

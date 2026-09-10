@@ -824,6 +824,8 @@ class WebWikiIndexer:
 
                         break
 
+        client.close()
+
 
 
         # обновляем индекс и сохраняем кэш (append через полную перезапись — проще и надёжнее)
@@ -898,6 +900,8 @@ def _read_sitemap_urls(
     r = client.get(sitemap_url)
 
     r.raise_for_status()
+
+    client.close()
 
 
 
@@ -992,6 +996,8 @@ def _fetch_docs(urls: list[str]) -> list[WebWikiDoc]:
         if i % 50 == 0:
 
             logging.info("Индексирование: %d/%d (успешно: %d)", i, total, len(docs))
+
+    client.close()
 
 
 
