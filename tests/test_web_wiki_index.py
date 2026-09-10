@@ -8,6 +8,7 @@ from app.web_wiki_index import (
     WebWikiIndex,
     WebWikiDoc,
     _extract_text_from_html,
+    _fetch_docs,
     _read_sitemap_urls,
     _save_cache,
 )
@@ -188,5 +189,31 @@ def test_sitemap_client_closes_when_request_fails(monkeypatch):
             max_pages=10,
             base_url="https://wiki.test",
         )
+
+    assert clients and clients[0].closed
+
+
+def test_fetch_docs_client_closes_when_unexpected_error(monkeypatch):
+    clients = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            clients.append(self)
+            self.closed = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self.closed = True
+            return False
+
+        def get(self, url):
+            raise KeyboardInterrupt
+
+    monkeypatch.setattr("app.web_wiki_index.httpx.Client", Client)
+
+    with pytest.raises(KeyboardInterrupt):
+        _fetch_docs(["https://wiki.test/page"])
 
     assert clients and clients[0].closed

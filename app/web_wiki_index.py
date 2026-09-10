@@ -962,45 +962,22 @@ def _extract_text_from_html(html: str) -> tuple[str, str]:
 
 
 def _fetch_docs(urls: list[str]) -> list[WebWikiDoc]:
-
     docs: list[WebWikiDoc] = []
-
-    client = httpx.Client(timeout=30.0, follow_redirects=True, headers={"User-Agent": "WikiLinkBot/1.0"})
-
-
-
     total = len(urls)
-
-    for i, url in enumerate(urls, start=1):
-
-        try:
-
-            r = client.get(url)
-
-            if r.status_code != 200:
-
+    with httpx.Client(timeout=30.0, follow_redirects=True, headers={"User-Agent": "WikiLinkBot/1.0"}) as client:
+        for i, url in enumerate(urls, start=1):
+            try:
+                r = client.get(url)
+                if r.status_code != 200:
+                    continue
+                title, text = _extract_text_from_html(r.text)
+                docs.append(WebWikiDoc(title=title, url=url, text=text))
+            except Exception:
                 continue
-
-            title, text = _extract_text_from_html(r.text)
-
-            docs.append(WebWikiDoc(title=title, url=url, text=text))
-
-        except Exception:
-
-            continue
-
-        if i % 50 == 0:
-
-            logging.info("Индексирование: %d/%d (успешно: %d)", i, total, len(docs))
-
-    client.close()
-
-
-
+            if i % 50 == 0:
+                logging.info("Индексирование: %d/%d (успешно: %d)", i, total, len(docs))
     if not docs:
-
         raise RuntimeError("Не получилось скачать страницы вики для индекса")
-
     return docs
 
 
