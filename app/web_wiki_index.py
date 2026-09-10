@@ -895,13 +895,9 @@ def _read_sitemap_urls(
     extra_urls: tuple[str, ...] = (),
 ) -> list[str]:
 
-    client = httpx.Client(timeout=30.0, follow_redirects=True, headers={"User-Agent": "WikiLinkBot/1.0"})
-
-    r = client.get(sitemap_url)
-
-    r.raise_for_status()
-
-    client.close()
+    with httpx.Client(timeout=30.0, follow_redirects=True, headers={"User-Agent": "WikiLinkBot/1.0"}) as client:
+        r = client.get(sitemap_url)
+        r.raise_for_status()
 
 
 

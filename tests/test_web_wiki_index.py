@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import threading
 
+import pytest
+
 from app.web_wiki_index import (
     WebWikiIndex,
     WebWikiDoc,
@@ -137,6 +139,13 @@ def test_sitemap_urls_are_deduplicated_and_extra_urls_are_added(monkeypatch):
         def close(self):
             self.closed = True
 
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self.close()
+            return False
+
         def get(self, url):
             return Response()
 
@@ -150,4 +159,34 @@ def test_sitemap_urls_are_deduplicated_and_extra_urls_are_added(monkeypatch):
     )
 
     assert urls == ["https://wiki.test/en/a", "https://wiki.test/en/extra"]
+    assert clients and clients[0].closed
+
+
+def test_sitemap_client_closes_when_request_fails(monkeypatch):
+    clients = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            clients.append(self)
+            self.closed = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            self.closed = True
+            return False
+
+        def get(self, url):
+            raise RuntimeError("network down")
+
+    monkeypatch.setattr("app.web_wiki_index.httpx.Client", Client)
+
+    with pytest.raises(RuntimeError, match="network down"):
+        _read_sitemap_urls(
+            "https://wiki.test/sitemap.xml",
+            max_pages=10,
+            base_url="https://wiki.test",
+        )
+
     assert clients and clients[0].closed
