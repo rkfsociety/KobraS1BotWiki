@@ -100,6 +100,7 @@ class WikiReindexer:
         self.indexer = indexer
         self.notify_callback = notify_callback
         self._reindex_in_progress = False
+        self._reindex_lock = asyncio.Lock()
 
     async def reindex_if_needed(self, monitor: SitemapMonitor, force: bool = False) -> bool:
         """
@@ -112,18 +113,18 @@ class WikiReindexer:
         Returns:
             True если переиндексация произведена.
         """
-        if self._reindex_in_progress:
-            logging.info("Переиндексация уже в процессе, пропускаем")
-            return False
-
-        has_changes, reason = await monitor.check_for_changes()
-        if not (has_changes or force):
-            return False
-
-        logging.info("Инициирована переиндексация вики: %s", reason)
-        self._reindex_in_progress = True
-
+        async with self._reindex_lock:
+            if self._reindex_in_progress:
+                logging.info("Переиндексация уже в процессе, пропускаем")
+                return False
+            self._reindex_in_progress = True
         try:
+            has_changes, reason = await monitor.check_for_changes()
+            if not (has_changes or force):
+                return False
+
+            logging.info("Инициирована переиндексация вики: %s", reason)
+
             # Очищаем состояние: сбрасываем next_idx и удаляем флаг done_notified
             self.indexer._state.next_idx = 0
             self.indexer._state.done_notified = False
