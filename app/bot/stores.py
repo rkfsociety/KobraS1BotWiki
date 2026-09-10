@@ -6,6 +6,7 @@ import re
 import threading
 import time
 from pathlib import Path
+from functools import lru_cache
 
 from telegram.ext import ContextTypes
 
@@ -45,6 +46,7 @@ def _load_clarify_store() -> dict[str, dict]:
 def _save_clarify_store(data: dict[str, dict]) -> None:
     _save_json_atomic(CLARIFY_STORE, data)
 
+@lru_cache(maxsize=4096)
 def _norm_text(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").lower()).strip()
 
