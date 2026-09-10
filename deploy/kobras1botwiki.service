@@ -42,6 +42,7 @@ Environment=PYTHONUNBUFFERED=1
 ExecStartPre=/usr/bin/test -f /home/anycubicwikibot/KobraS1BotWiki/.env
 ExecStartPre=/usr/bin/test -x /home/anycubicwikibot/KobraS1BotWiki/.venv/bin/python
 ExecStartPre=/home/anycubicwikibot/KobraS1BotWiki/.venv/bin/python -c "import dotenv, telegram, rapidfuzz"
+ExecStartPre=/home/anycubicwikibot/KobraS1BotWiki/.venv/bin/python -c "from app.config import load_settings; load_settings()"
 ExecStart=/home/anycubicwikibot/KobraS1BotWiki/.venv/bin/python -m app.bot
 Restart=on-failure
 RestartSec=5
