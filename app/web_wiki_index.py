@@ -475,7 +475,8 @@ class WebWikiIndex:
         q = _normalize(query)
         if not q:
             return []
-        cache_key = f"{q}\x00{top_k}"
+        limit = max(1, top_k)
+        cache_key = f"{q}\x00{limit}"
 
         with self._lock:
             if cache_key in self._search_cache:
@@ -504,7 +505,6 @@ class WebWikiIndex:
 
             scored.append((score, i))
 
-        limit = max(1, top_k)
         # В рабочем режиме top_k обычно равен 1 или 5. Не сортируем весь
         # индекс, сохраняя исходный порядок документов при равных score.
         best = nlargest(limit, scored, key=lambda item: (item[0], -item[1]))

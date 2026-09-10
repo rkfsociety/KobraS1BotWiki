@@ -67,6 +67,17 @@ def test_search_cache_hit_returns_copy():
     assert [doc.title for doc, _ in index.search("printer", top_k=2)] == ["one", "two"]
 
 
+def test_search_normalizes_equivalent_top_k_cache_keys():
+    index = WebWikiIndex([
+        WebWikiDoc(title="one", url="https://example.test/one", text="printer bed"),
+    ])
+
+    index.search("printer", top_k=0)
+    index.search("printer", top_k=-1)
+
+    assert len(index._search_cache) == 1
+
+
 def test_index_cache_save_is_atomic(tmp_path):
     path = tmp_path / "nested" / "wiki.json"
     _save_cache(path, [WebWikiDoc(title="тест", url="https://example.test", text="текст")])
