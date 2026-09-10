@@ -16,7 +16,7 @@ from app.bot.reply_access import chat_topic_in_allowed_lists
 from app.bot.reply_logging import log_bot_reply_for_message
 from app.web_wiki_index import WebWikiIndex
 
-from ._utils import _deny_unless_admin_command_access
+from ._utils import _deny_unless_admin_command_access, _safe_runtime_timestamp
 
 
 async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -34,12 +34,15 @@ async def cmd_ping(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     remote = settings.git_autopull_remote
     branch = settings.git_autopull_branch
     cache_key = f"{remote}/{branch}"
-    ping_git_cache: dict = context.application.bot_data.setdefault("ping_git_cache", {})
+    ping_git_cache = context.application.bot_data.get("ping_git_cache")
+    if not isinstance(ping_git_cache, dict):
+        ping_git_cache = {}
+        context.application.bot_data["ping_git_cache"] = ping_git_cache
     now = time.time()
     ttl = 60.0
     ent = ping_git_cache.get(cache_key)
 
-    if isinstance(ent, dict) and now - float(ent.get("ts", 0)) < ttl:
+    if isinstance(ent, dict) and now - _safe_runtime_timestamp(ent.get("ts", 0)) < ttl:
         local_f = ent.get("local")
         remote_f = ent.get("remote")
         upd = ent.get("upd")
