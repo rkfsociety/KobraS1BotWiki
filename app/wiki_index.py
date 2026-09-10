@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections import OrderedDict
 from dataclasses import dataclass
 from heapq import nlargest
 from pathlib import Path
@@ -9,6 +10,7 @@ from rapidfuzz import fuzz
 
 
 _WORD_RE = re.compile(r"[0-9A-Za-zА-Яа-яЁё_]+", re.UNICODE)
+_SEARCH_CACHE_SIZE = 256
 
 
 def _normalize(text: str) -> str:
@@ -47,6 +49,7 @@ class WikiIndex:
     def __init__(self, docs: list[WikiDoc]) -> None:
         self._docs = tuple(docs)
         self._texts = tuple(d.text for d in self._docs)
+        self._search_cache: OrderedDict[tuple[str, int], list[tuple[WikiDoc, int]]] = OrderedDict()
 
     @property
     def doc_count(self) -> int:
@@ -76,16 +79,26 @@ class WikiIndex:
         q = _normalize(query)
         if not q:
             return []
+        limit = max(1, top_k)
+        cache_key = (q, limit)
+        cached = self._search_cache.get(cache_key)
+        if cached is not None:
+            self._search_cache.move_to_end(cache_key)
+            return list(cached)
+
         scored: list[tuple[int, int]] = []
         for i, text in enumerate(self._texts):
             score = int(fuzz.token_set_ratio(q, text))
             scored.append((score, i))
-        limit = max(1, top_k)
         best = nlargest(limit, scored, key=lambda item: (item[0], -item[1]))
         results: list[tuple[WikiDoc, int]] = []
         for score, idx in best:
             results.append((self._docs[idx], score))
-        return results
+        self._search_cache[cache_key] = results
+        self._search_cache.move_to_end(cache_key)
+        if len(self._search_cache) > _SEARCH_CACHE_SIZE:
+            self._search_cache.popitem(last=False)
+        return list(results)
 
     @staticmethod
     def looks_like_question(text: str) -> bool:
