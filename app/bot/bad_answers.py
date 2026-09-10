@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from app.bot.git_autopull import project_repo_root
+from app.bot.stores import _save_json_atomic
 
 _LOCK = threading.RLock()
 
@@ -39,10 +40,7 @@ def load_bad_answers() -> list[dict[str, Any]]:
 def save_bad_answers(entries: list[dict[str, Any]]) -> None:
     with _LOCK:
         p = _bad_answers_path()
-        p.parent.mkdir(parents=True, exist_ok=True)
-        temporary = p.with_name(f".{p.name}.{os.getpid()}.tmp")
-        temporary.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
-        temporary.replace(p)
+        _save_json_atomic(p, entries, indent=2)
 
 
 def flag_bad_answer(

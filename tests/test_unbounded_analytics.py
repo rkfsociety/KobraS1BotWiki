@@ -74,6 +74,7 @@ def test_bad_answers_save_replaces_file_atomically(tmp_path, monkeypatch):
 
     assert json.loads(path.read_text(encoding="utf-8")) == [{"question": "тест"}]
     assert not list(tmp_path.glob("*.tmp"))
+    assert not list(tmp_path.glob(".bad_answers.json.*.tmp"))
 
 
 def test_missed_questions_save_replaces_file_atomically(tmp_path, monkeypatch):
