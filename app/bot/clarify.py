@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import math
 
 import logging
 
@@ -76,6 +77,14 @@ from app.config import Settings
 
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
+
+def _safe_timestamp(value: object, default: float = 0.0) -> float:
+    try:
+        result = float(value)
+        return result if math.isfinite(result) else default
+    except (TypeError, ValueError, OverflowError):
+        return default
+
 def _sync_clarify_pending_from_disk(pending: dict[tuple[int, int], dict]) -> None:
 
     """
@@ -108,9 +117,9 @@ def _sync_clarify_pending_from_disk(pending: dict[tuple[int, int], dict]) -> Non
 
         old = pending.get(tup)
 
-        ts_new = float(v.get("ts") or 0.0)
+        ts_new = _safe_timestamp(v.get("ts"))
 
-        if old is None or ts_new >= float(old.get("ts") or 0.0):
+        if old is None or ts_new >= _safe_timestamp(old.get("ts") if old else 0.0):
 
             pending[tup] = v
 
@@ -265,7 +274,7 @@ def _arm_clarify_correction_window(
 
     cd = context.application.bot_data.setdefault("clarify_correction_cooldown_until", {})
 
-    if not user_id_is_developer(user_id, settings) and time.time() < float(cd.get(key, 0.0)):
+    if not user_id_is_developer(user_id, settings) and time.time() < _safe_timestamp(cd.get(key, 0.0)):
 
         return
 
@@ -751,7 +760,7 @@ async def _try_send_printer_clarify(
 
     ckey = (chat_id, msg.from_user.id)
 
-    last = float(cooldown.get(ckey, 0.0))
+    last = _safe_timestamp(cooldown.get(ckey, 0.0))
 
     now2 = time.time()
 
@@ -1076,7 +1085,7 @@ async def _maybe_handle_clarify_correction_followup(update: Update, context: Con
 
     now = time.time()
 
-    if now - float(item.get("ts", 0.0)) > settings.clarify_correction_ttl_seconds:
+    if now - _safe_timestamp(item.get("ts", 0.0)) > settings.clarify_correction_ttl_seconds:
 
         st.pop(key, None)
 
@@ -1195,4 +1204,3 @@ async def _maybe_handle_clarify_correction_followup(update: Update, context: Con
         st[key] = item
 
     return True
-
