@@ -2,12 +2,19 @@
 from __future__ import annotations
 
 import http.client
+import threading
 import time
 import types
 
 import pytest
 
-from app.web_panel import _CSS, _admin_activity_panels, _bot_stats_section, start_web_panel
+from app.web_panel import (
+    _CSS,
+    _PanelState,
+    _admin_activity_panels,
+    _bot_stats_section,
+    start_web_panel,
+)
 
 
 class _StubApp:
@@ -61,6 +68,21 @@ def panel(monkeypatch, tmp_path):
 
 def _conn(port: int) -> http.client.HTTPConnection:
     return http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+
+
+def test_login_fail_cache_is_bounded_and_prunes_expired_ips(monkeypatch):
+    state = object.__new__(_PanelState)
+    state.login_fails = {}
+    state.lock = threading.Lock()
+    monkeypatch.setattr("app.web_panel._MAX_LOGIN_FAIL_IPS", 2)
+    monkeypatch.setattr("app.web_panel.time.time", lambda: 100.0)
+
+    state.record_login_fail("old")
+    monkeypatch.setattr("app.web_panel.time.time", lambda: 500.0)
+    state.record_login_fail("new-1")
+    state.record_login_fail("new-2")
+
+    assert set(state.login_fails) == {"new-1", "new-2"}
 
 
 def _login(c: http.client.HTTPConnection) -> str:

@@ -97,6 +97,7 @@ from app.web_miniapp import (
 log = logging.getLogger(__name__)
 
 _MAX_FORM_BODY_BYTES = 32 * 1024
+_MAX_LOGIN_FAIL_IPS = 4096
 
 
 class _FormReadError(ValueError):
@@ -284,7 +285,21 @@ class _PanelState:
     def record_login_fail(self, ip: str) -> None:
         now = time.time()
         with self.lock:
+            # Чистим не только текущий IP: иначе поток уникальных адресов
+            # может неограниченно раздувать память публичной панели.
+            self.login_fails = {
+                key: [timestamp for timestamp in timestamps if now - timestamp < 300]
+                for key, timestamps in self.login_fails.items()
+                if any(now - timestamp < 300 for timestamp in timestamps)
+            }
             self.login_fails.setdefault(ip, []).append(now)
+            if len(self.login_fails) > _MAX_LOGIN_FAIL_IPS:
+                oldest = sorted(
+                    self.login_fails,
+                    key=lambda key: self.login_fails[key][-1],
+                )[: len(self.login_fails) - _MAX_LOGIN_FAIL_IPS]
+                for key in oldest:
+                    self.login_fails.pop(key, None)
 
     def clear_login_fails(self, ip: str) -> None:
         with self.lock:
