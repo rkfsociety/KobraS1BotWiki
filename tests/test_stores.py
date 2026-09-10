@@ -23,3 +23,13 @@ def test_norm_text_reuses_bounded_cache():
     info = _norm_text.cache_info()
     assert info.hits == 1
     assert info.currsize == 1
+
+
+def test_save_json_atomic_uses_no_fixed_temp_name(tmp_path):
+    path = tmp_path / "state.json"
+
+    _save_json_atomic(path, {"value": 1})
+    _save_json_atomic(path, {"value": 2})
+
+    assert json.loads(path.read_text(encoding="utf-8"))["value"] == 2
+    assert list(tmp_path.glob(".state.json.*.tmp")) == []
