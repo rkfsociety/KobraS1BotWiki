@@ -20,12 +20,15 @@ git pull --ff-only
 
 sudo systemctl restart "$SERVICE"
 
-if ! systemctl is-active --quiet "$SERVICE"; then
-    echo "[ERROR] $SERVICE не запустился" >&2
-    systemctl status "$SERVICE" --no-pager || true
-    journalctl -u "$SERVICE" -n 40 --no-pager || true
-    exit 1
-fi
+for _ in 1 2 3; do
+    sleep 2
+    if ! systemctl is-active --quiet "$SERVICE"; then
+        echo "[ERROR] $SERVICE не запустился или завершился после restart" >&2
+        systemctl status "$SERVICE" --no-pager || true
+        journalctl -u "$SERVICE" -n 40 --no-pager || true
+        exit 1
+    fi
+done
 
 main_pid="$(systemctl show -p MainPID --value "$SERVICE")"
 echo "[OK] $SERVICE active (MainPID=$main_pid)"
