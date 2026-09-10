@@ -97,7 +97,9 @@ def try_git_push_bad_answers() -> tuple[bool, str]:
     if not (repo / ".git").exists():
         return False, "нет .git — только локальный файл"
 
-    run(["git", "add", "--", rel])
+    ad = run(["git", "add", "--", rel])
+    if ad.returncode != 0:
+        return False, (ad.stderr or ad.stdout or "git add failed").strip()[:500]
     diff = run(["git", "diff", "--staged", "--quiet"])
     if diff.returncode == 0:
         return True, "без изменений"
