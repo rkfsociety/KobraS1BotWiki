@@ -23,6 +23,8 @@ from pathlib import Path
 from typing import Any
 from heapq import nlargest
 
+from app.bot.stores import _save_json_atomic
+
 log = logging.getLogger(__name__)
 
 _STATS_KEY = "bot_stats"
@@ -128,11 +130,8 @@ def _persist(bot_data: dict[str, Any], *, force: bool = False) -> None:
                 pass
         try:
             p = _stats_path()
-            p.parent.mkdir(parents=True, exist_ok=True)
             stats = bot_data.get(_STATS_KEY) or {}
-            tmp = p.with_suffix(".tmp")
-            tmp.write_bytes(json.dumps(stats, ensure_ascii=False).encode("utf-8"))
-            tmp.replace(p)
+            _save_json_atomic(p, stats)
             bot_data["_bot_stats_last_save"] = now
         except Exception as exc:
             log.warning("bot_stats: ошибка сохранения — %s", exc)

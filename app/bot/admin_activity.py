@@ -13,6 +13,8 @@ import threading
 import time
 from typing import Any
 
+from app.bot.stores import _save_json_atomic
+
 log = logging.getLogger(__name__)
 
 _ACTIVITY_KEY = "admin_activity"
@@ -90,11 +92,8 @@ def _persist(bot_data: dict[str, Any], *, force: bool = False) -> None:
                 pass
         try:
             p = _activity_path()
-            p.parent.mkdir(parents=True, exist_ok=True)
             activity = bot_data.get(_ACTIVITY_KEY) or {}
-            tmp = p.with_suffix(".tmp")
-            tmp.write_bytes(json.dumps(activity, ensure_ascii=False).encode("utf-8"))
-            tmp.replace(p)
+            _save_json_atomic(p, activity)
             bot_data["_admin_activity_last_save"] = now
         except Exception as exc:
             log.warning("admin_activity: ошибка сохранения — %s", exc)

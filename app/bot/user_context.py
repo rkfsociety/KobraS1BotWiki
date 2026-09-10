@@ -21,6 +21,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from app.bot.stores import _save_json_atomic
+
 # ── константы ────────────────────────────────────────────────────────────────
 
 _USER_MSG_MAX  = 8      # последних сообщений на пользователя
@@ -142,9 +144,7 @@ def save_ctx_to_disk(bot_data: dict[str, Any], *, force: bool = False) -> None:
                 "users":       dict(bot_data.get("user_ctx_msgs", {})),
                 "bot_answers": dict(bot_data.get("user_ctx_answers", {})),
             }
-            tmp = p.with_suffix(".tmp")
-            tmp.write_bytes(json.dumps(data, ensure_ascii=False).encode("utf-8"))
-            tmp.replace(p)
+            _save_json_atomic(p, data)
             bot_data["_user_ctx_last_save"] = now
         except Exception:
             pass
