@@ -235,6 +235,19 @@ def test_dashboard_uses_amber_circular_activity_cards():
     assert "#f0c674" in _CSS
 
 
+def test_dashboard_stats_tolerate_corrupted_counts():
+    body = _bot_stats_section(
+        [("https://wiki.example/a", 1)],
+        [("q", 1)],
+        [0] * 24,
+        [{"label": "admin", "count": "broken"}],
+        {"bot_stats": {"total_answers": "broken"}, "admin_activity": {}},
+    )
+
+    assert "admin" in body
+    assert "broken" not in body
+
+
 def test_moderator_activity_description_matches_collected_events():
     body = _admin_activity_panels(
         {

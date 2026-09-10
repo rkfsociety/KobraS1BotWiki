@@ -1025,7 +1025,7 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
     from app.bot.missed_questions import load_missed_questions
 
     bot_stats = bd.get("bot_stats") or {}
-    total_answers = int(bot_stats.get("total_answers", 0))
+    total_answers = _safe_int(bot_stats.get("total_answers", 0))
     top_wiki_pages = get_top_wiki_pages(bd)
     top_questions = get_top_questions(bd)
     hourly_activity = get_hourly_activity(bd)
@@ -1179,7 +1179,7 @@ def _bot_stats_section(
                 f'<td class="{rank_cls}">{rank}</td>'
                 f'<td class="user-cell"><div class="name">{html.escape(str(row.get("label") or "?"))}</div>'
                 f'<div class="id">{html.escape(str(row.get("user_id") or ""))}</div></td>'
-                f'<td class=right><span class="count-badge">{int(row.get("count", 0))}</span></td>'
+                f'<td class=right><span class="count-badge">{_safe_int(row.get("count", 0))}</span></td>'
                 "</tr>"
             )
         user_rows_html = "".join(user_rows)
@@ -1236,7 +1236,7 @@ def _admin_activity_panels(bot_data: dict[str, Any]) -> str:
             counts = row.get("counts") or {}
             cells = []
             for k in stat_keys:
-                v = int(counts.get(k, 0))
+                v = _safe_int(counts.get(k, 0))
                 cls = "mod-stat mod-stat--hot" if v and k in ("ban", "kick") else "mod-stat"
                 if v == 0:
                     cls += " mod-stat--zero"
@@ -1246,7 +1246,7 @@ def _admin_activity_panels(bot_data: dict[str, Any]) -> str:
                 f'<td class="user-cell"><div class="name">{html.escape(str(row.get("label") or "?"))}</div>'
                 f'<div class="id">{html.escape(str(row.get("user_id") or ""))}</div></td>'
                 f'{"".join(cells)}'
-                f'<td class="right admin-total">{int(row.get("total", 0))}</td>'
+                f'<td class="right admin-total">{_safe_int(row.get("total", 0))}</td>'
                 "</tr>"
             )
         summary_table = (
