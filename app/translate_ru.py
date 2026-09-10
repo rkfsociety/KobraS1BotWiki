@@ -17,6 +17,16 @@ _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
 
 
+def _cache_timestamp(entry: object) -> float:
+    if not isinstance(entry, dict):
+        return 0.0
+    try:
+        timestamp = float(entry.get("ts") or 0.0)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return timestamp if math.isfinite(timestamp) else 0.0
+
+
 @dataclass
 class Translator:
     cache_path: Path
@@ -69,11 +79,8 @@ class Translator:
         ent = self._cache.get(text)
         if not isinstance(ent, dict):
             return None
-        try:
-            ts = float(ent.get("ts") or 0.0)
-        except (TypeError, ValueError):
-            return None
-        if not math.isfinite(ts):
+        ts = _cache_timestamp(ent)
+        if not ts and ent.get("ts") not in (None, 0, 0.0, "0", "0.0"):
             return None
         if ts and (time.time() - ts) > float(self.ttl_seconds):
             return None
@@ -84,8 +91,11 @@ class Translator:
         self._load()
         self._cache[text] = {"ru": ru, "ts": time.time(), "source": source}
         # примитивная защита от разрастания
-        if len(self._cache) > int(self.max_cache_entries):
-            for k in sorted(self._cache.keys())[: max(100, len(self._cache) - self.max_cache_entries)]:
+        max_entries = max(1, int(self.max_cache_entries))
+        if len(self._cache) > max_entries:
+            remove_count = len(self._cache) - max_entries
+            oldest = sorted(self._cache, key=lambda key: _cache_timestamp(self._cache[key]))
+            for k in oldest[:remove_count]:
                 self._cache.pop(k, None)
         self._save()
 
