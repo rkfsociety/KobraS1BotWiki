@@ -233,6 +233,10 @@ def try_git_push_missed_questions() -> tuple[bool, str]:
             return True, "нечего коммитить"
         return False, err[:500] if err else "git commit failed"
 
+    pull = run(["git", "pull", "--ff-only"])
+    if pull.returncode != 0:
+        return False, (pull.stderr or pull.stdout or "git pull failed").strip()[:500]
+
     ps = run(["git", "push"])
     if ps.returncode != 0:
         return False, (ps.stderr or ps.stdout or "git push").strip()[:500]
