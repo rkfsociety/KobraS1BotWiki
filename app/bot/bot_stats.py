@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 from heapq import nlargest
 
-from app.bot.stores import _save_json_atomic
+from app.bot.stores import _save_interval_elapsed, _save_json_atomic
 
 log = logging.getLogger(__name__)
 
@@ -138,12 +138,10 @@ def load_bot_stats(bot_data: dict[str, Any]) -> None:
 def _persist(bot_data: dict[str, Any], *, force: bool = False) -> None:
     now = time.time()
     with _SAVE_LOCK:
-        if not force:
-            try:
-                if now - float(bot_data.get("_bot_stats_last_save", 0.0)) < _SAVE_INTERVAL:
-                    return
-            except (TypeError, ValueError):
-                pass
+        if not force and not _save_interval_elapsed(
+            bot_data.get("_bot_stats_last_save", 0.0), now=now, interval=_SAVE_INTERVAL
+        ):
+            return
         try:
             p = _stats_path()
             stats = bot_data.get(_STATS_KEY) or {}

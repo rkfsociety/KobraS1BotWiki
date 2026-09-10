@@ -5,6 +5,7 @@ import json
 from app.bot.stores import (
     _norm_text,
     _get_answer_ctx_store,
+    _save_interval_elapsed,
     _record_bot_answer_context,
     _save_json_atomic,
     flush_answer_ctx_store,
@@ -29,6 +30,12 @@ def test_norm_text_reuses_bounded_cache():
     info = _norm_text.cache_info()
     assert info.hits == 1
     assert info.currsize == 1
+
+
+def test_save_interval_treats_corrupted_timestamp_as_due_once():
+    assert _save_interval_elapsed(float("nan"), now=100.0, interval=60.0)
+    assert not _save_interval_elapsed(100.0, now=120.0, interval=60.0)
+    assert _save_interval_elapsed(100.0, now=160.0, interval=60.0)
 
 
 def test_answer_context_accessor_loads_disk_only_when_missing(monkeypatch):

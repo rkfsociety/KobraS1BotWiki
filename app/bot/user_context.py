@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app.bot.stores import _save_json_atomic
+from app.bot.stores import _save_interval_elapsed, _save_json_atomic
 
 # ── константы ────────────────────────────────────────────────────────────────
 
@@ -146,10 +146,14 @@ def _load_from_disk(bot_data: dict[str, Any]) -> None:
 def save_ctx_to_disk(bot_data: dict[str, Any], *, force: bool = False) -> None:
     """Сохраняет контекст на диск атомарно, не чаще раза в минуту."""
     now = time.time()
-    if not force and now - bot_data.get("_user_ctx_last_save", 0.0) < _SAVE_INTERVAL:
+    if not force and not _save_interval_elapsed(
+        bot_data.get("_user_ctx_last_save", 0.0), now=now, interval=_SAVE_INTERVAL
+    ):
         return
     with _SAVE_LOCK:
-        if not force and now - bot_data.get("_user_ctx_last_save", 0.0) < _SAVE_INTERVAL:
+        if not force and not _save_interval_elapsed(
+            bot_data.get("_user_ctx_last_save", 0.0), now=now, interval=_SAVE_INTERVAL
+        ):
             return
         try:
             p = _ctx_path()

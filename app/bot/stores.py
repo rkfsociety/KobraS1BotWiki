@@ -24,6 +24,15 @@ _STORE_SAVE_LOCK = threading.Lock()
 _ANSWER_CTX_SAVE_INTERVAL = 60.0
 
 
+def _save_interval_elapsed(last_value: object, *, now: float, interval: float) -> bool:
+    """Проверяет интервал записи и безопасно обрабатывает повреждённый timestamp."""
+    try:
+        last = float(last_value)
+    except (TypeError, ValueError, OverflowError):
+        return True
+    return not math.isfinite(last) or now - last >= interval
+
+
 def _save_json_atomic(path: Path, data: object, *, indent: int | None = None) -> None:
     """Атомарно сохраняет JSON, не оставляя рабочий файл частично записанным."""
     payload = json.dumps(data, ensure_ascii=False, indent=indent)
@@ -92,12 +101,12 @@ def _save_answer_ctx_store(
 ) -> None:
     now = time.time()
     if not force and bot_data is not None:
-        try:
-            last_save = float(bot_data.get("_answer_ctx_last_save", 0.0))
-            if math.isfinite(last_save) and now - last_save < _ANSWER_CTX_SAVE_INTERVAL:
-                return
-        except (TypeError, ValueError, OverflowError):
-            pass
+        if not _save_interval_elapsed(
+            bot_data.get("_answer_ctx_last_save", 0.0),
+            now=now,
+            interval=_ANSWER_CTX_SAVE_INTERVAL,
+        ):
+            return
     _save_json_atomic(ANSWER_CTX_STORE, data)
     if bot_data is not None:
         bot_data["_answer_ctx_last_save"] = now
