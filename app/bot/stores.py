@@ -9,6 +9,7 @@ import threading
 import time
 from pathlib import Path
 from functools import lru_cache
+from typing import Any
 
 from telegram.ext import ContextTypes
 
@@ -20,6 +21,7 @@ from app.bot.constants import (
 )
 
 _STORE_SAVE_LOCK = threading.Lock()
+_ANSWER_CTX_SAVE_INTERVAL = 60.0
 
 
 def _save_json_atomic(path: Path, data: object, *, indent: int | None = None) -> None:
@@ -75,8 +77,26 @@ def _load_answer_ctx_store() -> dict[str, dict]:
         return {}
 
 
-def _save_answer_ctx_store(data: dict[str, dict]) -> None:
+def _save_answer_ctx_store(
+    data: dict[str, dict], *, bot_data: dict[str, Any] | None = None, force: bool = False
+) -> None:
+    now = time.time()
+    if not force and bot_data is not None:
+        try:
+            if now - float(bot_data.get("_answer_ctx_last_save", 0.0)) < _ANSWER_CTX_SAVE_INTERVAL:
+                return
+        except (TypeError, ValueError):
+            pass
     _save_json_atomic(ANSWER_CTX_STORE, data)
+    if bot_data is not None:
+        bot_data["_answer_ctx_last_save"] = now
+
+
+def flush_answer_ctx_store(bot_data: dict[str, Any]) -> None:
+    """Принудительно сохраняет контекст ответов перед остановкой процесса."""
+    store = bot_data.get("answer_ctx_store")
+    if isinstance(store, dict):
+        _save_answer_ctx_store(store, bot_data=bot_data, force=True)
 
 
 def _answer_ctx_key(chat_id: int, bot_message_id: int) -> str:
@@ -121,7 +141,7 @@ def _record_bot_answer_context(
         items = sorted(store.items(), key=lambda kv: _answer_ctx_timestamp(kv[1]))
         for k, _ in items[:200]:
             store.pop(k, None)
-    _save_answer_ctx_store(store)
+    _save_answer_ctx_store(store, bot_data=context.application.bot_data)
 
 
 def _load_feedback_store() -> dict[str, list[str]]:

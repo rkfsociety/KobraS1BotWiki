@@ -55,7 +55,7 @@ from app.bot.panel_login import cmd_start
 from app.bot.reactions import on_message_reaction
 from app.bot.ops_notify import notify_ops
 from app.bot.telegram_log_mirror import attach_telegram_log_mirror, flush_telegram_log_mirror
-from app.bot.stores import _load_clarify_store, _load_fix_store
+from app.bot.stores import _load_clarify_store, _load_fix_store, flush_answer_ctx_store
 from app.bot.missed_questions import try_git_push_missed_questions
 from app.bot.wiki_reindex import SitemapMonitor, WikiReindexer
 from app.config import Settings, load_settings
@@ -506,6 +506,10 @@ def main() -> None:
         flush_admin_activity(app.bot_data)
     except Exception as e:
         logging.warning("Не удалось сохранить admin_activity перед остановкой: %s", e)
+    try:
+        flush_answer_ctx_store(app.bot_data)
+    except Exception as e:
+        logging.warning("Не удалось сохранить answer_ctx_store перед остановкой: %s", e)
 
     if git_pull_restart_state.get("action") == "exec":
         try:
