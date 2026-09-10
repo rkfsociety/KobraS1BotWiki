@@ -7,6 +7,7 @@
 | `python -m app.bot` | Любая (foreground) |
 | `deploy\start-bot.cmd` / `stop-bot.cmd` / `restart-bot.cmd` | Windows |
 | `./deploy/start-bot.sh` / `./deploy/stop-bot.sh` / `./deploy/restart-bot.sh` | Linux/macOS |
+| `./deploy/update-and-restart.sh` | Production: pull + systemd restart + health check |
 
 Если бот запущен через `deploy/ensure-bot.sh` в **screen**, вывод идёт в screen и в `logs/bot.log`, а не в `journalctl`.
 
