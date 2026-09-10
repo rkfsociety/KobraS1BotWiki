@@ -27,6 +27,27 @@ def test_load_recent_replies_deduplicates_file_entries_and_ignores_bad_memory_it
     assert [item["question"] for item in bot_data["recent_replies"]] == ["new", "old"]
 
 
+def test_load_recent_replies_tolerates_malformed_timestamps(tmp_path, monkeypatch):
+    path = tmp_path / "recent_replies.json"
+    path.write_text(
+        '[{"ts": ["broken"], "question": "bad"}, '
+        '{"ts": "not-a-number", "question": "also-bad"}, '
+        '{"ts": 2, "question": "new"}]',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.bot.reply_logging._replies_path", lambda: path)
+    bot_data = {"recent_replies": [{"ts": {"broken": True}, "question": "memory"}]}
+
+    load_recent_replies(bot_data)
+
+    assert [item["question"] for item in bot_data["recent_replies"]] == [
+        "new",
+        "memory",
+        "bad",
+        "also-bad",
+    ]
+
+
 def test_telegram_message_link_supergroup():
     url = telegram_message_link(-1002295062981, 42)
     assert url == "https://t.me/c/2295062981/42"

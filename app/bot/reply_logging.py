@@ -4,6 +4,7 @@ from __future__ import annotations
 import html as html_mod
 import json
 import logging
+import math
 import re
 import threading
 import time
@@ -19,6 +20,24 @@ from app.bot.decision_log import LOG_MIRROR_TEXT_MAX, _msg_ids, incoming_text_fo
 # --- буфер последних ответов (для дашборда веб-панели) ---
 _RECENT_REPLIES_KEY = "recent_replies"
 _REPLIES_SAVE_LOCK = threading.Lock()
+
+
+def _reply_timestamp(item: dict[str, Any]) -> float:
+    """Безопасно извлекает время записи для сортировки повреждённой ленты."""
+    try:
+        timestamp = float(item.get("ts", 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return timestamp if math.isfinite(timestamp) else 0.0
+
+
+def _reply_timestamp_key(item: dict[str, Any]) -> float | None:
+    """Возвращает ключ дедупликации только для корректного finite-ts."""
+    try:
+        timestamp = float(item.get("ts"))
+    except (TypeError, ValueError):
+        return None
+    return timestamp if math.isfinite(timestamp) else None
 
 
 def _replies_path() -> Path:
@@ -40,12 +59,20 @@ def load_recent_replies(bot_data: dict[str, Any]) -> None:
             existing = []
             bot_data[_RECENT_REPLIES_KEY] = existing
         existing[:] = [item for item in existing if isinstance(item, dict)]
-        existing_ts: set = {m.get("ts") for m in existing}
+        existing_ts = {
+            timestamp
+            for item in existing
+            if (timestamp := _reply_timestamp_key(item)) is not None
+        }
         for item in raw:
-            if isinstance(item, dict) and item.get("ts") not in existing_ts:
+            if not isinstance(item, dict):
+                continue
+            timestamp = _reply_timestamp_key(item)
+            if timestamp is None or timestamp not in existing_ts:
                 existing.append(item)
-                existing_ts.add(item.get("ts"))
-        existing.sort(key=lambda m: float(m.get("ts", 0)), reverse=True)
+                if timestamp is not None:
+                    existing_ts.add(timestamp)
+        existing.sort(key=_reply_timestamp, reverse=True)
         logging.info("recent_replies: загружено %d записей с диска", len(existing))
     except Exception as exc:
         logging.warning("recent_replies: ошибка загрузки — %s", exc)
