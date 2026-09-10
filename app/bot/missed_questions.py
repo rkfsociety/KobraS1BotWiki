@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.bot.git_autopull import project_repo_root
+from app.bot.stores import _save_json_atomic
 
 _LOCK = threading.Lock()
 
@@ -96,10 +97,7 @@ def load_missed_questions() -> list[dict[str, Any]]:
 
 def _save(entries: list[dict[str, Any]]) -> None:
     p = _path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_suffix(".tmp")
-    tmp.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(p)
+    _save_json_atomic(p, entries, indent=2)
 
 
 def add_missed_question(

@@ -74,3 +74,14 @@ def test_bad_answers_save_replaces_file_atomically(tmp_path, monkeypatch):
 
     assert json.loads(path.read_text(encoding="utf-8")) == [{"question": "тест"}]
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_missed_questions_save_replaces_file_atomically(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.bot.missed_questions._path", lambda: tmp_path / "missed_questions.json")
+
+    from app.bot.missed_questions import _save
+
+    _save([{"text": "тест"}])
+
+    assert json.loads((tmp_path / "missed_questions.json").read_text(encoding="utf-8")) == [{"text": "тест"}]
+    assert not list(tmp_path.glob(".missed_questions.json.*.tmp"))
