@@ -85,6 +85,13 @@ def _safe_timestamp(value: object, default: float = 0.0) -> float:
     except (TypeError, ValueError, OverflowError):
         return default
 
+
+def _safe_message_id(value: object) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
 def _sync_clarify_pending_from_disk(pending: dict[tuple[int, int], dict]) -> None:
 
     """
@@ -356,9 +363,11 @@ def _reply_is_expected_by_bot(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         expected_mid = item.get("prompt_message_id")
 
-        if expected_mid is not None and int(expected_mid) == int(reply_mid):
-
-            return True
+        if expected_mid is not None:
+            expected_id = _safe_message_id(expected_mid)
+            reply_id = _safe_message_id(reply_mid)
+            if expected_id is not None and expected_id == reply_id:
+                return True
 
     st = context.application.bot_data.setdefault("clarify_correction_state", {})
 
@@ -368,9 +377,11 @@ def _reply_is_expected_by_bot(update: Update, context: ContextTypes.DEFAULT_TYPE
 
         exp = corr.get("expected_reply_to_mid")
 
-        if exp is not None and int(exp) == int(reply_mid):
-
-            return True
+        if exp is not None:
+            expected_id = _safe_message_id(exp)
+            reply_id = _safe_message_id(reply_mid)
+            if expected_id is not None and expected_id == reply_id:
+                return True
 
     return False
 
@@ -939,25 +950,19 @@ async def _maybe_handle_clarification_followup(update: Update, context: ContextT
 
     expected_mid = item.get("prompt_message_id")
 
-    if expected_mid is not None and reply_msg_id is not None and int(expected_mid) != int(reply_msg_id):
-
-        if settings.log_decisions:
-
-            logging.info(
-
-                "clarify_followup_ignored chat=%s user=%s reason=reply_to_other_message expected_mid=%s got_mid=%s",
-
-                update.effective_chat.id,
-
-                from_user,
-
-                expected_mid,
-
-                reply_msg_id,
-
-            )
-
-        return False
+    if expected_mid is not None:
+        expected_id = _safe_message_id(expected_mid)
+        reply_id = _safe_message_id(reply_msg_id)
+        if expected_id is None or reply_id is None or expected_id != reply_id:
+            if settings.log_decisions:
+                logging.info(
+                    "clarify_followup_ignored chat=%s user=%s reason=reply_to_other_message expected_mid=%s got_mid=%s",
+                    update.effective_chat.id,
+                    from_user,
+                    expected_mid,
+                    reply_msg_id,
+                )
+            return False
 
     original = str(item.get("original") or "").strip()
 
@@ -1119,7 +1124,9 @@ async def _maybe_handle_clarify_correction_followup(update: Update, context: Con
 
         _, reply_mid = _is_reply_to_bot(update, bot_id=bot_id)
 
-        if reply_mid is None or int(reply_mid) != int(expected_mid):
+        expected_id = _safe_message_id(expected_mid)
+        reply_id = _safe_message_id(reply_mid)
+        if expected_id is None or reply_id is None or reply_id != expected_id:
 
             return False
 
@@ -1171,7 +1178,7 @@ async def _maybe_handle_clarify_correction_followup(update: Update, context: Con
 
     item["ts"] = now
 
-    rem = int(item.get("remaining", 0)) - 1
+    rem = (_safe_message_id(item.get("remaining", 0)) or 0) - 1
 
     if rem <= 0:
 

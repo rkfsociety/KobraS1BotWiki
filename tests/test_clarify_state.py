@@ -18,3 +18,9 @@ def test_sync_pending_ignores_corrupt_timestamps(monkeypatch):
 
     assert pending[(1, 2)]["question"] == "bad"
     assert pending[(3, 4)]["question"] == "new"
+
+
+def test_safe_message_id_rejects_corrupted_values():
+    assert clarify._safe_message_id("123") == 123
+    assert clarify._safe_message_id("broken") is None
+    assert clarify._safe_message_id(float("nan")) is None
