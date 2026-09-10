@@ -20,7 +20,10 @@ jobs:
         run: pip install ruff bandit
 
       - name: Ruff
-        run: ruff check app tests
+        run: ruff check app tests scripts
+
+      - name: Compile Python sources
+        run: python -m compileall -q app tests scripts
 
       - name: Bandit
         run: bandit -r app -c .github/bandit.yaml
