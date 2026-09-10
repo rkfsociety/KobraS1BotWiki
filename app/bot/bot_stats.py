@@ -26,6 +26,7 @@ log = logging.getLogger(__name__)
 
 _STATS_KEY = "bot_stats"
 _SAVE_LOCK = threading.Lock()
+_SAVE_INTERVAL = 60.0
 _MAX_UNIQUE_QUESTIONS = 2000
 _MAX_TRACKED_USERS = 3000
 # v2: hourly_activity = все входящие в allowed-чатах (раньше считались только ответы бота).
@@ -115,8 +116,15 @@ def load_bot_stats(bot_data: dict[str, Any]) -> None:
         bot_data[_STATS_KEY] = _empty_stats()
 
 
-def _persist(bot_data: dict[str, Any]) -> None:
+def _persist(bot_data: dict[str, Any], *, force: bool = False) -> None:
+    now = time.time()
     with _SAVE_LOCK:
+        if not force:
+            try:
+                if now - float(bot_data.get("_bot_stats_last_save", 0.0)) < _SAVE_INTERVAL:
+                    return
+            except (TypeError, ValueError):
+                pass
         try:
             p = _stats_path()
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -124,8 +132,14 @@ def _persist(bot_data: dict[str, Any]) -> None:
             tmp = p.with_suffix(".tmp")
             tmp.write_bytes(json.dumps(stats, ensure_ascii=False).encode("utf-8"))
             tmp.replace(p)
+            bot_data["_bot_stats_last_save"] = now
         except Exception as exc:
             log.warning("bot_stats: ошибка сохранения — %s", exc)
+
+
+def flush_bot_stats(bot_data: dict[str, Any]) -> None:
+    """Принудительно сохраняет свежую статистику перед остановкой процесса."""
+    _persist(bot_data, force=True)
 
 
 def _bump_hour(stats: dict[str, Any], hour: int) -> None:

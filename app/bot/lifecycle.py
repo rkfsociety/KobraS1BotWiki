@@ -50,7 +50,7 @@ from app.bot.handlers import (
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.reply_logging import load_recent_replies
 from app.bot.admin_activity import load_admin_activity
-from app.bot.bot_stats import load_bot_stats
+from app.bot.bot_stats import flush_bot_stats, load_bot_stats
 from app.bot.panel_login import cmd_start
 from app.bot.reactions import on_message_reaction
 from app.bot.ops_notify import notify_ops
@@ -496,6 +496,12 @@ def main() -> None:
     # Важно: после перезапуска не "догоняем" накопившиеся сообщения.
     # Telegram отдаёт накопленные updates при polling — drop_pending_updates их сбрасывает.
     app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+
+    # Последний throttled-save мог быть меньше минуты назад — не оставляем его в памяти.
+    try:
+        flush_bot_stats(app.bot_data)
+    except Exception as e:
+        logging.warning("Не удалось сохранить bot_stats перед остановкой: %s", e)
 
     if git_pull_restart_state.get("action") == "exec":
         try:

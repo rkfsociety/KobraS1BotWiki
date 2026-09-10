@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from app.bot.bot_stats import (
     _empty_stats,
+    flush_bot_stats,
     get_hourly_activity,
     get_top_users,
     load_bot_stats,
@@ -41,6 +42,22 @@ def test_answer_does_not_bump_hourly():
     assert get_hourly_activity(bd) == before
     assert bd["bot_stats"]["total_answers"] == 1
     assert bd["bot_stats"]["wiki_pages"]["https://wiki.example/x"] == 1
+
+
+def test_stats_persistence_is_throttled_and_flushable(tmp_path, monkeypatch):
+    import json
+    import app.bot.bot_stats as bs
+
+    path = tmp_path / "bot_stats.json"
+    monkeypatch.setattr(bs, "_stats_path", lambda: path)
+    bd: dict = {}
+
+    record_incoming_activity(bd, user_id=1)
+    record_incoming_activity(bd, user_id=2)
+    assert json.loads(path.read_text(encoding="utf-8"))["total_incoming"] == 1
+
+    flush_bot_stats(bd)
+    assert json.loads(path.read_text(encoding="utf-8"))["total_incoming"] == 2
 
 
 def test_load_migrates_old_hourly_to_empty_incoming(tmp_path, monkeypatch):
