@@ -406,7 +406,7 @@ def _json_payload(payload: dict[str, Any]) -> bytes:
 
 def _session_store(state: Any) -> dict[str, dict[str, Any]]:
     sessions = getattr(state, "miniapp_sessions", None)
-    if sessions is None:
+    if not isinstance(sessions, dict):
         sessions = {}
         state.miniapp_sessions = sessions
     return sessions
@@ -419,7 +419,7 @@ def _session_exp(session: dict[str, Any]) -> float:
     try:
         expiry = float(session.get("exp", 0) or 0)
         return expiry if math.isfinite(expiry) else 0.0
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 0.0
 
 
@@ -461,7 +461,7 @@ def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, A
         }
 
     token = secrets.token_urlsafe(32)
-    ttl = min(max(300, int(getattr(state.settings, "panel_session_ttl_seconds", 1800))), 3600)
+    ttl = min(max(300, _safe_int(getattr(state.settings, "panel_session_ttl_seconds", 1800), 1800)), 3600)
     with state.lock:
         sessions = _session_store(state)
         now = time.time()

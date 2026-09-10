@@ -226,6 +226,13 @@ def test_dashboard_tolerates_corrupted_numeric_stats(monkeypatch):
     assert payload["stats"]["total_answers"] == 0
 
 
+def test_session_reader_recovers_from_corrupted_session_container():
+    state = types.SimpleNamespace(lock=threading.Lock(), miniapp_sessions=[])
+
+    assert _get_session(state, "Bearer missing") is None
+    assert state.miniapp_sessions == {}
+
+
 def test_miniapp_stats_tolerates_corrupted_stats_container(monkeypatch):
     state = types.SimpleNamespace(
         application=types.SimpleNamespace(bot_data={"bot_stats": "broken"})
