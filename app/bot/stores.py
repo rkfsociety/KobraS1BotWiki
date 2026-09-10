@@ -93,9 +93,10 @@ def _save_answer_ctx_store(
     now = time.time()
     if not force and bot_data is not None:
         try:
-            if now - float(bot_data.get("_answer_ctx_last_save", 0.0)) < _ANSWER_CTX_SAVE_INTERVAL:
+            last_save = float(bot_data.get("_answer_ctx_last_save", 0.0))
+            if math.isfinite(last_save) and now - last_save < _ANSWER_CTX_SAVE_INTERVAL:
                 return
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             pass
     _save_json_atomic(ANSWER_CTX_STORE, data)
     if bot_data is not None:

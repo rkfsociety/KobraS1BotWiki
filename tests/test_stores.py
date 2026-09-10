@@ -100,3 +100,17 @@ def test_answer_context_persistence_is_throttled_and_flushable(monkeypatch):
 
     flush_answer_ctx_store(_App.bot_data)
     assert len(calls) == 2
+
+
+def test_answer_context_throttling_recovers_from_non_finite_timestamp(monkeypatch):
+    import app.bot.stores as stores
+
+    calls: list[dict] = []
+    monkeypatch.setattr(stores, "_save_json_atomic", lambda path, data, **kwargs: calls.append(data))
+    monkeypatch.setattr(stores.time, "time", lambda: 100.0)
+    bot_data = {"_answer_ctx_last_save": float("nan")}
+
+    stores._save_answer_ctx_store({}, bot_data=bot_data)
+    stores._save_answer_ctx_store({}, bot_data=bot_data)
+
+    assert len(calls) == 1
