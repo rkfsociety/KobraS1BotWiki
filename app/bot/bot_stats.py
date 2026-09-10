@@ -21,6 +21,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+from heapq import nlargest
 
 log = logging.getLogger(__name__)
 
@@ -250,16 +251,20 @@ def record_answer(
 
 def get_top_wiki_pages(bot_data: dict[str, Any], limit: int = 10) -> list[tuple[str, int]]:
     """Топ вики-страниц по количеству ответов ботом."""
+    if limit <= 0:
+        return []
     stats = bot_data.get(_STATS_KEY) or {}
     pages = stats.get("wiki_pages") or {}
-    return sorted(pages.items(), key=lambda x: x[1], reverse=True)[:limit]
+    return nlargest(limit, pages.items(), key=lambda x: x[1])
 
 
 def get_top_questions(bot_data: dict[str, Any], limit: int = 10) -> list[tuple[str, int]]:
     """Топ вопросов пользователей по частоте."""
+    if limit <= 0:
+        return []
     stats = bot_data.get(_STATS_KEY) or {}
     questions = stats.get("questions") or {}
-    return sorted(questions.items(), key=lambda x: x[1], reverse=True)[:limit]
+    return nlargest(limit, questions.items(), key=lambda x: x[1])
 
 
 def get_hourly_activity(bot_data: dict[str, Any]) -> list[int]:
@@ -273,6 +278,8 @@ def get_hourly_activity(bot_data: dict[str, Any]) -> list[int]:
 
 def get_top_users(bot_data: dict[str, Any], limit: int = 10) -> list[dict[str, Any]]:
     """Топ участников по числу входящих сообщений в разрешённых чатах."""
+    if limit <= 0:
+        return []
     stats = bot_data.get(_STATS_KEY) or {}
     users = stats.get("user_messages") or {}
     rows: list[dict[str, Any]] = []
@@ -291,8 +298,7 @@ def get_top_users(bot_data: dict[str, Any], limit: int = 10) -> list[dict[str, A
                 "count": count,
             }
         )
-    rows.sort(key=lambda r: (r["count"], r.get("label") or ""), reverse=True)
-    return rows[:limit]
+    return nlargest(limit, rows, key=lambda r: (r["count"], r.get("label") or ""))
 
 
 def get_stats_metrics(bot_data: dict[str, Any]) -> dict[str, Any]:

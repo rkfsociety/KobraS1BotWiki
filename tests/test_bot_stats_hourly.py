@@ -5,6 +5,8 @@ from app.bot.bot_stats import (
     _empty_stats,
     flush_bot_stats,
     get_hourly_activity,
+    get_top_questions,
+    get_top_wiki_pages,
     get_top_users,
     load_bot_stats,
     record_answer,
@@ -89,3 +91,17 @@ def test_get_top_users():
     assert top[0]["user_id"] == 1
     assert top[0]["count"] == 5
     assert top[1]["user_id"] == 2
+
+
+def test_top_stats_returns_empty_for_non_positive_limit_and_keeps_ties():
+    bd = {
+        "bot_stats": {
+            "wiki_pages": {"first": 3, "second": 3},
+            "questions": {"q1": 2, "q2": 2},
+        }
+    }
+
+    assert get_top_wiki_pages(bd, limit=0) == []
+    assert get_top_questions(bd, limit=-1) == []
+    assert get_top_wiki_pages(bd, limit=2) == [("first", 3), ("second", 3)]
+    assert get_top_questions(bd, limit=2) == [("q1", 2), ("q2", 2)]
