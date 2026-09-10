@@ -54,6 +54,18 @@ def test_search_empty_query_returns_no_arbitrary_document():
     assert index.search("   ") == []
 
 
+def test_search_cache_hit_returns_copy():
+    index = WebWikiIndex([
+        WebWikiDoc(title="one", url="https://example.test/one", text="printer bed"),
+        WebWikiDoc(title="two", url="https://example.test/two", text="printer nozzle"),
+    ])
+
+    first = index.search("printer", top_k=2)
+    first.clear()
+
+    assert [doc.title for doc, _ in index.search("printer", top_k=2)] == ["one", "two"]
+
+
 def test_search_does_not_cache_snapshot_completed_before_index_update(monkeypatch):
     index = WebWikiIndex([
         WebWikiDoc(title="same", url="https://wiki.test/old", text="same"),

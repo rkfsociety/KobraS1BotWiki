@@ -480,7 +480,9 @@ class WebWikiIndex:
         with self._lock:
             if cache_key in self._search_cache:
                 self._search_cache.move_to_end(cache_key)
-                return self._search_cache[cache_key]
+                # Не отдаём внутренний список: вызывающий код может изменить его
+                # и тем самым повредить результат для следующих запросов.
+                return list(self._search_cache[cache_key])
             # Коллекции immutable: snapshot — это только несколько ссылок,
             # без копирования всего индекса под lock.
             blobs = self._blobs
@@ -517,7 +519,7 @@ class WebWikiIndex:
                 if len(self._search_cache) > _SEARCH_CACHE_SIZE:
                     self._search_cache.popitem(last=False)
 
-        return result
+        return list(result)
 
 
 
