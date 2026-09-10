@@ -56,6 +56,21 @@ _SAVE_INTERVAL = 60.0   # с — не чаще раза в минуту
 _SAVE_LOCK     = threading.Lock()
 
 
+def _fresh_context_items(items: list[object], *, now: float, ttl: float) -> list[dict[str, Any]]:
+    """Возвращает только корректные и неистёкшие записи контекста."""
+    fresh: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            is_fresh = now - float(item.get("ts", 0)) < ttl
+        except (TypeError, ValueError):
+            continue
+        if is_fresh:
+            fresh.append(item)
+    return fresh
+
+
 # ── пути и диск ───────────────────────────────────────────────────────────────
 
 def _ctx_path() -> Path:
@@ -91,16 +106,18 @@ def _load_from_disk(bot_data: dict[str, Any]) -> None:
             for k, v in src.items():
                 if not isinstance(v, list):
                     continue
-                fresh = [
-                    m for m in v
-                    if isinstance(m, dict) and now - float(m.get("ts", 0)) < ttl
-                ]
+                fresh = _fresh_context_items(v, now=now, ttl=ttl)
                 if fresh:
-                    existing_ts = {m.get("ts") for m in dst.get(k, [])}
                     buf = dst.setdefault(k, [])
+                    if not isinstance(buf, list):
+                        buf = []
+                        dst[k] = buf
+                    buf[:] = [m for m in buf if isinstance(m, dict)]
+                    existing_ts = {m.get("ts") for m in buf}
                     for m in fresh:
                         if m.get("ts") not in existing_ts:
                             buf.append(m)
+                            existing_ts.add(m.get("ts"))
                     buf[:] = buf[-max_n:]
     except Exception:
         pass
