@@ -38,6 +38,9 @@ User=anycubicwikibot
 Group=anycubicwikibot
 WorkingDirectory=/home/anycubicwikibot/KobraS1BotWiki
 Environment=PYTHONUNBUFFERED=1
+# Fail early with a clear status when deploy missed secrets or the venv.
+ExecStartPre=/usr/bin/test -f /home/anycubicwikibot/KobraS1BotWiki/.env
+ExecStartPre=/usr/bin/test -x /home/anycubicwikibot/KobraS1BotWiki/.venv/bin/python
 ExecStart=/home/anycubicwikibot/KobraS1BotWiki/.venv/bin/python -m app.bot
 Restart=on-failure
 RestartSec=5
