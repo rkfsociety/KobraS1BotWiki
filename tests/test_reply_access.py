@@ -1,13 +1,36 @@
 """Проверка allowlist чатов/тем (reply_access)."""
 from __future__ import annotations
 
-from app.bot.reply_access import can_bot_reply_in_context, chat_topic_in_allowed_lists
+from types import SimpleNamespace
+
+from app.bot.reply_access import (
+    _cache_get,
+    _cache_put,
+    can_bot_reply_in_context,
+    chat_topic_in_allowed_lists,
+)
 
 
 def test_collect_only_context_cannot_send_reply():
     assert not can_bot_reply_in_context(answer_context=False, bot_can_send=True)
     assert not can_bot_reply_in_context(answer_context=True, bot_can_send=False)
     assert can_bot_reply_in_context(answer_context=True, bot_can_send=True)
+
+
+def test_reply_access_cache_is_bounded(monkeypatch):
+    context = SimpleNamespace(application=SimpleNamespace(bot_data={}))
+    monkeypatch.setattr("app.bot.reply_access._CACHE_MAX_ENTRIES", 2)
+    monkeypatch.setattr("app.bot.reply_access.time.monotonic", lambda: 100.0)
+
+    _cache_put(context, 1, None, True, 300)
+    _cache_put(context, 2, None, True, 300)
+    _cache_put(context, 3, None, False, 300)
+
+    store = context.application.bot_data["reply_access_cache"]
+    assert len(store) == 2
+    assert _cache_get(context, 1, None) is None
+    assert _cache_get(context, 2, None) is True
+    assert _cache_get(context, 3, None) is False
 
 
 def test_no_lists_allows_everywhere():

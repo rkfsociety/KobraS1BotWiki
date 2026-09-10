@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 _CACHE_KEY = "reply_access_cache"
 _DEFAULT_CACHE_TTL = 300.0
+_CACHE_MAX_ENTRIES = 2048
 
 
 def can_bot_reply_in_context(*, answer_context: bool, bot_can_send: bool) -> bool:
@@ -121,7 +122,19 @@ def _cache_put(
     ttl: float,
 ) -> None:
     store = context.application.bot_data.setdefault(_CACHE_KEY, {})
-    store[(chat_id, topic_id)] = (ok, time.monotonic() + ttl)
+    key = (chat_id, topic_id)
+    now = time.monotonic()
+    if key not in store and len(store) >= _CACHE_MAX_ENTRIES:
+        # Сначала освобождаем записи, которые истекли без повторного чтения.
+        expired = [cache_key for cache_key, (_, expires) in store.items() if expires <= now]
+        for cache_key in expired:
+            store.pop(cache_key, None)
+        # При всплеске новых чатов ограничиваем память, удаляя ближайшую к
+        # истечению запись (она наименее полезна для будущего чтения).
+        if len(store) >= _CACHE_MAX_ENTRIES:
+            oldest_key = min(store, key=lambda cache_key: store[cache_key][1])
+            store.pop(oldest_key, None)
+    store[key] = (ok, now + ttl)
 
 
 def invalidate_reply_access_cache(
