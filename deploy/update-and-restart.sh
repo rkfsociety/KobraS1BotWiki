@@ -30,5 +30,12 @@ for _ in 1 2 3; do
     fi
 done
 
+service_user="$(systemctl show -p User --value "$SERVICE")"
+if [[ "$service_user" != "$EXPECTED_USER" ]]; then
+    echo "[ERROR] $SERVICE запущен не под $EXPECTED_USER (User=$service_user)" >&2
+    systemctl status "$SERVICE" --no-pager || true
+    exit 1
+fi
+
 main_pid="$(systemctl show -p MainPID --value "$SERVICE")"
 echo "[OK] $SERVICE active (MainPID=$main_pid)"
