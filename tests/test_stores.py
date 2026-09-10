@@ -4,6 +4,7 @@ import json
 
 from app.bot.stores import (
     _norm_text,
+    _get_answer_ctx_store,
     _record_bot_answer_context,
     _save_json_atomic,
     flush_answer_ctx_store,
@@ -28,6 +29,23 @@ def test_norm_text_reuses_bounded_cache():
     info = _norm_text.cache_info()
     assert info.hits == 1
     assert info.currsize == 1
+
+
+def test_answer_context_accessor_loads_disk_only_when_missing(monkeypatch):
+    calls: list[int] = []
+    loaded = {"one": {"q": "q"}}
+    monkeypatch.setattr(
+        "app.bot.stores._load_answer_ctx_store",
+        lambda: calls.append(1) or loaded,
+    )
+    bot_data: dict = {"answer_ctx_store": {"cached": {"q": "cached"}}}
+
+    assert _get_answer_ctx_store(bot_data)["cached"]["q"] == "cached"
+    assert calls == []
+
+    bot_data.pop("answer_ctx_store")
+    assert _get_answer_ctx_store(bot_data) is loaded
+    assert calls == [1]
 
 
 def test_save_json_atomic_uses_no_fixed_temp_name(tmp_path):

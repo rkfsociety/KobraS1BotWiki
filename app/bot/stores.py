@@ -77,6 +77,16 @@ def _load_answer_ctx_store() -> dict[str, dict]:
         return {}
 
 
+def _get_answer_ctx_store(bot_data: dict[str, Any]) -> dict[str, dict]:
+    """Возвращает store из памяти и читает диск только при первом обращении."""
+    store = bot_data.get("answer_ctx_store")
+    if isinstance(store, dict):
+        return store
+    store = _load_answer_ctx_store()
+    bot_data["answer_ctx_store"] = store
+    return store
+
+
 def _save_answer_ctx_store(
     data: dict[str, dict], *, bot_data: dict[str, Any] | None = None, force: bool = False
 ) -> None:
@@ -125,10 +135,7 @@ def _record_bot_answer_context(
     Запоминаем, на какой запрос бот ответил данным сообщением.
     Нужно для команды /error (перепоиск и "обучение").
     """
-    store = context.application.bot_data.setdefault("answer_ctx_store", {})
-    if not isinstance(store, dict):
-        store = {}
-        context.application.bot_data["answer_ctx_store"] = store
+    store = _get_answer_ctx_store(context.application.bot_data)
 
     store[_answer_ctx_key(chat_id, bot_message_id)] = {
         "q": query,

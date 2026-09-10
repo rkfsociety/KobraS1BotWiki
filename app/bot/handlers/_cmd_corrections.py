@@ -14,7 +14,7 @@ from app.bot.reply_logging import log_bot_reply_for_message
 from app.bot.stores import (
     _answer_ctx_key,
     _excluded_urls_for_query,
-    _load_answer_ctx_store,
+    _get_answer_ctx_store,
     _record_bot_answer_context,
     _remember_bad_answer,
     _remember_good_fix,
@@ -74,8 +74,8 @@ async def cmd_error(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     bad_mid = msg.reply_to_message.message_id
-    store = context.application.bot_data.setdefault("answer_ctx_store", _load_answer_ctx_store())
-    item = store.get(_answer_ctx_key(chat_id, bad_mid)) if isinstance(store, dict) else None
+    store = _get_answer_ctx_store(context.application.bot_data)
+    item = store.get(_answer_ctx_key(chat_id, bad_mid))
 
     if not isinstance(item, dict) or not item.get("q"):
         ur = _t(lang, "unknown_reply_ctx")
@@ -236,8 +236,8 @@ async def cmd_fix(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     bad_mid = msg.reply_to_message.message_id
-    store = context.application.bot_data.setdefault("answer_ctx_store", _load_answer_ctx_store())
-    item = store.get(_answer_ctx_key(chat_id, bad_mid)) if isinstance(store, dict) else None
+    store = _get_answer_ctx_store(context.application.bot_data)
+    item = store.get(_answer_ctx_key(chat_id, bad_mid))
 
     if not isinstance(item, dict) or not item.get("q"):
         ur = _t(lang, "unknown_reply_ctx")
