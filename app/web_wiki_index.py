@@ -721,7 +721,7 @@ class WebWikiIndexer:
 
         }
 
-        self.state_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        _atomic_write_text(self.state_file, json.dumps(payload, ensure_ascii=False))
 
 
 
@@ -731,7 +731,7 @@ class WebWikiIndexer:
 
             self.index.replace_docs([])
 
-            self.cache_file.write_text("[]\n", encoding="utf-8")
+            _atomic_write_text(self.cache_file, "[]\n")
 
             self._state.next_idx = 0
 
@@ -1009,7 +1009,15 @@ def _save_cache(path: Path, docs: list[WebWikiDoc]) -> None:
 
     payload = [{"title": d.title, "url": d.url, "text": d.text} for d in docs]
 
-    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    _atomic_write_text(path, json.dumps(payload, ensure_ascii=False))
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Заменяет файл целиком, не оставляя частично записанный JSON при сбое."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.replace(path)
 
 
 

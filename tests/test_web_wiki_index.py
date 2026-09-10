@@ -7,6 +7,7 @@ from app.web_wiki_index import (
     WebWikiDoc,
     _extract_text_from_html,
     _read_sitemap_urls,
+    _save_cache,
 )
 
 
@@ -64,6 +65,14 @@ def test_search_cache_hit_returns_copy():
     first.clear()
 
     assert [doc.title for doc, _ in index.search("printer", top_k=2)] == ["one", "two"]
+
+
+def test_index_cache_save_is_atomic(tmp_path):
+    path = tmp_path / "nested" / "wiki.json"
+    _save_cache(path, [WebWikiDoc(title="тест", url="https://example.test", text="текст")])
+
+    assert '"title": "тест"' in path.read_text(encoding="utf-8")
+    assert not list(path.parent.glob(".*.tmp"))
 
 
 def test_search_does_not_cache_snapshot_completed_before_index_update(monkeypatch):
