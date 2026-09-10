@@ -573,6 +573,16 @@ def test_config_save_updates_env(panel):
     assert "TELEGRAM_BOT_TOKEN" not in text
 
 
+def test_write_env_values_leaves_no_temporary_file(tmp_path):
+    from app.web_panel import _write_env_values
+
+    path = tmp_path / ".env"
+    _write_env_values(path, {"MIN_SCORE": "80"})
+
+    assert path.read_text(encoding="utf-8") == "\nMIN_SCORE=80\n"
+    assert not list(tmp_path.glob("..env.*.tmp"))
+
+
 def test_config_save_invalid_int_rejected(panel):
     from urllib.parse import urlencode
 

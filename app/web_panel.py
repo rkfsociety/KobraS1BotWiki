@@ -22,6 +22,7 @@ import json
 import logging
 import math
 import secrets
+import tempfile
 import threading
 import time
 import urllib.request
@@ -1563,7 +1564,20 @@ def _write_env_values(path: Path, updates: dict[str, str]) -> None:
     while len(lines) > 1 and lines[-1] == "":
         lines.pop()
     # Пишем байтами, чтобы текстовый режим не транслировал \n повторно (иначе \r\r\n на Windows).
-    path.write_bytes((newline.join(lines) + newline).encode("utf-8"))
+    payload = (newline.join(lines) + newline).encode("utf-8")
+    temporary_name: str | None = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
+        ) as temporary:
+            temporary_name = temporary.name
+            temporary.write(payload)
+            temporary.flush()
+        Path(temporary_name).replace(path)
+    finally:
+        if temporary_name is not None:
+            Path(temporary_name).unlink(missing_ok=True)
 
 
 def _current_config_value(key: str, ftype: str, env_vals: dict[str, str], settings: Any) -> str:
