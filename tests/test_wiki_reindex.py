@@ -16,6 +16,16 @@ def test_sitemap_state_save_is_atomic(tmp_path):
     assert not list(tmp_path.glob(".*.tmp"))
 
 
+def test_sitemap_monitor_falls_back_for_non_object_state(tmp_path):
+    path = tmp_path / "sitemap_state.json"
+    path.write_text("[1, 2, 3]", encoding="utf-8")
+
+    monitor = SitemapMonitor("https://example.test/sitemap.xml", cache_dir=tmp_path)
+
+    assert monitor._state["hash"] is None
+    assert monitor._state["url_count"] == 0
+
+
 def test_sitemap_checks_are_serialized(tmp_path, monkeypatch):
     monitor = SitemapMonitor("https://example.test/sitemap.xml", cache_dir=tmp_path)
     active = 0

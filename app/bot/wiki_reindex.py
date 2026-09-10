@@ -27,7 +27,9 @@ class SitemapMonitor:
         """Загружает сохранённое состояние sitemap."""
         if self.state_file.exists():
             try:
-                return json.loads(self.state_file.read_text(encoding="utf-8"))
+                raw = json.loads(self.state_file.read_text(encoding="utf-8"))
+                if isinstance(raw, dict):
+                    return raw
             except Exception:
                 pass
         return {"hash": None, "url_count": 0, "timestamp": 0, "last_check": 0}
