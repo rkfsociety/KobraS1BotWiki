@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from app.bot.stores import _norm_text, _save_json_atomic
+from app.bot.stores import _norm_text, _record_bot_answer_context, _save_json_atomic
 
 
 def test_save_json_atomic_replaces_file_without_leaving_temp_file(tmp_path):
@@ -33,3 +33,26 @@ def test_save_json_atomic_uses_no_fixed_temp_name(tmp_path):
 
     assert json.loads(path.read_text(encoding="utf-8"))["value"] == 2
     assert list(tmp_path.glob(".state.json.*.tmp")) == []
+
+
+def test_answer_context_pruning_tolerates_malformed_entries(monkeypatch, tmp_path):
+    class _App:
+        bot_data = {
+            "answer_ctx_store": {
+                "bad": {"ts": "broken"},
+                "not-a-dict": "broken",
+            }
+        }
+
+    class _Context:
+        application = _App()
+
+    monkeypatch.setattr("app.bot.stores.ANSWER_CTX_STORE", tmp_path / "answer_context.json")
+    monkeypatch.setattr("app.bot.stores._save_answer_ctx_store", lambda store: None)
+
+    for index in range(801):
+        _record_bot_answer_context(
+            context=_Context(), chat_id=1, bot_message_id=index, query="q", url=None
+        )
+
+    assert len(_App.bot_data["answer_ctx_store"]) == 603

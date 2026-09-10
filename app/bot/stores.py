@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import tempfile
 import threading
@@ -82,6 +83,16 @@ def _answer_ctx_key(chat_id: int, bot_message_id: int) -> str:
     return f"{chat_id}:{bot_message_id}"
 
 
+def _answer_ctx_timestamp(entry: object) -> float:
+    if not isinstance(entry, dict):
+        return 0.0
+    try:
+        value = float(entry.get("ts", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return value if math.isfinite(value) else 0.0
+
+
 def _record_bot_answer_context(
     *,
     context: ContextTypes.DEFAULT_TYPE,
@@ -107,7 +118,7 @@ def _record_bot_answer_context(
     # Ограничим размер, чтобы не разрасталось бесконечно
     if len(store) > 800:
         # удаляем самые старые
-        items = sorted(store.items(), key=lambda kv: float(kv[1].get("ts", 0.0)))
+        items = sorted(store.items(), key=lambda kv: _answer_ctx_timestamp(kv[1]))
         for k, _ in items[:200]:
             store.pop(k, None)
     _save_answer_ctx_store(store)
