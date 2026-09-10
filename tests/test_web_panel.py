@@ -14,6 +14,8 @@ from app.web_panel import (
     _admin_activity_panels,
     _bot_stats_section,
     _sort_missed_entries,
+    _safe_float,
+    _safe_int,
     start_web_panel,
 )
 
@@ -89,6 +91,13 @@ def test_sort_missed_entries_uses_requested_order_once():
         "score-first",
         "count-first",
     ]
+
+
+def test_missed_entry_numeric_helpers_tolerate_corrupted_values():
+    assert _safe_float("not-a-number") == 0.0
+    assert _safe_float(float("inf"), default=7.0) == 7.0
+    assert _safe_int({"bad": True}, default=3) == 3
+    assert _safe_int("4") == 4
 
 
 def test_login_fail_cache_is_bounded_and_prunes_expired_ips(monkeypatch):

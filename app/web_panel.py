@@ -20,6 +20,7 @@ import hmac
 import html
 import json
 import logging
+import math
 import secrets
 import threading
 import time
@@ -98,6 +99,21 @@ log = logging.getLogger(__name__)
 
 _MAX_FORM_BODY_BYTES = 32 * 1024
 _MAX_LOGIN_FAIL_IPS = 4096
+
+
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        parsed = float(value)
+        return parsed if math.isfinite(parsed) else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(value: object, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 class _FormReadError(ValueError):
@@ -750,7 +766,7 @@ def _bad_answers_section(state: _PanelState, csrf: str) -> str:
         return ""
     rows = []
     for i, e in enumerate(entries[:50]):
-        ts = time.strftime("%d.%m %H:%M", time.localtime(float(e.get("ts", 0) or 0)))
+        ts = time.strftime("%d.%m %H:%M", time.localtime(_safe_float(e.get("ts"))))
         q = html.escape(str(e.get("question", ""))[:300])
         ans = str(e.get("answer", ""))
         url = str(e.get("url", ""))
@@ -804,9 +820,10 @@ def _missed_questions_section(csrf: str) -> str:
         ts = time.strftime("%d.%m %H:%M", time.localtime(float(e.get("ts", 0) or 0)))
         q = html.escape(str(e.get("text", ""))[:300])
         score = e.get("score")
-        score_str = f"{score:.0f}" if score is not None else "—"
+        score_value = _safe_float(score, default=float("nan"))
+        score_str = f"{score_value:.0f}" if math.isfinite(score_value) else "—"
         url = str(e.get("best_url", "") or "")
-        count = int(e.get("count", 1))
+        count = _safe_int(e.get("count"), default=1)
         url_cell = (
             f'<a href="{html.escape(url)}" target=_blank rel=noopener style="font-size:12px">{html.escape(url[:70])}</a>'
             if url else '<span class=muted>—</span>'
@@ -858,10 +875,10 @@ def _missed_questions_section(csrf: str) -> str:
 def _sort_missed_entries(entries: list[dict], sort: str) -> list[dict]:
     """Сортирует очередь missed единообразно для просмотра и действий с индексом."""
     if sort == "score":
-        return sorted(entries, key=lambda x: float(x.get("score") or 0))
+        return sorted(entries, key=lambda x: _safe_float(x.get("score")))
     if sort == "time":
-        return sorted(entries, key=lambda x: float(x.get("ts") or 0), reverse=True)
-    return sorted(entries, key=lambda x: int(x.get("count") or 1), reverse=True)
+        return sorted(entries, key=lambda x: _safe_float(x.get("ts")), reverse=True)
+    return sorted(entries, key=lambda x: _safe_int(x.get("count"), default=1), reverse=True)
 
 
 def _missed_page(state: _PanelState, csrf: str, flash: str = "", sort: str = "count") -> bytes:
@@ -876,13 +893,14 @@ def _missed_page(state: _PanelState, csrf: str, flash: str = "", sort: str = "co
 
     rows = []
     for i, e in enumerate(entries):
-        ts = time.strftime("%d.%m %H:%M", time.localtime(float(e.get("ts", 0) or 0)))
+        ts = time.strftime("%d.%m %H:%M", time.localtime(_safe_float(e.get("ts"))))
         text = str(e.get("text", ""))
         q = html.escape(text[:300])
         score = e.get("score")
-        score_str = f"{score:.0f}" if score is not None else "—"
+        score_value = _safe_float(score, default=float("nan"))
+        score_str = f"{score_value:.0f}" if math.isfinite(score_value) else "—"
         url = str(e.get("best_url", "") or "")
-        count = int(e.get("count", 1))
+        count = _safe_int(e.get("count"), default=1)
         in_qa = text.lower().strip() in qa_keys
         url_cell = (
             f'<a href="{html.escape(url)}" target=_blank rel=noopener style="font-size:12px">'
