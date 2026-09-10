@@ -21,7 +21,9 @@ from typing import Any
 from app.bot.git_autopull import project_repo_root
 from app.bot.stores import _norm_text, _save_json_atomic
 
-_MAX_ENTRIES = 250
+# В файле уже есть больше 250 рабочих FAQ; запас предотвращает потерю
+# существующих ответов при следующем /qaadd до плановой чистки дублей.
+_MAX_ENTRIES = 300
 _MIN_SUBSTR_LEN = 6
 
 # Предложение → автоизвлечение коротких ключей: порог в словах

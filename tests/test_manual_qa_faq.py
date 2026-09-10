@@ -129,3 +129,25 @@ def test_manual_qa_store_save_is_atomic(tmp_path, monkeypatch):
 
     assert load_manual_qa_store() == [{"title": "тест", "keys": ["тест"], "answer": "ответ"}]
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_adding_entry_does_not_drop_existing_tail_entries(tmp_path, monkeypatch):
+    import app.bot.manual_qa as mqa
+
+    path = tmp_path / "manual_qa.json"
+    monkeypatch.setattr(mqa, "_manual_qa_path", lambda: path)
+    entries = [
+        {"title": str(i), "keys": [f"ключ {i}"], "answer": "ответ"}
+        for i in range(259)
+    ]
+
+    ok, _ = add_manual_qa_entry(
+        entries=entries,
+        raw_keys=["новый уникальный вопрос"],
+        answer="новый ответ",
+        title="Новый FAQ",
+    )
+
+    assert ok
+    assert len(entries) == 260
+    assert entries[-1]["title"] == "258"
