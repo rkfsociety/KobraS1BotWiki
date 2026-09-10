@@ -50,7 +50,22 @@ def _get_int(name: str, default: int) -> int:
 
         return default
 
-    return int(raw)
+    try:
+        return int(raw)
+    except (TypeError, ValueError, OverflowError):
+        logging.warning("Некорректное значение %s, используем значение по умолчанию", name)
+        return default
+
+
+def _get_optional_int(name: str) -> int | None:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError, OverflowError):
+        logging.warning("Некорректное значение %s, параметр отключён", name)
+        return None
 
 
 
@@ -316,9 +331,7 @@ def load_settings() -> Settings:
 
     notify_on_index_done = _get_bool("NOTIFY_ON_INDEX_DONE", True)
 
-    notify_chat_id_raw = (os.getenv("NOTIFY_CHAT_ID") or "").strip()
-
-    notify_chat_id = int(notify_chat_id_raw) if notify_chat_id_raw else None
+    notify_chat_id = _get_optional_int("NOTIFY_CHAT_ID")
 
     notify_mention = (os.getenv("NOTIFY_MENTION") or "").strip()
 
@@ -678,4 +691,3 @@ def load_settings() -> Settings:
         panel_webapp_url=panel_webapp_url,
 
     )
-
