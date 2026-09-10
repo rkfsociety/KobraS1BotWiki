@@ -7,6 +7,7 @@ from app.bot.manual_qa import (
     add_manual_qa_entry,
     find_manual_qa_answer,
     load_manual_qa_store,
+    save_manual_qa_store,
 )
 
 _CASES = [
@@ -118,3 +119,13 @@ def test_add_entry_with_sentence_key_is_matchable(tmp_path):
         assert find_manual_qa_answer(entries, "изношеный ремень у принтера") is not None
     finally:
         mqa._manual_qa_path = orig
+
+
+def test_manual_qa_store_save_is_atomic(tmp_path, monkeypatch):
+    path = tmp_path / "manual_qa.json"
+    monkeypatch.setattr("app.bot.manual_qa._manual_qa_path", lambda: path)
+
+    save_manual_qa_store([{"title": "тест", "keys": ["тест"], "answer": "ответ"}])
+
+    assert load_manual_qa_store() == [{"title": "тест", "keys": ["тест"], "answer": "ответ"}]
+    assert not list(tmp_path.glob("*.tmp"))

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from app.bot.git_autopull import project_repo_root
-from app.bot.stores import _norm_text
+from app.bot.stores import _norm_text, _save_json_atomic
 
 _MAX_ENTRIES = 250
 _MIN_SUBSTR_LEN = 6
@@ -129,8 +129,7 @@ def load_manual_qa_store() -> list[dict[str, Any]]:
 
 def save_manual_qa_store(entries: list[dict[str, Any]]) -> None:
     p = _manual_qa_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+    _save_json_atomic(p, entries, indent=2)
 
 
 def try_git_push_manual_qa() -> tuple[bool, str]:
