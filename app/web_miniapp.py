@@ -423,6 +423,13 @@ def _session_exp(session: dict[str, Any]) -> float:
         return 0.0
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
 def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, Any]]:
     """Проверяет Telegram initData и создаёт короткую сессию участника группы."""
     try:
@@ -527,8 +534,8 @@ def dashboard_payload(state: Any, authorization: str) -> tuple[int, dict[str, An
         "role": session["role"],
         "user": session["user"],
         "stats": {
-            "wiki_pages": int(getattr(wiki, "doc_count", 0) if wiki is not None else 0),
-            "total_answers": int((bot_data.get("bot_stats") or {}).get("total_answers", 0)),
+            "wiki_pages": _safe_int(getattr(wiki, "doc_count", 0) if wiki is not None else 0),
+            "total_answers": _safe_int((bot_data.get("bot_stats") or {}).get("total_answers", 0)),
             "manual_answers": len(bot_data.get("manual_qa_entries") or []),
             "missed_questions": len(load_missed_questions()),
             "fixes": len(bot_data.get("fix_store") or {}),
@@ -852,8 +859,8 @@ def stats_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
     peak_hours = get_peak_hours(bot_data, limit=3)
     missed = load_missed_questions()
 
-    total_incoming = int(stats.get("total_incoming", 0))
-    total_answers = int(stats.get("total_answers", 0))
+    total_incoming = _safe_int(stats.get("total_incoming", 0))
+    total_answers = _safe_int(stats.get("total_answers", 0))
     peak_hour = peak_hours[0]["hour"] if peak_hours else 0
     peak_val = peak_hours[0]["count"] if peak_hours else 0
 

@@ -17,7 +17,13 @@ from telegram.constants import ChatMemberStatus
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.missed_questions import load_missed_questions
 from app.bot.chat_store import ChatStore
-from app.web_miniapp import _get_session, create_miniapp_session, export_answers_to_json, render_miniapp
+from app.web_miniapp import (
+    _get_session,
+    create_miniapp_session,
+    dashboard_payload,
+    export_answers_to_json,
+    render_miniapp,
+)
 from app.web_panel import start_web_panel
 
 
@@ -199,6 +205,24 @@ def test_admin_session_and_dashboard_are_available(mini_panel):
     assert payload["role"] == "admin"
     assert payload["user"]["id"] == 42
     assert payload["stats"]["wiki_pages"] == 42
+
+
+def test_dashboard_tolerates_corrupted_numeric_stats(monkeypatch):
+    state = types.SimpleNamespace(
+        application=types.SimpleNamespace(
+            bot_data={"bot_stats": {"total_answers": "broken"}, "manual_qa_entries": []}
+        )
+    )
+    monkeypatch.setattr(
+        "app.web_miniapp._require_admin_session",
+        lambda state, authorization: ({"role": "admin", "user": {"id": 1}}, None),
+    )
+    monkeypatch.setattr("app.web_miniapp.load_missed_questions", lambda: [])
+
+    status, payload = dashboard_payload(state, "Bearer test")
+
+    assert status == 200
+    assert payload["stats"]["total_answers"] == 0
 
 
 def test_admin_can_clear_processed_miniapp_answers(mini_panel):
