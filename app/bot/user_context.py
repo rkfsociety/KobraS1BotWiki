@@ -62,13 +62,17 @@ def _fresh_context_items(items: list[object], *, now: float, ttl: float) -> list
     for item in items:
         if not isinstance(item, dict):
             continue
-        try:
-            is_fresh = now - float(item.get("ts", 0)) < ttl
-        except (TypeError, ValueError):
-            continue
-        if is_fresh:
+        if _is_fresh_context_item(item, now=now, ttl=ttl):
             fresh.append(item)
     return fresh
+
+
+def _is_fresh_context_item(item: dict[str, Any], *, now: float, ttl: float) -> bool:
+    try:
+        timestamp = float(item.get("ts", 0))
+    except (TypeError, ValueError):
+        return False
+    return now - timestamp < ttl
 
 
 # ── пути и диск ───────────────────────────────────────────────────────────────
@@ -179,7 +183,7 @@ def record_user_message(
     msgs: dict[str, list] = bot_data.setdefault("user_ctx_msgs", {})
     buf = msgs.setdefault(ukey, [])
     buf.append({"text": text[:500], "ts": now})
-    buf[:] = [m for m in buf if now - m["ts"] < _USER_TTL]
+    buf[:] = _fresh_context_items(buf, now=now, ttl=_USER_TTL)
     if len(buf) > _USER_MSG_MAX:
         del buf[:-_USER_MSG_MAX]
 
@@ -187,7 +191,7 @@ def record_user_message(
     chat_msgs: dict[str, list] = bot_data.setdefault("chat_ctx_msgs", {})
     cbuf = chat_msgs.setdefault(str(chat_id), [])
     cbuf.append({"user_id": user_id, "text": text[:300], "ts": now})
-    cbuf[:] = [m for m in cbuf if now - m["ts"] < _CHAT_TTL]
+    cbuf[:] = _fresh_context_items(cbuf, now=now, ttl=_CHAT_TTL)
     if len(cbuf) > _CHAT_MSG_MAX:
         del cbuf[:-_CHAT_MSG_MAX]
 
@@ -209,7 +213,7 @@ def record_bot_answer(
     ans: dict[str, list] = bot_data.setdefault("user_ctx_answers", {})
     buf = ans.setdefault(ukey, [])
     buf.append({"text": answer_text[:300], "url": url, "ts": now})
-    buf[:] = [m for m in buf if now - m["ts"] < _USER_TTL]
+    buf[:] = _fresh_context_items(buf, now=now, ttl=_USER_TTL)
     if len(buf) > _BOT_ANS_MAX:
         del buf[:-_BOT_ANS_MAX]
     save_ctx_to_disk(bot_data)
@@ -247,21 +251,21 @@ def enrich_query(
     # Слова из прошлых ответов бота (самые релевантные — бот уже нашёл тему)
     ans_words: list[str] = []
     for a in reversed(bot_data.get("user_ctx_answers", {}).get(ukey, [])[-2:]):
-        if now - float(a.get("ts", 0)) > _USER_TTL:
+        if not _is_fresh_context_item(a, now=now, ttl=_USER_TTL):
             continue
         ans_words.extend(_words(a.get("text", "")))
 
     # Слова из предыдущих сообщений пользователя (исключаем текущий)
     user_words: list[str] = []
     for m in reversed(bot_data.get("user_ctx_msgs", {}).get(ukey, [])[-4:-1]):
-        if now - float(m.get("ts", 0)) > _USER_TTL:
+        if not _is_fresh_context_item(m, now=now, ttl=_USER_TTL):
             continue
         user_words.extend(_words(m.get("text", "")))
 
     # Слова из контекста чата (другие пользователи — тема разговора)
     chat_words: list[str] = []
     for m in reversed(bot_data.get("chat_ctx_msgs", {}).get(str(chat_id), [])[-5:]):
-        if now - float(m.get("ts", 0)) > _CHAT_TTL:
+        if not _is_fresh_context_item(m, now=now, ttl=_CHAT_TTL):
             continue
         if m.get("user_id") == user_id:
             continue  # уже взяли из user_words
@@ -301,7 +305,7 @@ def get_user_topic_hint(
         ("user_ctx_msgs",    _USER_TTL),
     ]:
         for m in reversed(bot_data.get(bucket_key, {}).get(ukey, [])[-3:]):
-            if now - float(m.get("ts", 0)) > ttl:
+            if not _is_fresh_context_item(m, now=now, ttl=ttl):
                 continue
             words.extend(_words(m.get("text", "")))
 
