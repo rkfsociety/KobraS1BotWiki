@@ -817,7 +817,7 @@ def _missed_questions_section(csrf: str) -> str:
         return ""
     rows = []
     for i, e in enumerate(entries[:100]):
-        ts = time.strftime("%d.%m %H:%M", time.localtime(float(e.get("ts", 0) or 0)))
+        ts = time.strftime("%d.%m %H:%M", time.localtime(_safe_float(e.get("ts", 0) or 0)))
         q = html.escape(str(e.get("text", ""))[:300])
         score = e.get("score")
         score_value = _safe_float(score, default=float("nan"))
@@ -1268,7 +1268,7 @@ def _admin_activity_panels(bot_data: dict[str, Any]) -> str:
     if recent:
         recent_rows = "".join(
             "<tr>"
-            f'<td class=muted style="white-space:nowrap">{html.escape(time.strftime("%d.%m %H:%M", time.localtime(float(e.get("ts", 0)))))}</td>'
+            f'<td class=muted style="white-space:nowrap">{html.escape(time.strftime("%d.%m %H:%M", time.localtime(_safe_float(e.get("ts", 0)))))}</td>'
             f'<td>{html.escape(str(e.get("admin_label") or e.get("admin_id") or "?"))}</td>'
             f"<td>{_action_pill_html(str(e.get('action') or ''))}</td>"
             f'<td class=muted>{html.escape(str(e.get("target_label") or e.get("target_id") or "—"))}</td>'

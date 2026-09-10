@@ -12,7 +12,9 @@ from app.web_panel import (
     _CSS,
     _PanelState,
     _admin_activity_panels,
+    _bad_answers_section,
     _bot_stats_section,
+    _missed_questions_section,
     _sort_missed_entries,
     _safe_float,
     _safe_int,
@@ -98,6 +100,20 @@ def test_missed_entry_numeric_helpers_tolerate_corrupted_values():
     assert _safe_float(float("inf"), default=7.0) == 7.0
     assert _safe_int({"bad": True}, default=3) == 3
     assert _safe_int("4") == 4
+
+
+def test_panel_sections_tolerate_corrupted_timestamps(monkeypatch):
+    monkeypatch.setattr(
+        "app.web_panel.load_bad_answers",
+        lambda: [{"ts": {"broken": True}, "question": "q", "answer": "a"}],
+    )
+    monkeypatch.setattr(
+        "app.web_panel.load_missed_questions",
+        lambda: [{"ts": ["broken"], "text": "q"}],
+    )
+
+    assert "q" in _bad_answers_section(None, "csrf")
+    assert "q" in _missed_questions_section("csrf")
 
 
 def test_login_fail_cache_is_bounded_and_prunes_expired_ips(monkeypatch):
