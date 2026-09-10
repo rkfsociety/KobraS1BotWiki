@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -177,6 +178,15 @@ class WikiReindexer:
 def _atomic_write_text(path: Path, content: str) -> None:
     """Заменяет state/cache целиком, не оставляя частичный файл при сбое."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(content, encoding="utf-8")
-    temporary.replace(path)
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
+        ) as temporary:
+            temporary_name = temporary.name
+            temporary.write(content)
+            temporary.flush()
+        Path(temporary_name).replace(path)
+    finally:
+        if temporary_name is not None:
+            Path(temporary_name).unlink(missing_ok=True)

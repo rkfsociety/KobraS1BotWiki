@@ -3,6 +3,7 @@ from __future__ import annotations
 
 
 import json
+import tempfile
 
 import re
 import xml.etree.ElementTree as ET
@@ -994,9 +995,18 @@ def _save_cache(path: Path, docs: list[WebWikiDoc]) -> None:
 def _atomic_write_text(path: Path, content: str) -> None:
     """Заменяет файл целиком, не оставляя частично записанный JSON при сбое."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(content, encoding="utf-8")
-    temporary.replace(path)
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
+        ) as temporary:
+            temporary_name = temporary.name
+            temporary.write(content)
+            temporary.flush()
+        Path(temporary_name).replace(path)
+    finally:
+        if temporary_name is not None:
+            Path(temporary_name).unlink(missing_ok=True)
 
 
 
