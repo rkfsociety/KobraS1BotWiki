@@ -47,3 +47,19 @@ def test_runtime_context_methods_skip_malformed_timestamps():
 
     assert enrich_query(bot_data, user_id=10, chat_id=20, query="это") == "это"
     assert get_user_topic_hint(bot_data, user_id=10, chat_id=20) == "ответ / новый / вопрос"
+
+
+def test_runtime_context_recovers_from_corrupted_store_containers():
+    bot_data = {
+        "_user_ctx_loaded": True,
+        "user_ctx_msgs": "broken",
+        "user_ctx_answers": [],
+        "chat_ctx_msgs": None,
+    }
+
+    record_user_message(bot_data, user_id=10, chat_id=20, text="новый вопрос")
+    record_bot_answer(bot_data, user_id=10, chat_id=20, answer_text="ответ", url="")
+
+    assert bot_data["user_ctx_msgs"]["20:10"][-1]["text"] == "новый вопрос"
+    assert bot_data["user_ctx_answers"]["20:10"][-1]["text"] == "ответ"
+    assert bot_data["chat_ctx_msgs"]["20"][-1]["user_id"] == 10

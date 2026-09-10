@@ -15,6 +15,7 @@ Persist: .cache/user_ctx.json, атомарная запись, не чаще р
 from __future__ import annotations
 
 import json
+import math
 import re
 import threading
 import time
@@ -72,9 +73,25 @@ def _fresh_context_items(items: list[object], *, now: float, ttl: float) -> list
 def _is_fresh_context_item(item: dict[str, Any], *, now: float, ttl: float) -> bool:
     try:
         timestamp = float(item.get("ts", 0))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return False
-    return now - timestamp < ttl
+    return math.isfinite(timestamp) and now - timestamp < ttl
+
+
+def _dict_store(bot_data: dict[str, Any], key: str) -> dict[str, Any]:
+    store = bot_data.get(key)
+    if not isinstance(store, dict):
+        store = {}
+        bot_data[key] = store
+    return store
+
+
+def _list_buffer(store: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    buffer = store.get(key)
+    if not isinstance(buffer, list):
+        buffer = []
+        store[key] = buffer
+    return buffer
 
 
 # ── пути и диск ───────────────────────────────────────────────────────────────
@@ -108,16 +125,13 @@ def _load_from_disk(bot_data: dict[str, Any]) -> None:
             src = raw.get(src_key, {})
             if not isinstance(src, dict):
                 continue
-            dst: dict[str, list] = bot_data.setdefault(dst_key, {})
+            dst = _dict_store(bot_data, dst_key)
             for k, v in src.items():
                 if not isinstance(v, list):
                     continue
                 fresh = _fresh_context_items(v, now=now, ttl=ttl)
                 if fresh:
-                    buf = dst.setdefault(k, [])
-                    if not isinstance(buf, list):
-                        buf = []
-                        dst[k] = buf
+                    buf = _list_buffer(dst, k)
                     buf[:] = [m for m in buf if isinstance(m, dict)]
                     existing_ts = {m.get("ts") for m in buf}
                     for m in fresh:
@@ -180,16 +194,16 @@ def record_user_message(
     ukey = _ukey(user_id, chat_id)
 
     # Пользовательская история
-    msgs: dict[str, list] = bot_data.setdefault("user_ctx_msgs", {})
-    buf = msgs.setdefault(ukey, [])
+    msgs = _dict_store(bot_data, "user_ctx_msgs")
+    buf = _list_buffer(msgs, ukey)
     buf.append({"text": text[:500], "ts": now})
     buf[:] = _fresh_context_items(buf, now=now, ttl=_USER_TTL)
     if len(buf) > _USER_MSG_MAX:
         del buf[:-_USER_MSG_MAX]
 
     # История чата (все пользователи)
-    chat_msgs: dict[str, list] = bot_data.setdefault("chat_ctx_msgs", {})
-    cbuf = chat_msgs.setdefault(str(chat_id), [])
+    chat_msgs = _dict_store(bot_data, "chat_ctx_msgs")
+    cbuf = _list_buffer(chat_msgs, str(chat_id))
     cbuf.append({"user_id": user_id, "text": text[:300], "ts": now})
     cbuf[:] = _fresh_context_items(cbuf, now=now, ttl=_CHAT_TTL)
     if len(cbuf) > _CHAT_MSG_MAX:
@@ -210,8 +224,8 @@ def record_bot_answer(
     _ensure_loaded(bot_data)
     now = time.time()
     ukey = _ukey(user_id, chat_id)
-    ans: dict[str, list] = bot_data.setdefault("user_ctx_answers", {})
-    buf = ans.setdefault(ukey, [])
+    ans = _dict_store(bot_data, "user_ctx_answers")
+    buf = _list_buffer(ans, ukey)
     buf.append({"text": answer_text[:300], "url": url, "ts": now})
     buf[:] = _fresh_context_items(buf, now=now, ttl=_USER_TTL)
     if len(buf) > _BOT_ANS_MAX:
