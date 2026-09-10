@@ -33,6 +33,21 @@ def test_reply_access_cache_is_bounded(monkeypatch):
     assert _cache_get(context, 3, None) is False
 
 
+def test_reply_access_cache_recovers_from_corrupted_entries(monkeypatch):
+    context = SimpleNamespace(
+        application=SimpleNamespace(
+            bot_data={"reply_access_cache": {"broken": "value", (1, None): (True, float("nan"))}}
+        )
+    )
+    monkeypatch.setattr("app.bot.reply_access.time.monotonic", lambda: 100.0)
+
+    assert _cache_get(context, 1, None) is None
+    _cache_put(context, 2, None, True, "broken")
+
+    assert _cache_get(context, 2, None) is None
+    assert isinstance(context.application.bot_data["reply_access_cache"], dict)
+
+
 def test_no_lists_allows_everywhere():
     assert chat_topic_in_allowed_lists(
         allowed_chat_ids=None,

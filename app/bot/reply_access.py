@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from typing import TYPE_CHECKING
 
@@ -102,16 +103,22 @@ async def _closed_forum_topic_blocks_bot(
 
 def _cache_get(context: ContextTypes.DEFAULT_TYPE, chat_id: int, topic_id: int | None) -> bool | None:
     store = context.application.bot_data.get(_CACHE_KEY)
-    if not store:
+    if not isinstance(store, dict) or not store:
         return None
     entry = store.get((chat_id, topic_id))
-    if not entry:
-        return None
-    ok, expires = entry
-    if time.monotonic() >= expires:
+    if not isinstance(entry, (tuple, list)) or len(entry) != 2:
         store.pop((chat_id, topic_id), None)
         return None
-    return ok
+    ok, expires = entry
+    try:
+        expires_at = float(expires)
+    except (TypeError, ValueError, OverflowError):
+        store.pop((chat_id, topic_id), None)
+        return None
+    if not math.isfinite(expires_at) or time.monotonic() >= expires_at:
+        store.pop((chat_id, topic_id), None)
+        return None
+    return bool(ok)
 
 
 def _cache_put(
@@ -122,19 +129,54 @@ def _cache_put(
     ttl: float,
 ) -> None:
     store = context.application.bot_data.setdefault(_CACHE_KEY, {})
+    if not isinstance(store, dict):
+        store = {}
+        context.application.bot_data[_CACHE_KEY] = store
     key = (chat_id, topic_id)
     now = time.monotonic()
+    try:
+        ttl_value = float(ttl)
+    except (TypeError, ValueError, OverflowError):
+        ttl_value = 0.0
+    if not math.isfinite(ttl_value):
+        ttl_value = 0.0
     if key not in store and len(store) >= _CACHE_MAX_ENTRIES:
         # Сначала освобождаем записи, которые истекли без повторного чтения.
-        expired = [cache_key for cache_key, (_, expires) in store.items() if expires <= now]
+        expired = []
+        for cache_key, entry in list(store.items()):
+            if not isinstance(entry, (tuple, list)) or len(entry) != 2:
+                expired.append(cache_key)
+                continue
+            try:
+                expires_at = float(entry[1])
+            except (TypeError, ValueError, OverflowError):
+                expired.append(cache_key)
+                continue
+            if not math.isfinite(expires_at) or expires_at <= now:
+                expired.append(cache_key)
         for cache_key in expired:
             store.pop(cache_key, None)
         # При всплеске новых чатов ограничиваем память, удаляя ближайшую к
         # истечению запись (она наименее полезна для будущего чтения).
         if len(store) >= _CACHE_MAX_ENTRIES:
-            oldest_key = min(store, key=lambda cache_key: store[cache_key][1])
-            store.pop(oldest_key, None)
-    store[key] = (ok, now + ttl)
+            valid_entries = {
+                cache_key: float(entry[1])
+                for cache_key, entry in store.items()
+                if isinstance(entry, (tuple, list))
+                and len(entry) == 2
+                and _finite_number(entry[1])
+            }
+            if valid_entries:
+                oldest_key = min(valid_entries, key=valid_entries.get)
+                store.pop(oldest_key, None)
+    store[key] = (bool(ok), now + max(0.0, ttl_value))
+
+
+def _finite_number(value: object) -> bool:
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return False
 
 
 def invalidate_reply_access_cache(
