@@ -49,4 +49,16 @@ if [[ "$service_user" != "$EXPECTED_USER" ]]; then
 fi
 
 main_pid="$(systemctl show -p MainPID --value "$SERVICE")"
+if [[ ! "$main_pid" =~ ^[1-9][0-9]*$ ]]; then
+    echo "[ERROR] $SERVICE active, но MainPID некорректен: $main_pid" >&2
+    systemctl status "$SERVICE" --no-pager || true
+    exit 1
+fi
+exec_status="$(systemctl show -p ExecMainStatus --value "$SERVICE")"
+if [[ "$exec_status" != "0" ]]; then
+    echo "[ERROR] $SERVICE active, но ExecMainStatus=$exec_status" >&2
+    systemctl status "$SERVICE" --no-pager || true
+    journalctl -u "$SERVICE" -n 40 --no-pager || true
+    exit 1
+fi
 echo "[OK] $SERVICE active (MainPID=$main_pid)"
