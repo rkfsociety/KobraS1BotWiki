@@ -268,26 +268,43 @@ def get_top_wiki_pages(bot_data: dict[str, Any], limit: int = 10) -> list[tuple[
     """Топ вики-страниц по количеству ответов ботом."""
     if limit <= 0:
         return []
-    stats = bot_data.get(_STATS_KEY) or {}
-    pages = stats.get("wiki_pages") or {}
-    return nlargest(limit, pages.items(), key=lambda x: x[1])
+    stats = _stats_from_bot_data(bot_data)
+    return nlargest(limit, _counter_items(stats.get("wiki_pages")), key=lambda x: x[1])
 
 
 def get_top_questions(bot_data: dict[str, Any], limit: int = 10) -> list[tuple[str, int]]:
     """Топ вопросов пользователей по частоте."""
     if limit <= 0:
         return []
-    stats = bot_data.get(_STATS_KEY) or {}
-    questions = stats.get("questions") or {}
-    return nlargest(limit, questions.items(), key=lambda x: x[1])
+    stats = _stats_from_bot_data(bot_data)
+    return nlargest(limit, _counter_items(stats.get("questions")), key=lambda x: x[1])
+
+
+def _stats_from_bot_data(bot_data: dict[str, Any]) -> dict[str, Any]:
+    """Возвращает статистику только если runtime-структура действительно dict."""
+    if not isinstance(bot_data, dict):
+        return {}
+    stats = bot_data.get(_STATS_KEY)
+    return stats if isinstance(stats, dict) else {}
+
+
+def _counter_items(value: Any) -> list[tuple[str, int]]:
+    """Нормализует счётчик перед сортировкой и отбрасывает мусорные ключи."""
+    if not isinstance(value, dict):
+        return []
+    return [
+        (key, max(0, _safe_int(count)))
+        for key, count in value.items()
+        if isinstance(key, str)
+    ]
 
 
 def get_hourly_activity(bot_data: dict[str, Any]) -> list[int]:
     """Счётчики входящих сообщений по часам суток (24 элемента, индекс = час)."""
-    stats = bot_data.get(_STATS_KEY) or {}
+    stats = _stats_from_bot_data(bot_data)
     hourly = stats.get("hourly_activity")
     if isinstance(hourly, list) and len(hourly) == 24:
-        return list(hourly)
+        return [max(0, _safe_int(value)) for value in hourly]
     return [0] * 24
 
 
@@ -295,7 +312,7 @@ def get_top_users(bot_data: dict[str, Any], limit: int = 10) -> list[dict[str, A
     """Топ участников по числу входящих сообщений в разрешённых чатах."""
     if limit <= 0:
         return []
-    stats = bot_data.get(_STATS_KEY) or {}
+    stats = _stats_from_bot_data(bot_data)
     users = stats.get("user_messages") or {}
     rows: list[dict[str, Any]] = []
     if not isinstance(users, dict):
@@ -303,7 +320,7 @@ def get_top_users(bot_data: dict[str, Any], limit: int = 10) -> list[dict[str, A
     for entry in users.values():
         if not isinstance(entry, dict):
             continue
-        count = int(entry.get("count", 0))
+        count = max(0, _safe_int(entry.get("count", 0)))
         if count <= 0:
             continue
         rows.append(
@@ -318,11 +335,11 @@ def get_top_users(bot_data: dict[str, Any], limit: int = 10) -> list[dict[str, A
 
 def get_stats_metrics(bot_data: dict[str, Any]) -> dict[str, Any]:
     """Возвращает метрики качества: уникальные вопросы/пользователи, коэффициент ответов."""
-    stats = bot_data.get(_STATS_KEY) or {}
-    total_answers = int(stats.get("total_answers", 0))
-    total_incoming = int(stats.get("total_incoming", 0))
-    unique_questions = len(stats.get("questions") or {})
-    unique_users = len(stats.get("user_messages") or {})
+    stats = _stats_from_bot_data(bot_data)
+    total_answers = max(0, _safe_int(stats.get("total_answers", 0)))
+    total_incoming = max(0, _safe_int(stats.get("total_incoming", 0)))
+    unique_questions = len(stats.get("questions")) if isinstance(stats.get("questions"), dict) else 0
+    unique_users = len(stats.get("user_messages")) if isinstance(stats.get("user_messages"), dict) else 0
 
     answer_rate = 0
     if total_incoming > 0:
@@ -338,6 +355,8 @@ def get_stats_metrics(bot_data: dict[str, Any]) -> dict[str, Any]:
 
 def get_peak_hours(bot_data: dict[str, Any], limit: int = 3) -> list[dict[str, Any]]:
     """Возвращает топ часов по активности."""
+    if limit <= 0:
+        return []
     hourly = get_hourly_activity(bot_data)
     if not hourly:
         return []
@@ -352,10 +371,12 @@ def get_peak_hours(bot_data: dict[str, Any], limit: int = 3) -> list[dict[str, A
 
 def get_daily_distribution(bot_data: dict[str, Any]) -> dict[str, int]:
     """Возвращает распределение активности по дням недели (если данные собираются)."""
-    stats = bot_data.get(_STATS_KEY) or {}
-    daily = stats.get("daily_activity") or {}
+    stats = _stats_from_bot_data(bot_data)
+    daily = stats.get("daily_activity")
+    if not isinstance(daily, dict):
+        daily = {}
     days = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
     return {
-        days[i] if i < len(days) else f"день_{i}": int(daily.get(str(i), 0))
+        days[i] if i < len(days) else f"день_{i}": max(0, _safe_int(daily.get(str(i), 0)))
         for i in range(7)
     }
