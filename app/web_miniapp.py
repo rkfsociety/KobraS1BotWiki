@@ -430,6 +430,10 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _as_mapping(value: object) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, Any]]:
     """Проверяет Telegram initData и создаёт короткую сессию участника группы."""
     try:
@@ -530,12 +534,13 @@ def dashboard_payload(state: Any, authorization: str) -> tuple[int, dict[str, An
         return error
     bot_data = state.application.bot_data if state.application else {}
     wiki = bot_data.get("wiki_index")
+    stats = _as_mapping(bot_data.get("bot_stats"))
     return 200, {
         "role": session["role"],
         "user": session["user"],
         "stats": {
             "wiki_pages": _safe_int(getattr(wiki, "doc_count", 0) if wiki is not None else 0),
-            "total_answers": _safe_int((bot_data.get("bot_stats") or {}).get("total_answers", 0)),
+            "total_answers": _safe_int(stats.get("total_answers", 0)),
             "manual_answers": len(bot_data.get("manual_qa_entries") or []),
             "missed_questions": len(load_missed_questions()),
             "fixes": len(bot_data.get("fix_store") or {}),
@@ -849,7 +854,7 @@ def stats_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
     from app.bot.missed_questions import load_missed_questions
 
     bot_data = state.application.bot_data if state.application else {}
-    stats = bot_data.get("bot_stats") or {}
+    stats = _as_mapping(bot_data.get("bot_stats"))
 
     top_wiki_pages = get_top_wiki_pages(bot_data, limit=8)
     top_questions = get_top_questions(bot_data, limit=8)

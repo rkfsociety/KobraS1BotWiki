@@ -23,6 +23,7 @@ from app.web_miniapp import (
     dashboard_payload,
     export_answers_to_json,
     render_miniapp,
+    stats_payload,
 )
 from app.web_panel import start_web_panel
 
@@ -223,6 +224,22 @@ def test_dashboard_tolerates_corrupted_numeric_stats(monkeypatch):
 
     assert status == 200
     assert payload["stats"]["total_answers"] == 0
+
+
+def test_miniapp_stats_tolerates_corrupted_stats_container(monkeypatch):
+    state = types.SimpleNamespace(
+        application=types.SimpleNamespace(bot_data={"bot_stats": "broken"})
+    )
+    monkeypatch.setattr(
+        "app.web_miniapp._require_admin_session",
+        lambda state, authorization: ({"role": "admin"}, None),
+    )
+    monkeypatch.setattr("app.web_miniapp.load_missed_questions", lambda: [])
+
+    status, payload = stats_payload(state, "Bearer test")
+
+    assert status == 200
+    assert payload["metrics"]["total_answers"] == 0
 
 
 def test_admin_can_clear_processed_miniapp_answers(mini_panel):
