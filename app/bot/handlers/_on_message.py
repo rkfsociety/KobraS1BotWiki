@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 import time
 import traceback
-from collections import deque
 
 from telegram import Update
 from telegram.constants import ParseMode
@@ -52,7 +51,15 @@ from app.web_wiki_index import WebWikiIndex
 
 from app.bot.bot_stats import record_answer as _record_stat
 from app.bot.bot_stats import record_incoming_activity as _record_incoming
-from ._utils import _is_triggered_message, _safe_runtime_timestamp, _trigger_source, _try_reply_manual_qa
+from ._utils import (
+    _is_triggered_message,
+    _rate_limit_dict,
+    _rate_limit_queue,
+    _rate_limit_url_dict,
+    _safe_runtime_timestamp,
+    _trigger_source,
+    _try_reply_manual_qa,
+)
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -152,14 +159,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     settings = context.application.bot_data["settings"]
     index: WebWikiIndex = context.application.bot_data["wiki_index"]
-    rl = context.application.bot_data.setdefault(
-        "rate_limit",
-        {
-            "last_reply_ts_by_chat": {},
-            "reply_ts_by_chat": {},
-            "last_url_ts_by_chat": {},
-        },
-    )
+    rl = context.application.bot_data.get("rate_limit")
+    if not isinstance(rl, dict):
+        rl = {}
+        context.application.bot_data["rate_limit"] = rl
 
     chat_id = update.effective_chat.id
     msg = update.effective_message
@@ -496,13 +499,15 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     now = time.time()
     spam_exempt = await user_exempt_from_wiki_reply_spam_limits(update, context)
 
-    last_reply_ts = _safe_runtime_timestamp(rl["last_reply_ts_by_chat"].get(chat_id, 0.0))
+    last_reply_ts = _safe_runtime_timestamp(
+        _rate_limit_dict(rl, "last_reply_ts_by_chat").get(chat_id, 0.0)
+    )
     if not spam_exempt and now - last_reply_ts < settings.cooldown_seconds:
         if settings.log_decisions:
             logging.info("skip chat=%s reason=cooldown", chat_id)
         return
 
-    q: deque[float] = rl["reply_ts_by_chat"].setdefault(chat_id, deque())
+    q = _rate_limit_queue(rl, chat_id)
     cutoff = now - 60.0
     while q and q[0] < cutoff:
         q.popleft()
@@ -512,7 +517,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             logging.info("skip chat=%s reason=rate_limit", chat_id)
         return
 
-    last_url = rl["last_url_ts_by_chat"].setdefault(chat_id, {})
+    last_url = _rate_limit_url_dict(rl, chat_id)
     last_url_ts = _safe_runtime_timestamp(last_url.get(url, 0.0))
     if not spam_exempt and now - last_url_ts < settings.duplicate_window_seconds:
         if settings.log_decisions:
@@ -572,6 +577,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
 
     # фиксируем отправку после успешного ответа
-    rl["last_reply_ts_by_chat"][chat_id] = now
+    _rate_limit_dict(rl, "last_reply_ts_by_chat")[chat_id] = now
     q.append(now)
     last_url[url] = now

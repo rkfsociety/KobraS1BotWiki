@@ -32,6 +32,28 @@ def _safe_runtime_timestamp(value: object, default: float = 0.0) -> float:
     return timestamp if math.isfinite(timestamp) else default
 
 
+def _rate_limit_dict(rl: dict, key: str) -> dict:
+    value = rl.get(key)
+    if not isinstance(value, dict):
+        value = {}
+        rl[key] = value
+    return value
+
+
+def _rate_limit_queue(rl: dict, chat_id: int) -> deque[float]:
+    queues = _rate_limit_dict(rl, "reply_ts_by_chat")
+    value = queues.get(chat_id)
+    if not isinstance(value, deque):
+        value = deque()
+        queues[chat_id] = value
+    return value
+
+
+def _rate_limit_url_dict(rl: dict, chat_id: int) -> dict:
+    urls = _rate_limit_dict(rl, "last_url_ts_by_chat")
+    return _rate_limit_dict(urls, chat_id)
+
+
 async def _deny_unless_admin_command_access(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -134,14 +156,16 @@ async def _try_reply_manual_qa(
     syn_url = f"manual:{hashlib.md5(ans.encode('utf-8', errors='ignore')).hexdigest()}"
 
     if apply_rate_limit:
-        last_reply_ts = _safe_runtime_timestamp(rl["last_reply_ts_by_chat"].get(chat_id, 0.0))
+        last_reply_ts = _safe_runtime_timestamp(
+            _rate_limit_dict(rl, "last_reply_ts_by_chat").get(chat_id, 0.0)
+        )
 
         if not spam_exempt and now - last_reply_ts < settings.cooldown_seconds:
             if settings.log_decisions:
                 log_skip(chat_id, "cooldown", msg=msg)
             return True
 
-        q: deque[float] = rl["reply_ts_by_chat"].setdefault(chat_id, deque())
+        q = _rate_limit_queue(rl, chat_id)
         cutoff = now - 60.0
 
         while q and q[0] < cutoff:
@@ -152,7 +176,7 @@ async def _try_reply_manual_qa(
                 log_skip(chat_id, "rate_limit", msg=msg)
             return True
 
-        last_url = rl["last_url_ts_by_chat"].setdefault(chat_id, {})
+        last_url = _rate_limit_url_dict(rl, chat_id)
         last_url_ts = _safe_runtime_timestamp(last_url.get(syn_url, 0.0))
 
         if not spam_exempt and now - last_url_ts < settings.duplicate_window_seconds:
@@ -200,9 +224,9 @@ async def _try_reply_manual_qa(
         )
 
     if apply_rate_limit:
-        q = rl["reply_ts_by_chat"].setdefault(chat_id, deque())
-        last_url = rl["last_url_ts_by_chat"].setdefault(chat_id, {})
-        rl["last_reply_ts_by_chat"][chat_id] = now
+        q = _rate_limit_queue(rl, chat_id)
+        last_url = _rate_limit_url_dict(rl, chat_id)
+        _rate_limit_dict(rl, "last_reply_ts_by_chat")[chat_id] = now
         q.append(now)
         last_url[syn_url] = now
 
