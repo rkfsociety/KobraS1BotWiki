@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
+from pathlib import Path
 
 from telegram.ext import ContextTypes
 
@@ -13,6 +15,18 @@ from app.bot.constants import (
     FEEDBACK_STORE,
     FIX_STORE,
 )
+
+_STORE_SAVE_LOCK = threading.Lock()
+
+
+def _save_json_atomic(path: Path, data: object, *, indent: int | None = None) -> None:
+    """Атомарно сохраняет JSON, не оставляя рабочий файл частично записанным."""
+    payload = json.dumps(data, ensure_ascii=False, indent=indent)
+    with _STORE_SAVE_LOCK:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(f".{path.name}.tmp")
+        temporary.write_text(payload, encoding="utf-8")
+        temporary.replace(path)
 
 def _clarify_key(chat_id: int, user_id: int) -> str:
     return f"{chat_id}:{user_id}"
@@ -29,8 +43,7 @@ def _load_clarify_store() -> dict[str, dict]:
 
 
 def _save_clarify_store(data: dict[str, dict]) -> None:
-    CLARIFY_STORE.parent.mkdir(parents=True, exist_ok=True)
-    CLARIFY_STORE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    _save_json_atomic(CLARIFY_STORE, data)
 
 def _norm_text(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").lower()).strip()
@@ -46,8 +59,7 @@ def _load_answer_ctx_store() -> dict[str, dict]:
 
 
 def _save_answer_ctx_store(data: dict[str, dict]) -> None:
-    ANSWER_CTX_STORE.parent.mkdir(parents=True, exist_ok=True)
-    ANSWER_CTX_STORE.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    _save_json_atomic(ANSWER_CTX_STORE, data)
 
 
 def _answer_ctx_key(chat_id: int, bot_message_id: int) -> str:
@@ -105,8 +117,7 @@ def _load_feedback_store() -> dict[str, list[str]]:
 
 
 def _save_feedback_store(data: dict[str, list[str]]) -> None:
-    FEEDBACK_STORE.parent.mkdir(parents=True, exist_ok=True)
-    FEEDBACK_STORE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    _save_json_atomic(FEEDBACK_STORE, data, indent=2)
 
 
 def _remember_bad_answer(*, context: ContextTypes.DEFAULT_TYPE, query: str, bad_url: str | None) -> None:
@@ -157,8 +168,7 @@ def _load_fix_store() -> dict[str, str]:
 
 
 def _save_fix_store(data: dict[str, str]) -> None:
-    FIX_STORE.parent.mkdir(parents=True, exist_ok=True)
-    FIX_STORE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    _save_json_atomic(FIX_STORE, data, indent=2)
 
 
 def _remember_good_fix(*, context: ContextTypes.DEFAULT_TYPE, query: str, good_url: str) -> None:
@@ -181,4 +191,3 @@ def _preferred_fix_url(*, context: ContextTypes.DEFAULT_TYPE, query: str) -> str
     if not isinstance(fixes, dict):
         return None
     return fixes.get(_norm_text(query))
-
