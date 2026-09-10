@@ -4,6 +4,7 @@ from __future__ import annotations
 from app.bot.admin_activity import (
     flush_admin_activity,
     get_admin_activity_summary,
+    get_admin_activity_totals,
     get_recent_admin_actions,
     load_admin_activity,
     record_admin_action,
@@ -54,6 +55,24 @@ def test_load_admin_activity_from_disk(tmp_path, monkeypatch):
     load_admin_activity(bd)
     summary = get_admin_activity_summary(bd)
     assert summary[0]["counts"]["ban"] == 3
+
+
+def test_load_keeps_valid_activity_when_values_are_corrupted(tmp_path, monkeypatch):
+    import app.bot.admin_activity as aa
+
+    p = tmp_path / "admin_activity.json"
+    p.write_text(
+        '{"admins":{"1":{"user_id":1,"label":"@mod","counts":{"ban":3,"kick":"broken"}}},'
+        '"totals":{"ban":3,"kick":"broken"},"recent":[],"last_updated":"broken"}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(aa, "_activity_path", lambda: p)
+    bd: dict = {}
+
+    load_admin_activity(bd)
+
+    assert get_admin_activity_totals(bd) == {"ban": 3, "kick": 0}
+    assert get_admin_activity_summary(bd)[0]["counts"] == {"ban": 3, "kick": 0}
 
 
 def test_admin_activity_persistence_is_throttled_and_flushable(tmp_path, monkeypatch):

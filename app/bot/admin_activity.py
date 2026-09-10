@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import threading
 import time
 from typing import Any
@@ -51,6 +52,21 @@ def _empty_activity() -> dict[str, Any]:
     }
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        result = float(value)
+        return result if math.isfinite(result) else default
+    except (TypeError, ValueError):
+        return default
+
+
 def load_admin_activity(bot_data: dict[str, Any]) -> None:
     """Загружает статистику модерации с диска при старте бота."""
     try:
@@ -64,16 +80,23 @@ def load_admin_activity(bot_data: dict[str, Any]) -> None:
         activity = _empty_activity()
         admins = raw.get("admins")
         if isinstance(admins, dict):
-            activity["admins"] = {
-                str(k): v for k, v in admins.items() if isinstance(k, (str, int)) and isinstance(v, dict)
-            }
+            loaded_admins: dict[str, dict[str, Any]] = {}
+            for key, value in admins.items():
+                if not isinstance(key, (str, int)) or not isinstance(value, dict):
+                    continue
+                entry = dict(value)
+                counts = value.get("counts")
+                if isinstance(counts, dict):
+                    entry["counts"] = {str(action): max(0, _safe_int(count)) for action, count in counts.items()}
+                loaded_admins[str(key)] = entry
+            activity["admins"] = loaded_admins
         totals = raw.get("totals")
         if isinstance(totals, dict):
-            activity["totals"] = {str(k): int(v) for k, v in totals.items() if isinstance(k, str)}
+            activity["totals"] = {str(k): max(0, _safe_int(v)) for k, v in totals.items() if isinstance(k, str)}
         recent = raw.get("recent")
         if isinstance(recent, list):
             activity["recent"] = [x for x in recent if isinstance(x, dict)][-_MAX_RECENT:]
-        activity["last_updated"] = float(raw.get("last_updated", 0.0))
+        activity["last_updated"] = _safe_float(raw.get("last_updated", 0.0))
         bot_data[_ACTIVITY_KEY] = activity
         log.info("admin_activity: загружено админов=%d событий=%d", len(activity["admins"]), len(activity["recent"]))
     except Exception as exc:
