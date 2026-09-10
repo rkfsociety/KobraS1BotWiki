@@ -52,7 +52,7 @@ from app.web_wiki_index import WebWikiIndex
 
 from app.bot.bot_stats import record_answer as _record_stat
 from app.bot.bot_stats import record_incoming_activity as _record_incoming
-from ._utils import _is_triggered_message, _trigger_source, _try_reply_manual_qa
+from ._utils import _is_triggered_message, _safe_runtime_timestamp, _trigger_source, _try_reply_manual_qa
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -496,7 +496,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     now = time.time()
     spam_exempt = await user_exempt_from_wiki_reply_spam_limits(update, context)
 
-    last_reply_ts = rl["last_reply_ts_by_chat"].get(chat_id, 0.0)
+    last_reply_ts = _safe_runtime_timestamp(rl["last_reply_ts_by_chat"].get(chat_id, 0.0))
     if not spam_exempt and now - last_reply_ts < settings.cooldown_seconds:
         if settings.log_decisions:
             logging.info("skip chat=%s reason=cooldown", chat_id)
@@ -513,7 +513,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
 
     last_url = rl["last_url_ts_by_chat"].setdefault(chat_id, {})
-    last_url_ts = float(last_url.get(url, 0.0))
+    last_url_ts = _safe_runtime_timestamp(last_url.get(url, 0.0))
     if not spam_exempt and now - last_url_ts < settings.duplicate_window_seconds:
         if settings.log_decisions:
             log_skip(chat_id, "duplicate", msg=msg, url=url)

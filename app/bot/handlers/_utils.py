@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import html
+import math
 import time
 from collections import deque
 
@@ -21,6 +22,14 @@ from app.bot.reply_logging import add_to_recent_replies
 from app.bot.review_mention import reply_for_user
 from app.bot.stores import _record_bot_answer_context
 from app.bot.user_context import record_bot_answer as _record_bot_ans
+
+
+def _safe_runtime_timestamp(value: object, default: float = 0.0) -> float:
+    try:
+        timestamp = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return timestamp if math.isfinite(timestamp) else default
 
 
 async def _deny_unless_admin_command_access(
@@ -125,7 +134,7 @@ async def _try_reply_manual_qa(
     syn_url = f"manual:{hashlib.md5(ans.encode('utf-8', errors='ignore')).hexdigest()}"
 
     if apply_rate_limit:
-        last_reply_ts = rl["last_reply_ts_by_chat"].get(chat_id, 0.0)
+        last_reply_ts = _safe_runtime_timestamp(rl["last_reply_ts_by_chat"].get(chat_id, 0.0))
 
         if not spam_exempt and now - last_reply_ts < settings.cooldown_seconds:
             if settings.log_decisions:
@@ -144,7 +153,7 @@ async def _try_reply_manual_qa(
             return True
 
         last_url = rl["last_url_ts_by_chat"].setdefault(chat_id, {})
-        last_url_ts = float(last_url.get(syn_url, 0.0))
+        last_url_ts = _safe_runtime_timestamp(last_url.get(syn_url, 0.0))
 
         if not spam_exempt and now - last_url_ts < settings.duplicate_window_seconds:
             if settings.log_decisions:
