@@ -75,6 +75,25 @@ def test_load_keeps_valid_activity_when_values_are_corrupted(tmp_path, monkeypat
     assert get_admin_activity_summary(bd)[0]["counts"] == {"ban": 3, "kick": 0}
 
 
+def test_readers_tolerate_corrupted_runtime_activity():
+    bd = {
+        "admin_activity": {
+            "admins": {
+                "1": {"user_id": 1, "label": "@mod", "counts": {"ban": "2", "kick": object()}},
+                "bad": "broken",
+            },
+            "totals": {"ban": "3", "kick": object()},
+            "recent": ["broken", {"action": "ban"}],
+        }
+    }
+
+    assert get_admin_activity_summary(bd)[0]["counts"] == {"ban": 2, "kick": 0}
+    assert get_admin_activity_totals(bd) == {"ban": 3, "kick": 0}
+    assert get_recent_admin_actions(bd) == [{"action": "ban"}]
+    assert get_admin_activity_summary(bd, limit=0) == []
+    assert get_recent_admin_actions(bd, limit=0) == []
+
+
 def test_admin_activity_persistence_is_throttled_and_flushable(tmp_path, monkeypatch):
     import app.bot.admin_activity as aa
 

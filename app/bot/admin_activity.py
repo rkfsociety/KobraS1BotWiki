@@ -67,6 +67,14 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _activity_from_bot_data(bot_data: dict[str, Any]) -> dict[str, Any]:
+    """Возвращает activity только если runtime-структура действительно dict."""
+    if not isinstance(bot_data, dict):
+        return {}
+    activity = bot_data.get(_ACTIVITY_KEY)
+    return activity if isinstance(activity, dict) else {}
+
+
 def load_admin_activity(bot_data: dict[str, Any]) -> None:
     """Загружает статистику модерации с диска при старте бота."""
     try:
@@ -207,8 +215,12 @@ def record_admin_action(
 
 def get_admin_activity_summary(bot_data: dict[str, Any], *, limit: int = 15) -> list[dict[str, Any]]:
     """Список админов, отсортированный по сумме всех действий."""
-    activity = bot_data.get(_ACTIVITY_KEY) or {}
-    admins = activity.get("admins") or {}
+    if limit <= 0:
+        return []
+    activity = _activity_from_bot_data(bot_data)
+    admins = activity.get("admins")
+    if not isinstance(admins, dict):
+        return []
     rows: list[dict[str, Any]] = []
     for entry in admins.values():
         if not isinstance(entry, dict):
@@ -216,14 +228,18 @@ def get_admin_activity_summary(bot_data: dict[str, Any], *, limit: int = 15) -> 
         counts = entry.get("counts") or {}
         if not isinstance(counts, dict):
             counts = {}
-        total = sum(int(v) for v in counts.values())
+        normalized_counts = {
+            str(action): max(0, _safe_int(value))
+            for action, value in counts.items()
+        }
+        total = sum(normalized_counts.values())
         if total <= 0:
             continue
         rows.append(
             {
                 "user_id": entry.get("user_id"),
                 "label": entry.get("label") or str(entry.get("user_id") or "?"),
-                "counts": {k: int(v) for k, v in counts.items()},
+                "counts": normalized_counts,
                 "total": total,
             }
         )
@@ -232,19 +248,24 @@ def get_admin_activity_summary(bot_data: dict[str, Any], *, limit: int = 15) -> 
 
 
 def get_recent_admin_actions(bot_data: dict[str, Any], *, limit: int = 20) -> list[dict[str, Any]]:
-    activity = bot_data.get(_ACTIVITY_KEY) or {}
-    recent = activity.get("recent") or []
+    if limit <= 0:
+        return []
+    activity = _activity_from_bot_data(bot_data)
+    recent = activity.get("recent")
     if not isinstance(recent, list):
         return []
-    return list(reversed(recent[-limit:]))
+    return [item for item in reversed(recent[-limit:]) if isinstance(item, dict)]
 
 
 def get_admin_activity_totals(bot_data: dict[str, Any]) -> dict[str, int]:
-    activity = bot_data.get(_ACTIVITY_KEY) or {}
-    totals = activity.get("totals") or {}
+    activity = _activity_from_bot_data(bot_data)
+    totals = activity.get("totals")
     if not isinstance(totals, dict):
         return {}
-    return {k: int(v) for k, v in totals.items()}
+    return {
+        str(action): max(0, _safe_int(value))
+        for action, value in totals.items()
+    }
 
 
 def action_label(action: str) -> str:
