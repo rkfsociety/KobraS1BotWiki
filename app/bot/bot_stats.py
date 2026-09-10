@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import threading
 import time
 from pathlib import Path
@@ -55,6 +56,21 @@ def _empty_stats() -> dict[str, Any]:
     }
 
 
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        result = float(value)
+        return result if math.isfinite(result) else default
+    except (TypeError, ValueError):
+        return default
+
+
 def load_bot_stats(bot_data: dict[str, Any]) -> None:
     """Загружает статистику с диска при старте бота."""
     try:
@@ -68,13 +84,13 @@ def load_bot_stats(bot_data: dict[str, Any]) -> None:
         stats = _empty_stats()
         wp = raw.get("wiki_pages")
         if isinstance(wp, dict):
-            stats["wiki_pages"] = {k: int(v) for k, v in wp.items() if isinstance(k, str)}
+            stats["wiki_pages"] = {k: max(0, _safe_int(v)) for k, v in wp.items() if isinstance(k, str)}
         qs = raw.get("questions")
         if isinstance(qs, dict):
-            stats["questions"] = {k: int(v) for k, v in qs.items() if isinstance(k, str)}
-        stats["total_answers"] = max(0, int(raw.get("total_answers", 0)))
-        stats["total_incoming"] = max(0, int(raw.get("total_incoming", 0)))
-        stats["last_updated"] = float(raw.get("last_updated", 0.0))
+            stats["questions"] = {k: max(0, _safe_int(v)) for k, v in qs.items() if isinstance(k, str)}
+        stats["total_answers"] = max(0, _safe_int(raw.get("total_answers", 0)))
+        stats["total_incoming"] = max(0, _safe_int(raw.get("total_incoming", 0)))
+        stats["last_updated"] = _safe_float(raw.get("last_updated", 0.0))
         users = raw.get("user_messages")
         if isinstance(users, dict):
             loaded: dict[str, dict[str, Any]] = {}
@@ -88,19 +104,19 @@ def load_bot_stats(bot_data: dict[str, Any]) -> None:
                 loaded[str(uid)] = {
                     "user_id": uid,
                     "label": str(v.get("label") or uid),
-                    "count": max(0, int(v.get("count", 0))),
+                    "count": max(0, _safe_int(v.get("count", 0))),
                 }
                 if v.get("username"):
                     loaded[str(uid)]["username"] = str(v["username"])
                 if v.get("first_name"):
                     loaded[str(uid)]["first_name"] = str(v["first_name"])
             stats["user_messages"] = loaded
-        ver = int(raw.get("stats_version") or 1)
+        ver = _safe_int(raw.get("stats_version") or 1, default=1)
         kind = raw.get("hourly_activity_kind")
         hourly = raw.get("hourly_activity")
         # Старая схема считала ответы бота — сбрасываем гистограмму при миграции.
         if ver >= _STATS_VERSION and kind == "incoming" and isinstance(hourly, list) and len(hourly) == 24:
-            stats["hourly_activity"] = [max(0, int(x)) for x in hourly]
+            stats["hourly_activity"] = [max(0, _safe_int(x)) for x in hourly]
         else:
             stats["hourly_activity"] = [0] * 24
             stats["total_incoming"] = 0

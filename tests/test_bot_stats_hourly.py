@@ -79,6 +79,29 @@ def test_load_migrates_old_hourly_to_empty_incoming(tmp_path, monkeypatch):
     assert bd["bot_stats"]["stats_version"] == 2
 
 
+def test_load_keeps_valid_stats_when_one_value_is_corrupted(tmp_path, monkeypatch):
+    import app.bot.bot_stats as bs
+
+    p = tmp_path / "bot_stats.json"
+    p.write_text(
+        '{"wiki_pages":{"good":3,"bad":"broken"},"questions":{"q":2},'
+        '"total_answers":"broken","total_incoming":4,"last_updated":"broken",'
+        '"stats_version":2,"hourly_activity_kind":"incoming",'
+        '"hourly_activity":[' + ",".join(["1"] * 24) + ']}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(bs, "_stats_path", lambda: p)
+    bd: dict = {}
+
+    load_bot_stats(bd)
+
+    assert bd["bot_stats"]["wiki_pages"] == {"good": 3, "bad": 0}
+    assert bd["bot_stats"]["questions"] == {"q": 2}
+    assert bd["bot_stats"]["total_answers"] == 0
+    assert bd["bot_stats"]["total_incoming"] == 4
+    assert sum(bd["bot_stats"]["hourly_activity"]) == 24
+
+
 def test_get_top_users():
     bd: dict = {}
     for _ in range(5):
