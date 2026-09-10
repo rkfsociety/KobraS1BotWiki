@@ -71,7 +71,7 @@ from app.bot.manual_qa import (
     save_manual_qa_store,
     try_git_push_manual_qa,
 )
-from app.bot.stores import _load_fix_store, _norm_text, _save_fix_store
+from app.bot.stores import _load_fix_store, _norm_text, _save_fix_store, _save_json_atomic
 from app.bot.bot_stats import get_top_wiki_pages, get_top_questions, get_hourly_activity, get_top_users
 from app.bot.admin_activity import (
     action_label,
@@ -207,10 +207,7 @@ class _PanelState:
         """Сохраняет текущие сессии на диск (вызывается под self.lock)."""
         try:
             p = _sessions_file()
-            p.parent.mkdir(parents=True, exist_ok=True)
-            tmp = p.with_suffix(".tmp")
-            tmp.write_bytes(json.dumps(self.sessions, ensure_ascii=False).encode("utf-8"))
-            tmp.replace(p)
+            _save_json_atomic(p, self.sessions)
         except Exception as exc:
             logging.warning("panel: не удалось сохранить сессии: %s", exc)
 

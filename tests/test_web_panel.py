@@ -131,6 +131,18 @@ def test_login_fail_cache_is_bounded_and_prunes_expired_ips(monkeypatch):
     assert set(state.login_fails) == {"new-1", "new-2"}
 
 
+def test_panel_session_save_is_atomic(tmp_path, monkeypatch):
+    path = tmp_path / "panel_sessions.json"
+    state = object.__new__(_PanelState)
+    state.sessions = {"token": {"exp": 123.0, "csrf": "csrf", "user": "admin"}}
+    monkeypatch.setattr("app.web_panel._sessions_file", lambda: path)
+
+    state._save_sessions_locked()
+
+    assert path.exists()
+    assert not list(tmp_path.glob(".panel_sessions.json.*.tmp"))
+
+
 def _login(c: http.client.HTTPConnection) -> str:
     c.request(
         "POST",
