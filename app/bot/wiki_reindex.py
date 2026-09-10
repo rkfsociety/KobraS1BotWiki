@@ -33,7 +33,7 @@ class SitemapMonitor:
 
     def _save_state(self) -> None:
         """Сохраняет состояние sitemap на диск."""
-        self.state_file.write_text(json.dumps(self._state, ensure_ascii=False), encoding="utf-8")
+        _atomic_write_text(self.state_file, json.dumps(self._state, ensure_ascii=False))
 
     async def check_for_changes(self) -> tuple[bool, str]:
         """
@@ -123,7 +123,7 @@ class WikiReindexer:
             self.indexer._state.done_notified = False
             self.indexer._state.urls = []
             self.indexer.index.replace_docs([])
-            self.indexer.cache_file.write_text("[]\n", encoding="utf-8")
+            _atomic_write_text(self.indexer.cache_file, "[]\n")
             self.indexer._state.cache_version = 2
             self.indexer._save_state(self.indexer._state)
 
@@ -163,3 +163,11 @@ class WikiReindexer:
 
         finally:
             self._reindex_in_progress = False
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Заменяет state/cache целиком, не оставляя частичный файл при сбое."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(content, encoding="utf-8")
+    temporary.replace(path)
