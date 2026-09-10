@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from app.bot.admin_activity import (
+    flush_admin_activity,
     get_admin_activity_summary,
     get_recent_admin_actions,
     load_admin_activity,
@@ -53,6 +54,24 @@ def test_load_admin_activity_from_disk(tmp_path, monkeypatch):
     load_admin_activity(bd)
     summary = get_admin_activity_summary(bd)
     assert summary[0]["counts"]["ban"] == 3
+
+
+def test_admin_activity_persistence_is_throttled_and_flushable(tmp_path, monkeypatch):
+    import app.bot.admin_activity as aa
+
+    p = tmp_path / "admin_activity.json"
+    monkeypatch.setattr(aa, "_activity_path", lambda: p)
+    monkeypatch.setattr(aa.time, "time", lambda: 100.0)
+    bd: dict = {}
+
+    record_admin_action(bd, action="ban", admin_id=1)
+    first = p.read_text(encoding="utf-8")
+    record_admin_action(bd, action="kick", admin_id=1)
+    assert p.read_text(encoding="utf-8") == first
+
+    flush_admin_activity(bd)
+    saved = p.read_text(encoding="utf-8")
+    assert '"kick": 1' in saved
 
 
 def test_classify_ban_and_voluntary_leave():

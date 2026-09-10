@@ -49,7 +49,7 @@ from app.bot.handlers import (
 )
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.reply_logging import load_recent_replies
-from app.bot.admin_activity import load_admin_activity
+from app.bot.admin_activity import flush_admin_activity, load_admin_activity
 from app.bot.bot_stats import flush_bot_stats, load_bot_stats
 from app.bot.panel_login import cmd_start
 from app.bot.reactions import on_message_reaction
@@ -502,6 +502,10 @@ def main() -> None:
         flush_bot_stats(app.bot_data)
     except Exception as e:
         logging.warning("Не удалось сохранить bot_stats перед остановкой: %s", e)
+    try:
+        flush_admin_activity(app.bot_data)
+    except Exception as e:
+        logging.warning("Не удалось сохранить admin_activity перед остановкой: %s", e)
 
     if git_pull_restart_state.get("action") == "exec":
         try:

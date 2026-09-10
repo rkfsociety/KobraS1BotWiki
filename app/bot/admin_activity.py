@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 
 _ACTIVITY_KEY = "admin_activity"
 _SAVE_LOCK = threading.Lock()
+_SAVE_INTERVAL = 60.0
 _MAX_RECENT = 80
 _MAX_ADMINS = 500
 
@@ -78,8 +79,15 @@ def load_admin_activity(bot_data: dict[str, Any]) -> None:
         bot_data[_ACTIVITY_KEY] = _empty_activity()
 
 
-def _persist(bot_data: dict[str, Any]) -> None:
+def _persist(bot_data: dict[str, Any], *, force: bool = False) -> None:
+    now = time.time()
     with _SAVE_LOCK:
+        if not force:
+            try:
+                if now - float(bot_data.get("_admin_activity_last_save", 0.0)) < _SAVE_INTERVAL:
+                    return
+            except (TypeError, ValueError):
+                pass
         try:
             p = _activity_path()
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -87,8 +95,14 @@ def _persist(bot_data: dict[str, Any]) -> None:
             tmp = p.with_suffix(".tmp")
             tmp.write_bytes(json.dumps(activity, ensure_ascii=False).encode("utf-8"))
             tmp.replace(p)
+            bot_data["_admin_activity_last_save"] = now
         except Exception as exc:
             log.warning("admin_activity: ошибка сохранения — %s", exc)
+
+
+def flush_admin_activity(bot_data: dict[str, Any]) -> None:
+    """Принудительно сохраняет свежую статистику перед остановкой процесса."""
+    _persist(bot_data, force=True)
 
 
 def _admin_label(*, user_id: int, username: str | None, first_name: str | None) -> str:
