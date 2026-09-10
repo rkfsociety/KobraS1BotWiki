@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import json
 
-from app.bot.wiki_reindex import SitemapMonitor, WikiReindexer
+from app.bot.wiki_reindex import SitemapMonitor, WikiReindexer, _atomic_write_text
 
 
 def test_sitemap_state_save_is_atomic(tmp_path):
@@ -13,6 +14,16 @@ def test_sitemap_state_save_is_atomic(tmp_path):
     monitor._save_state()
 
     assert json.loads(monitor.state_file.read_text(encoding="utf-8"))["hash"] == "abc"
+    assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_atomic_writer_survives_concurrent_replacements(tmp_path):
+    path = tmp_path / "shared.json"
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(lambda i: _atomic_write_text(path, json.dumps({"value": i})), range(32)))
+
+    assert json.loads(path.read_text(encoding="utf-8"))["value"] in range(32)
     assert not list(tmp_path.glob(".*.tmp"))
 
 
