@@ -13,6 +13,7 @@ from app.web_panel import (
     _PanelState,
     _admin_activity_panels,
     _bot_stats_section,
+    _sort_missed_entries,
     start_web_panel,
 )
 
@@ -68,6 +69,26 @@ def panel(monkeypatch, tmp_path):
 
 def _conn(port: int) -> http.client.HTTPConnection:
     return http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+
+
+def test_sort_missed_entries_uses_requested_order_once():
+    entries = [
+        {"text": "count-first", "count": 10, "score": 90, "ts": 100},
+        {"text": "score-first", "count": 1, "score": 20, "ts": 200},
+    ]
+
+    assert [entry["text"] for entry in _sort_missed_entries(entries, "count")] == [
+        "count-first",
+        "score-first",
+    ]
+    assert [entry["text"] for entry in _sort_missed_entries(entries, "score")] == [
+        "score-first",
+        "count-first",
+    ]
+    assert [entry["text"] for entry in _sort_missed_entries(entries, "time")] == [
+        "score-first",
+        "count-first",
+    ]
 
 
 def test_login_fail_cache_is_bounded_and_prunes_expired_ips(monkeypatch):

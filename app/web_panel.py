@@ -855,6 +855,15 @@ def _missed_questions_section(csrf: str) -> str:
     )
 
 
+def _sort_missed_entries(entries: list[dict], sort: str) -> list[dict]:
+    """Сортирует очередь missed единообразно для просмотра и действий с индексом."""
+    if sort == "score":
+        return sorted(entries, key=lambda x: float(x.get("score") or 0))
+    if sort == "time":
+        return sorted(entries, key=lambda x: float(x.get("ts") or 0), reverse=True)
+    return sorted(entries, key=lambda x: int(x.get("count") or 1), reverse=True)
+
+
 def _missed_page(state: _PanelState, csrf: str, flash: str = "", sort: str = "count") -> bytes:
     entries = load_missed_questions()
     qa_entries = load_manual_qa_store()
@@ -863,12 +872,7 @@ def _missed_page(state: _PanelState, csrf: str, flash: str = "", sort: str = "co
         for k in (e.get("keys") or []):
             qa_keys.add(str(k).lower().strip())
 
-    if sort == "score":
-        entries = sorted(entries, key=lambda x: float(x.get("score") or 0))
-    elif sort == "time":
-        entries = sorted(entries, key=lambda x: float(x.get("ts") or 0), reverse=True)
-    else:
-        entries = sorted(entries, key=lambda x: int(x.get("count") or 1), reverse=True)
+    entries = _sort_missed_entries(entries, sort)
 
     rows = []
     for i, e in enumerate(entries):
@@ -2393,19 +2397,12 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
         def _missed_questions_to_qa(self, form: dict[str, str]) -> None:
             sort = form.get("sort", "count")
             entries = load_missed_questions()
+            sorted_entries = _sort_missed_entries(entries, sort)
             try:
                 i = int(form.get("i", "-1"))
             except ValueError:
                 i = -1
-            if i < 0 or i >= len(sorted(entries, key=lambda x: int(x.get("count") or 1), reverse=True)):
-                self._redirect(f"/missed?sort={sort}")
-                return
-            sorted_entries = sorted(entries, key=lambda x: int(x.get("count") or 1), reverse=True)
-            if sort == "score":
-                sorted_entries = sorted(entries, key=lambda x: float(x.get("score") or 0))
-            elif sort == "time":
-                sorted_entries = sorted(entries, key=lambda x: float(x.get("ts") or 0), reverse=True)
-            if i >= len(sorted_entries):
+            if i < 0 or i >= len(sorted_entries):
                 self._redirect(f"/missed?sort={sort}")
                 return
             entry = sorted_entries[i]
