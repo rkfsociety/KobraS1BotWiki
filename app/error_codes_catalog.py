@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,7 +37,34 @@ def _load_json(path: Path) -> dict[str, Any] | None:
 
 def _save_json(path: Path, data: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
+        ) as temporary:
+            temporary_name = temporary.name
+            temporary.write(payload)
+            temporary.flush()
+        Path(temporary_name).replace(path)
+    finally:
+        if temporary_name is not None:
+            Path(temporary_name).unlink(missing_ok=True)
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        result = float(value)
+        return result if result == result and abs(result) != float("inf") else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _normalize_code(s: str) -> str | None:
@@ -161,9 +189,9 @@ async def ensure_error_codes_catalog(
     cache_file = Path(cache_path)
     cached = _load_json(cache_file)
     if cached and isinstance(cached, dict):
-        ts = float(cached.get("ts", 0.0))
-        cached_count = int(cached.get("count", 0) or 0)
-        cached_parser_version = int(cached.get("parser_version", 0) or 0)
+        ts = _safe_float(cached.get("ts", 0.0))
+        cached_count = _safe_int(cached.get("count", 0) or 0)
+        cached_parser_version = _safe_int(cached.get("parser_version", 0) or 0)
         # Если в кэше 0 записей — считаем кэш невалидным и перекачиваем сразу
         # (обычно это результат старого парсера или временной проблемы загрузки страницы).
         # Также перекачиваем, если обновилась версия парсера.
@@ -215,4 +243,3 @@ def merge_manual_overrides(
     out = dict(base)
     out.update(overrides)
     return out
-

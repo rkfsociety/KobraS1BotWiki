@@ -5,6 +5,16 @@ from app.bot.error_display import _format_error_code_info
 from app.bot.i18n import format_wiki_card
 from app.error_codes_catalog import ErrorCodeInfo
 
+
+def test_error_catalog_cache_write_is_atomic(tmp_path):
+    from app.error_codes_catalog import _save_json
+
+    path = tmp_path / "catalog.json"
+    _save_json(path, {"count": 1, "codes": {}})
+
+    assert '"count": 1' in path.read_text(encoding="utf-8")
+    assert not list(tmp_path.glob(".catalog.json.*.tmp"))
+
 _URL = "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-s1-combo/firmware-update-guide"
 
 
