@@ -17,7 +17,7 @@ from telegram.constants import ChatMemberStatus
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.missed_questions import load_missed_questions
 from app.bot.chat_store import ChatStore
-from app.web_miniapp import create_miniapp_session, render_miniapp
+from app.web_miniapp import _get_session, create_miniapp_session, render_miniapp
 from app.web_panel import start_web_panel
 
 
@@ -147,6 +147,13 @@ def test_miniapp_session_store_is_bounded(monkeypatch):
     assert len(state.miniapp_sessions) == 1
     assert first["session"] not in state.miniapp_sessions
     assert second["session"] in state.miniapp_sessions
+
+
+def test_miniapp_session_rejects_malformed_exp_without_error():
+    state = types.SimpleNamespace(lock=threading.Lock(), miniapp_sessions={"bad": {"exp": ["broken"]}})
+
+    assert _get_session(state, "Bearer bad") is None
+    assert "bad" not in state.miniapp_sessions
 
 
 def test_miniapp_shell_has_mobile_admin_dashboard_sections():

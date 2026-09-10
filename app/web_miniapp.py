@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import secrets
 import sqlite3
 import time
@@ -413,6 +414,14 @@ def _session_store(state: Any) -> dict[str, dict[str, Any]]:
 _MAX_MINIAPP_SESSIONS = 4096
 
 
+def _session_exp(session: dict[str, Any]) -> float:
+    try:
+        expiry = float(session.get("exp", 0) or 0)
+        return expiry if math.isfinite(expiry) else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, Any]]:
     """Проверяет Telegram initData и создаёт короткую сессию участника группы."""
     try:
@@ -445,13 +454,13 @@ def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, A
         sessions = _session_store(state)
         now = time.time()
         for old_token, session in list(sessions.items()):
-            if float(session.get("exp", 0)) <= now:
+            if not isinstance(session, dict) or _session_exp(session) <= now:
                 sessions.pop(old_token, None)
         if len(sessions) >= _MAX_MINIAPP_SESSIONS:
             overflow = len(sessions) - _MAX_MINIAPP_SESSIONS + 1
             for old_token in sorted(
                 sessions,
-                key=lambda token: float(sessions[token].get("exp", 0)),
+                key=lambda token: _session_exp(sessions[token]),
             )[:overflow]:
                 sessions.pop(old_token, None)
         sessions[token] = {"exp": now + ttl, "user": user, "role": role}
@@ -490,9 +499,9 @@ def _get_session(state: Any, authorization: str) -> dict[str, Any] | None:
         return None
     with state.lock:
         session = _session_store(state).get(token)
-        if not session:
+        if not isinstance(session, dict):
             return None
-        if float(session.get("exp", 0)) <= time.time():
+        if _session_exp(session) <= time.time():
             _session_store(state).pop(token, None)
             return None
         return dict(session)
