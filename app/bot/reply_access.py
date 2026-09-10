@@ -185,7 +185,7 @@ def invalidate_reply_access_cache(
     topic_id: int | None = None,
 ) -> None:
     store = context.application.bot_data.get(_CACHE_KEY)
-    if not store:
+    if not isinstance(store, dict) or not store:
         return
     store.pop((chat_id, topic_id), None)
     if topic_id is not None:

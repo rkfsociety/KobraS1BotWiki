@@ -8,6 +8,7 @@ from app.bot.reply_access import (
     _cache_put,
     can_bot_reply_in_context,
     chat_topic_in_allowed_lists,
+    invalidate_reply_access_cache,
 )
 
 
@@ -46,6 +47,14 @@ def test_reply_access_cache_recovers_from_corrupted_entries(monkeypatch):
 
     assert _cache_get(context, 2, None) is None
     assert isinstance(context.application.bot_data["reply_access_cache"], dict)
+
+
+def test_invalidate_reply_access_cache_ignores_corrupted_store():
+    context = SimpleNamespace(application=SimpleNamespace(bot_data={"reply_access_cache": []}))
+
+    invalidate_reply_access_cache(context, -1001, topic_id=4)
+
+    assert context.application.bot_data["reply_access_cache"] == []
 
 
 def test_no_lists_allows_everywhere():
