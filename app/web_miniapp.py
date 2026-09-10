@@ -14,6 +14,7 @@ from app.bot.miniapp_access import is_group_admin, is_group_member
 from app.bot.miniapp_auth import MiniAppAuthError, validate_init_data
 from app.bot.manual_qa import add_manual_qa_entry, find_manual_qa_answer, load_manual_qa_store
 from app.bot.missed_questions import add_missed_question, delete_missed_question_by_text, load_missed_questions
+from app.bot.stores import _save_json_atomic
 
 
 class MiniAppAccessError(PermissionError):
@@ -955,10 +956,7 @@ def export_answers_to_json(state: Any, authorization: str) -> tuple[int, dict[st
 
     cache_path = project_repo_root() / ".cache" / "chat_answers_export.json"
     try:
-        cache_path.write_text(
-            json.dumps(items, ensure_ascii=False, indent=2),
-            encoding="utf-8"
-        )
+        _save_json_atomic(cache_path, items, indent=2)
         return 200, {
             "ok": True,
             "message": f"Экспортировано {len(items)} ответов в {cache_path}",

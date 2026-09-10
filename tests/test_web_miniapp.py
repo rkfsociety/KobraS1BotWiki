@@ -17,7 +17,7 @@ from telegram.constants import ChatMemberStatus
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.missed_questions import load_missed_questions
 from app.bot.chat_store import ChatStore
-from app.web_miniapp import _get_session, create_miniapp_session, render_miniapp
+from app.web_miniapp import _get_session, create_miniapp_session, export_answers_to_json, render_miniapp
 from app.web_panel import start_web_panel
 
 
@@ -698,6 +698,27 @@ def test_chat_history_caps_page_at_fifty_and_uses_before_id(mini_panel):
     assert second_response.status == 200
     assert [message["id"] for message in second_page["messages"]] == [message.id for message in messages[:5]]
     assert second_page["has_more"] is False
+
+
+def test_answers_export_is_atomic(tmp_path, monkeypatch):
+    import app.web_miniapp as miniapp
+
+    question = types.SimpleNamespace(id=1, text="Вопрос", created_at=1)
+    answer = types.SimpleNamespace(
+        id=2, text="Ответ", source="wiki", url="https://wiki.example/a", user_id=3, created_at=2
+    )
+    state = types.SimpleNamespace()
+    state.chat_store = types.SimpleNamespace(list_recent_answers=lambda limit: [(question, answer)])
+    monkeypatch.setattr(miniapp, "_require_admin_session", lambda state, authorization: ({"role": "admin"}, None))
+    monkeypatch.setattr("app.bot.git_autopull.project_repo_root", lambda: tmp_path)
+
+    status, payload = export_answers_to_json(state, "Bearer test")
+
+    assert status == 200
+    assert payload["count"] == 1
+    exported = json.loads((tmp_path / ".cache" / "chat_answers_export.json").read_text(encoding="utf-8"))
+    assert exported[0]["question"] == "Вопрос"
+    assert not list((tmp_path / ".cache").glob(".chat_answers_export.json.*.tmp"))
 
 
 def test_user_session_is_forbidden_from_missed_mutations(mini_panel):
