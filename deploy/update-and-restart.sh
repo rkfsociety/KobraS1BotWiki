@@ -16,6 +16,17 @@ cd "$REPO_DIR"
 
 # Живой бот может коммитить data-файлы сам; не смешиваем их с обновлением кода.
 git checkout -- data/
+current_branch="$(git branch --show-current)"
+if [[ "$current_branch" != "master" ]]; then
+    echo "[ERROR] Deploy разрешён только из ветки master (сейчас: $current_branch)" >&2
+    exit 1
+fi
+tracked_changes="$(git status --porcelain --untracked-files=no)"
+if [[ -n "$tracked_changes" ]]; then
+    echo "[ERROR] В репозитории есть tracked-изменения перед deploy:" >&2
+    echo "$tracked_changes" >&2
+    exit 1
+fi
 git pull --ff-only
 
 sudo systemctl restart "$SERVICE"
