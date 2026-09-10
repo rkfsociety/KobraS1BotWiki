@@ -1,14 +1,30 @@
 """Зеркало лога в Telegram: только ответы бота с текстом вопроса и ответа."""
 from __future__ import annotations
 
+import json
 import logging
 
 from app.bot.decision_log import incoming_text_for_log, telegram_message_link
 from app.bot.telegram_log_mirror import LOG_MIRROR_TEXT_MAX, format_log_for_telegram
+from app.bot.reply_logging import load_recent_replies
 
 
 def test_log_mirror_text_max_reasonable():
     assert LOG_MIRROR_TEXT_MAX >= 500
+
+
+def test_load_recent_replies_deduplicates_file_entries_and_ignores_bad_memory_items(tmp_path, monkeypatch):
+    path = tmp_path / "recent_replies.json"
+    path.write_text(json.dumps([
+        {"ts": 2, "question": "new"},
+        {"ts": 2, "question": "duplicate"},
+    ]), encoding="utf-8")
+    monkeypatch.setattr("app.bot.reply_logging._replies_path", lambda: path)
+    bot_data = {"recent_replies": [None, {"ts": 1, "question": "old"}]}
+
+    load_recent_replies(bot_data)
+
+    assert [item["question"] for item in bot_data["recent_replies"]] == ["new", "old"]
 
 
 def test_telegram_message_link_supergroup():

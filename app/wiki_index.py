@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from heapq import nlargest
 from pathlib import Path
 
 from rapidfuzz import fuzz
@@ -44,8 +45,8 @@ class WikiDoc:
 
 class WikiIndex:
     def __init__(self, docs: list[WikiDoc]) -> None:
-        self._docs = docs
-        self._texts = [d.text for d in docs]
+        self._docs = tuple(docs)
+        self._texts = tuple(d.text for d in self._docs)
 
     @property
     def doc_count(self) -> int:
@@ -73,13 +74,16 @@ class WikiIndex:
 
     def search(self, query: str, *, top_k: int = 1) -> list[tuple[WikiDoc, int]]:
         q = _normalize(query)
+        if not q:
+            return []
         scored: list[tuple[int, int]] = []
         for i, text in enumerate(self._texts):
             score = int(fuzz.token_set_ratio(q, text))
             scored.append((score, i))
-        scored.sort(reverse=True, key=lambda x: x[0])
+        limit = max(1, top_k)
+        best = nlargest(limit, scored, key=lambda item: (item[0], -item[1]))
         results: list[tuple[WikiDoc, int]] = []
-        for score, idx in scored[: max(top_k, 1)]:
+        for score, idx in best:
             results.append((self._docs[idx], score))
         return results
 

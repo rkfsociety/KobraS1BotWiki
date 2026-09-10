@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 import time
 from pathlib import Path
 
@@ -266,7 +265,7 @@ def patch_banter() -> None:
         '        r"\\bкитайцы\\s+делают\\s+тачки\\b",\n'
         '        r"\\bрули\\s+перешив\\w*\\b",\n'
         '        r"\\bруки\\s+перешив\\w*\\b",\n'
-    )'
+        '    )\n'
     )
     if old in t:
         t = t.replace(old, new)

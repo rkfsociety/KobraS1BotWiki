@@ -28,7 +28,12 @@ def test_creates_database_schema_and_indexes(tmp_path: Path) -> None:
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
 
         assert {"chat_messages", "rate_limit_events"} <= tables
-        assert {"idx_chat_messages_user_id_id", "idx_chat_messages_user_id_created_at"} <= indexes
+        assert {
+            "idx_chat_messages_user_id_id",
+            "idx_chat_messages_user_id_created_at",
+            "idx_chat_messages_duplicate_lookup",
+            "idx_rate_limit_events_created_at",
+        } <= indexes
         assert journal_mode.lower() == "wal"
     finally:
         store.close()
@@ -81,6 +86,18 @@ def test_messages_are_isolated_and_listed_in_chronological_order(tmp_path: Path)
         store.close()
 
 
+def test_add_message_returns_inserted_values_without_reloading_row(tmp_path: Path) -> None:
+    store = ChatStore(tmp_path / "chat.sqlite3")
+    try:
+        message = store.add_message(7, "bot", "answer", "wiki", reply_to_id=3, url="https://wiki.example/a")
+
+        assert message == ChatMessage(
+            message.id, 7, "bot", "answer", "wiki", message.created_at, 3, "https://wiki.example/a"
+        )
+    finally:
+        store.close()
+
+
 def test_messages_support_cursor_pagination(tmp_path: Path) -> None:
     store = ChatStore(tmp_path / "chat.sqlite3")
     try:
@@ -103,6 +120,19 @@ def test_rate_limit_allows_one_request_per_three_seconds(tmp_path: Path) -> None
         assert not allowed
         assert retry_after == 1
         assert store.allow_request(1, now=103.0) == (True, 0)
+    finally:
+        store.close()
+
+
+def test_rate_limit_prunes_expired_events_for_inactive_users(tmp_path: Path) -> None:
+    store = ChatStore(tmp_path / "chat.sqlite3")
+    try:
+        assert store.allow_request(2, now=100.0) == (True, 0)
+        assert store.allow_request(1, now=700.0) == (True, 0)
+
+        with sqlite3.connect(tmp_path / "chat.sqlite3") as connection:
+            remaining = connection.execute("SELECT user_id FROM rate_limit_events").fetchall()
+        assert remaining == [(1,)]
     finally:
         store.close()
 

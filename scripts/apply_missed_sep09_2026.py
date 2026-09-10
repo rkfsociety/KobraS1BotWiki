@@ -15,7 +15,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from app.bot.manual_qa import find_manual_qa_answer, load_manual_qa_store, save_manual_qa_store
+from app.bot.manual_qa import (  # noqa: E402
+    find_manual_qa_answer,
+    load_manual_qa_store,
+    save_manual_qa_store,
+)
 
 
 MISSED_PATH = ROOT / "data" / "missed_questions.json"

@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 
 from collections import OrderedDict
 from dataclasses import dataclass
+from heapq import nlargest
 
 from pathlib import Path
 
@@ -352,11 +353,16 @@ class WebWikiIndex:
 
     def __init__(self, docs: list[WebWikiDoc]) -> None:
 
-        self._docs = docs
+        self._docs = tuple(docs)
 
-        self._blobs = [_make_search_blob(d) for d in docs]
+        self._blobs = tuple(_make_search_blob(d) for d in self._docs)
+
+        # Блобы неизменяемы до add_docs/replace_docs: не разбираем их
+        # заново в set на каждом поисковом запросе.
+        self._blob_tokens = tuple(frozenset(blob.split()) for blob in self._blobs)
 
         self._lock = threading.Lock()
+        self._version = 0
 
         self._search_cache: OrderedDict[str, list[tuple[WebWikiDoc, int]]] = OrderedDict()
 
@@ -388,7 +394,15 @@ class WebWikiIndex:
 
 
 
-    def _score_one(self, q: str, doc: WebWikiDoc, blob: str) -> int:
+    def _score_one(
+        self,
+        q: str,
+        doc: WebWikiDoc,
+        blob: str,
+        q_tokens: set[str] | None = None,
+        b_tokens: frozenset[str] | set[str] | None = None,
+        query_flags: tuple[bool, bool, bool] | None = None,
+    ) -> int:
 
         if not q:
 
@@ -404,9 +418,17 @@ class WebWikiIndex:
 
 
 
-        q_tokens = {t for t in q.split() if len(t) > 2 and t not in _TOKEN_BONUS_STOP}
-
-        b_tokens = set(blob.split())
+        if q_tokens is None:
+            q_tokens = {t for t in q.split() if len(t) > 2 and t not in _TOKEN_BONUS_STOP}
+        if b_tokens is None:
+            b_tokens = set(blob.split())
+        if query_flags is None:
+            query_flags = (
+                any(k in q for k in ("replac", "install", "remov", "swap", "chang", "disassembl")),
+                any(k in q for k in ("extrud", "hotend", "nozzle", "print-head", "printhead")),
+                "kobra" in q,
+            )
+        is_replacement_query, is_component_query, has_kobra = query_flags
 
         overlap = len(q_tokens & b_tokens)
 
@@ -414,7 +436,7 @@ class WebWikiIndex:
 
 
 
-        if any(k in q for k in ("replac", "install", "remov", "swap", "chang", "disassembl")):
+        if is_replacement_query:
 
             if "replacement" in doc.url or "replace" in doc.url or "install" in doc.url:
 
@@ -422,7 +444,7 @@ class WebWikiIndex:
 
 
 
-        if any(k in q for k in ("extrud", "hotend", "nozzle", "print-head", "printhead")):
+        if is_component_query:
 
             if "/faq" in doc.url or doc.url.rstrip("/").endswith("/faq"):
 
@@ -430,7 +452,7 @@ class WebWikiIndex:
 
 
 
-        if "kobra" in q and "kobra" in blob:
+        if has_kobra and "kobra" in blob:
 
             bonus += 8
 
@@ -451,32 +473,49 @@ class WebWikiIndex:
     def search(self, query: str, *, top_k: int = 1) -> list[tuple[WebWikiDoc, int]]:
 
         q = _normalize(query)
+        if not q:
+            return []
         cache_key = f"{q}\x00{top_k}"
 
         with self._lock:
             if cache_key in self._search_cache:
                 self._search_cache.move_to_end(cache_key)
                 return self._search_cache[cache_key]
-            blobs = list(self._blobs)
-            docs = list(self._docs)
+            # Коллекции immutable: snapshot — это только несколько ссылок,
+            # без копирования всего индекса под lock.
+            blobs = self._blobs
+            blob_tokens = self._blob_tokens
+            docs = self._docs
+            version = self._version
 
+        q_tokens = {t for t in q.split() if len(t) > 2 and t not in _TOKEN_BONUS_STOP}
+        query_flags = (
+            any(k in q for k in ("replac", "install", "remov", "swap", "chang", "disassembl")),
+            any(k in q for k in ("extrud", "hotend", "nozzle", "print-head", "printhead")),
+            "kobra" in q,
+        )
         scored: list[tuple[int, int]] = []
 
         for i, blob in enumerate(blobs):
 
-            score = self._score_one(q, docs[i], blob)
+            score = self._score_one(q, docs[i], blob, q_tokens, blob_tokens[i], query_flags)
 
             scored.append((score, i))
 
-        scored.sort(reverse=True, key=lambda x: x[0])
-
-        result = [(docs[i], score) for score, i in scored[: max(1, top_k)]]
+        limit = max(1, top_k)
+        # В рабочем режиме top_k обычно равен 1 или 5. Не сортируем весь
+        # индекс, сохраняя исходный порядок документов при равных score.
+        best = nlargest(limit, scored, key=lambda item: (item[0], -item[1]))
+        result = [(docs[i], score) for score, i in best]
 
         with self._lock:
-            self._search_cache[cache_key] = result
-            self._search_cache.move_to_end(cache_key)
-            if len(self._search_cache) > _SEARCH_CACHE_SIZE:
-                self._search_cache.popitem(last=False)
+            # Обновление индекса могло произойти, пока считались fuzzy scores.
+            # Не возвращаем устаревший snapshot в кэш после такого обновления.
+            if version == self._version:
+                self._search_cache[cache_key] = result
+                self._search_cache.move_to_end(cache_key)
+                if len(self._search_cache) > _SEARCH_CACHE_SIZE:
+                    self._search_cache.popitem(last=False)
 
         return result
 
@@ -490,16 +529,20 @@ class WebWikiIndex:
 
         with self._lock:
 
-            self._docs.extend(new_docs)
+            new_blobs = [_make_search_blob(d) for d in new_docs]
+            self._docs = (*self._docs, *new_docs)
+            self._blobs = (*self._blobs, *new_blobs)
+            self._blob_tokens = (*self._blob_tokens, *(frozenset(blob.split()) for blob in new_blobs))
 
-            self._blobs.extend(_make_search_blob(d) for d in new_docs)
-
+            self._version += 1
             self._search_cache.clear()
 
     def replace_docs(self, docs: list[WebWikiDoc]) -> None:
         with self._lock:
-            self._docs = list(docs)
-            self._blobs = [_make_search_blob(d) for d in self._docs]
+            self._docs = tuple(docs)
+            self._blobs = tuple(_make_search_blob(d) for d in self._docs)
+            self._blob_tokens = tuple(frozenset(blob.split()) for blob in self._blobs)
+            self._version += 1
             self._search_cache.clear()
 
 
@@ -1001,6 +1044,3 @@ def _load_cache(path: Path) -> list[WebWikiDoc]:
     except Exception:
 
         return []
-
-
-

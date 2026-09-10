@@ -51,8 +51,12 @@ class ChatStore:
                     ON chat_messages (user_id, id);
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id_created_at
                     ON chat_messages (user_id, created_at);
+                CREATE INDEX IF NOT EXISTS idx_chat_messages_duplicate_lookup
+                    ON chat_messages (user_id, role, text, created_at, id);
                 CREATE INDEX IF NOT EXISTS idx_rate_limit_events_user_id_created_at
                     ON rate_limit_events (user_id, created_at);
+                CREATE INDEX IF NOT EXISTS idx_rate_limit_events_created_at
+                    ON rate_limit_events (created_at);
                 """
             )
             columns = {
@@ -85,10 +89,19 @@ class ChatStore:
                 """,
                 (user_id, role, text, source, created_at, reply_to_id, url),
             )
-            row = self._connection.execute(
-                "SELECT * FROM chat_messages WHERE id = ?", (cursor.lastrowid,)
-            ).fetchone()
-        return self._message_from_row(row)
+            message_id = int(cursor.lastrowid)
+        # Все значения, кроме AUTOINCREMENT id, уже есть у вызывающего кода;
+        # не выполняем дополнительный SELECT только ради восстановления строки.
+        return ChatMessage(
+            id=message_id,
+            user_id=user_id,
+            role=role,
+            text=text,
+            source=source,
+            created_at=created_at,
+            reply_to_id=reply_to_id,
+            url=url,
+        )
 
     def add_exchange(
         self,
@@ -164,8 +177,8 @@ class ChatStore:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
                 self._connection.execute(
-                    "DELETE FROM rate_limit_events WHERE user_id = ? AND created_at <= ?",
-                    (user_id, now - 600),
+                    "DELETE FROM rate_limit_events WHERE created_at <= ?",
+                    (now - 600,),
                 )
                 latest = self._connection.execute(
                     """
@@ -216,31 +229,43 @@ class ChatStore:
         with self._lock:
             question_row = self._connection.execute(
                 """
-                SELECT * FROM chat_messages
-                WHERE user_id = ? AND role = 'user' AND text = ? AND created_at >= ? AND created_at <= ?
-                AND EXISTS (
-                    SELECT 1 FROM chat_messages AS answers
-                    WHERE answers.user_id = chat_messages.user_id
-                      AND answers.role = 'bot'
-                      AND answers.reply_to_id = chat_messages.id
-                )
-                ORDER BY id DESC LIMIT 1
+                SELECT q.*,
+                       a.id AS answer_id, a.user_id AS answer_user_id,
+                       a.role AS answer_role, a.text AS answer_text,
+                       a.source AS answer_source, a.created_at AS answer_created_at,
+                       a.reply_to_id AS answer_reply_to_id, a.url AS answer_url
+                FROM chat_messages AS q
+                JOIN chat_messages AS a
+                  ON a.user_id = q.user_id AND a.role = 'bot' AND a.reply_to_id = q.id
+                WHERE q.user_id = ? AND q.role = 'user' AND q.text = ?
+                  AND q.created_at >= ? AND q.created_at <= ?
+                ORDER BY q.id DESC, a.id DESC LIMIT 1
                 """,
                 (user_id, text, now - 10, now),
             ).fetchone()
             if question_row is None:
                 return None
-            answer_row = self._connection.execute(
-                """
-                SELECT * FROM chat_messages
-                WHERE user_id = ? AND role = 'bot' AND reply_to_id = ?
-                ORDER BY id DESC LIMIT 1
-                """,
-                (user_id, question_row["id"]),
-            ).fetchone()
-        if answer_row is None:
-            return None
-        return self._message_from_row(question_row), self._message_from_row(answer_row)
+        question = ChatMessage(
+            id=question_row["id"],
+            user_id=question_row["user_id"],
+            role=question_row["role"],
+            text=question_row["text"],
+            source=question_row["source"],
+            created_at=question_row["created_at"],
+            reply_to_id=question_row["reply_to_id"],
+            url=question_row["url"],
+        )
+        answer = ChatMessage(
+            id=question_row["answer_id"],
+            user_id=question_row["answer_user_id"],
+            role=question_row["answer_role"],
+            text=question_row["answer_text"],
+            source=question_row["answer_source"],
+            created_at=question_row["answer_created_at"],
+            reply_to_id=question_row["answer_reply_to_id"],
+            url=question_row["answer_url"],
+        )
+        return question, answer
 
     def rate_limit_remaining(self, user_id: int, now: float | None = None) -> dict[str, int]:
         """Возвращает текущий остаток короткого и оконного лимитов."""

@@ -35,11 +35,16 @@ def load_recent_replies(bot_data: dict[str, Any]) -> None:
         raw = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(raw, list):
             return
-        existing: list[dict] = bot_data.setdefault(_RECENT_REPLIES_KEY, [])
+        existing = bot_data.setdefault(_RECENT_REPLIES_KEY, [])
+        if not isinstance(existing, list):
+            existing = []
+            bot_data[_RECENT_REPLIES_KEY] = existing
+        existing[:] = [item for item in existing if isinstance(item, dict)]
         existing_ts: set = {m.get("ts") for m in existing}
         for item in raw:
             if isinstance(item, dict) and item.get("ts") not in existing_ts:
                 existing.append(item)
+                existing_ts.add(item.get("ts"))
         existing.sort(key=lambda m: float(m.get("ts", 0)), reverse=True)
         logging.info("recent_replies: загружено %d записей с диска", len(existing))
     except Exception as exc:

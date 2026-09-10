@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 from app.web_wiki_index import (
     WebWikiIndex,
     WebWikiDoc,
@@ -30,6 +32,54 @@ def test_replace_docs_rebuilds_search_blobs():
 
     assert index.doc_count == 1
     assert index.search("new")[0][0].url == "https://wiki.test/new"
+
+
+def test_search_top_k_keeps_document_order_for_equal_scores():
+    index = WebWikiIndex([
+        WebWikiDoc(title="same", url="https://wiki.test/first", text="same"),
+        WebWikiDoc(title="same", url="https://wiki.test/second", text="same"),
+    ])
+
+    assert [doc.url for doc, _ in index.search("same", top_k=2)] == [
+        "https://wiki.test/first",
+        "https://wiki.test/second",
+    ]
+
+
+def test_search_empty_query_returns_no_arbitrary_document():
+    index = WebWikiIndex([
+        WebWikiDoc(title="article", url="https://wiki.test/article", text="article"),
+    ])
+
+    assert index.search("   ") == []
+
+
+def test_search_does_not_cache_snapshot_completed_before_index_update(monkeypatch):
+    index = WebWikiIndex([
+        WebWikiDoc(title="same", url="https://wiki.test/old", text="same"),
+    ])
+    scoring_started = threading.Event()
+    release_scoring = threading.Event()
+    original_score_one = index._score_one
+
+    def slow_score_one(*args):
+        scoring_started.set()
+        assert release_scoring.wait(timeout=2)
+        return original_score_one(*args)
+
+    monkeypatch.setattr(index, "_score_one", slow_score_one)
+    worker = threading.Thread(target=index.search, args=("same",))
+    worker.start()
+    assert scoring_started.wait(timeout=2)
+
+    index.replace_docs([
+        WebWikiDoc(title="same", url="https://wiki.test/new", text="same"),
+    ])
+    release_scoring.set()
+    worker.join(timeout=2)
+    assert not worker.is_alive()
+
+    assert index.search("same")[0][0].url == "https://wiki.test/new"
 
 
 def test_sitemap_urls_are_deduplicated_and_extra_urls_are_added(monkeypatch):
