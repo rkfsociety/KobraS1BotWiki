@@ -69,3 +69,35 @@ def test_cache_loader_rejects_oversized_file_before_json_decode(tmp_path, monkey
     monkeypatch.setattr(catalog, "_MAX_CACHE_BYTES", 10)
 
     assert catalog._load_json(path) is None
+
+
+@pytest.mark.asyncio
+async def test_error_codes_rejects_oversized_http_response(tmp_path, monkeypatch):
+    class Response:
+        text = "x" * 100
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class Client:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args) -> None:
+            return None
+
+        async def get(self, url: str) -> Response:
+            return Response()
+
+    monkeypatch.setattr(catalog.httpx, "AsyncClient", Client)
+    monkeypatch.setattr(catalog, "_MAX_RESPONSE_BYTES", 10)
+
+    result = await catalog.ensure_error_codes_catalog(
+        base_url="https://wiki.anycubic.com",
+        cache_path=tmp_path / "catalog.json",
+    )
+
+    assert result == {}

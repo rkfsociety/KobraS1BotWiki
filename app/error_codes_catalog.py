@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 PARSER_VERSION = 2
 _MAX_CACHED_CODES = 1000
 _MAX_CACHE_BYTES = 8 * 1024 * 1024
+_MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -237,7 +238,10 @@ async def ensure_error_codes_catalog(
         async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
             r = await client.get(url)
             r.raise_for_status()
-            codes = parse_error_codes_page(r.text)
+            response_text = r.text
+            if len(response_text.encode("utf-8")) > _MAX_RESPONSE_BYTES:
+                raise ValueError("ответ error-codes превышает допустимый размер")
+            codes = parse_error_codes_page(response_text)
             # Если парсер не вытащил ничего, не перетираем возможный непустой кэш.
             if not codes and cached and isinstance(cached, dict):
                 data = cached.get("codes", {})
