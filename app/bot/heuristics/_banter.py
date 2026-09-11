@@ -438,6 +438,7 @@ def _is_partial_manual_find_observation(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_slicer_app_disambiguation(text: str) -> bool:
     """«Это в ChiTu или Orca?» — уточнение в треде, не запрос к вики."""
     if not text or not text.strip():

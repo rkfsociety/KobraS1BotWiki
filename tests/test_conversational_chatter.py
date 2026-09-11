@@ -18,6 +18,7 @@ from app.bot.text_heuristics import (
     _needs_model_clarification,
     _topic_is_marketplace_commerce_intent,
 )
+from app.bot.heuristics import _is_slicer_app_disambiguation
 from app.web_wiki_index import _looks_like_question
 
 _BED_COMPARE_MSG = "Разберемся, тут кстати стол регулируется не сверху как на кобре"
@@ -438,6 +439,17 @@ def test_orca_vs_slicer_opinion_is_chatter():
     assert _is_conversational_chatter(_ORCA_OPINION)
     assert not _looks_like_question(_ORCA_OPINION)
     assert not _message_has_help_intent(_ORCA_OPINION)
+
+
+def test_slicer_app_disambiguation_reuses_cached_classification():
+    _is_slicer_app_disambiguation.cache_clear()
+    before = _is_slicer_app_disambiguation.cache_info()
+    assert _is_slicer_app_disambiguation(_ORCA_OPINION)
+    middle = _is_slicer_app_disambiguation.cache_info()
+    assert _is_slicer_app_disambiguation(_ORCA_OPINION)
+    after = _is_slicer_app_disambiguation.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
 
 
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
