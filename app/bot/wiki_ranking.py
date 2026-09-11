@@ -79,6 +79,7 @@ def _lower_url(url: str) -> str:
 
 
 
+@lru_cache(maxsize=8192)
 def _url_model_bonus(url: str, hints: frozenset[str]) -> int:
 
     if not hints:
@@ -95,6 +96,7 @@ def _url_model_bonus(url: str, hints: frozenset[str]) -> int:
 
 
 
+@lru_cache(maxsize=8192)
 def _topic_path_bonus(topic: str | None, url: str) -> int:
 
     """Слегка подталкиваем URL под формулировку исходного вопроса (только уточнение по модели)."""
@@ -629,6 +631,7 @@ def _filament_feed_guide_url_plausible(url: str) -> bool:
 
 
 
+@lru_cache(maxsize=8192)
 def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
 
     """Тема «дверь» или «подача филамента», а URL про другое узло — сильный штраф."""
@@ -1074,6 +1077,7 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
 
 
+@lru_cache(maxsize=8192)
 def _url_model_penalty(url: str, hints: frozenset[str], topic: str | None = None) -> int:
 
     """Если модель в запросе ясна, но URL явно про другую линейку — сильный штраф."""
