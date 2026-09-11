@@ -177,6 +177,17 @@ def test_manual_qa_match_cache_is_invalidated_on_save(tmp_path, monkeypatch):
     assert manual_qa.find_manual_qa_answer(entries, "новый ключ") == ("ответ", "старый")
 
 
+def test_exact_manual_qa_index_keeps_newest_entry_priority():
+    from app.bot.manual_qa import find_manual_qa_answer
+
+    entries = [
+        {"title": "новый", "keys": ["ошибка 11518"], "answer": "новый ответ"},
+        {"title": "старый", "keys": ["ошибка 11518"], "answer": "старый ответ"},
+    ]
+
+    assert find_manual_qa_answer(entries, "Ошибка 11518") == ("новый ответ", "новый")
+
+
 def test_adding_entry_does_not_drop_existing_tail_entries(tmp_path, monkeypatch):
     import app.bot.manual_qa as mqa
 

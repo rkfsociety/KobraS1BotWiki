@@ -31,7 +31,15 @@ _MATCH_CACHE_SIZE = 8
 
 # Список FAQ живёт в bot_data весь срок процесса; кэшируем только подготовленные
 # ключи, чтобы не нормализовать тысячи строк на каждом входящем сообщении.
-_MATCH_CACHE: OrderedDict[int, tuple[list[dict[str, Any]], int, list[tuple[tuple[str, ...], str, str]]]] = OrderedDict()
+_MATCH_CACHE: OrderedDict[
+    int,
+    tuple[
+        list[dict[str, Any]],
+        int,
+        list[tuple[tuple[str, ...], str, str]],
+        dict[str, tuple[str, str]],
+    ],
+] = OrderedDict()
 
 # Предложение → автоизвлечение коротких ключей: порог в словах
 _SENTENCE_WORD_THRESHOLD = 5
@@ -285,6 +293,7 @@ def find_manual_qa_answer(entries: list[dict[str, Any]], user_text: str) -> tupl
     cached = _MATCH_CACHE.get(cache_key)
     if cached is None or cached[0] is not entries or cached[1] != len(entries):
         prepared: list[tuple[tuple[str, ...], str, str]] = []
+        exact: dict[str, tuple[str, str]] = {}
         for e in entries:
             if not isinstance(e, dict):
                 continue
@@ -301,14 +310,22 @@ def find_manual_qa_answer(entries: list[dict[str, Any]], user_text: str) -> tupl
                 continue
             ttl = e.get("title") if isinstance(e.get("title"), str) else ""
             ttl = ttl.strip() or (ks[0] if ks and isinstance(ks[0], str) else "manual")
-            prepared.append((normalized, ans.strip(), ttl))
-        cached = (entries, len(entries), prepared)
+            answer = ans.strip()
+            prepared.append((normalized, answer, ttl))
+            for kn in normalized:
+                # Порядок entries задаёт приоритет: сохраняем первое совпадение.
+                exact.setdefault(kn, (answer, ttl))
+        cached = (entries, len(entries), prepared, exact)
         _MATCH_CACHE[cache_key] = cached
         _MATCH_CACHE.move_to_end(cache_key)
         while len(_MATCH_CACHE) > _MATCH_CACHE_SIZE:
             _MATCH_CACHE.popitem(last=False)
     else:
         _MATCH_CACHE.move_to_end(cache_key)
+
+    exact_match = cached[3].get(tn)
+    if exact_match is not None:
+        return exact_match
 
     for normalized, answer, title in cached[2]:
         for kn in normalized:
