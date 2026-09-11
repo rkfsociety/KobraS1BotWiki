@@ -336,3 +336,16 @@ def test_real_questions_not_experience_chatter():
     assert not _is_experience_or_assertion_chat("Как я должен печатать TPU?")
     assert not _is_experience_or_assertion_chat("Можно ли использовать ABS?")
     assert not _is_experience_or_assertion_chat("Согласны ли вы что это лучше?")  # has opinion word but asking agreement
+
+
+def test_non_wiki_chatter_reuses_bounded_cache():
+    message = "Нашел, но не то что на Авито"
+    _is_non_wiki_chatter_message.cache_clear()
+
+    assert _is_non_wiki_chatter_message(message)
+    before = _is_non_wiki_chatter_message.cache_info()
+    assert _is_non_wiki_chatter_message(message)
+    after = _is_non_wiki_chatter_message.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from app.bot.heuristics._base import (
     _has_geo_social_cues,
@@ -154,6 +155,7 @@ def _needs_model_clarification(text: str) -> bool:
     return _topic_needs_printer_model(text) and not _printer_mentioned(text)
 
 
+@lru_cache(maxsize=4096)
 def _is_non_wiki_chatter_message(text: str) -> bool:
     """Сообщения чата, на которые бот не отвечает из вики."""
     return (
