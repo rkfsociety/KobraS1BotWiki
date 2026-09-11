@@ -38,7 +38,7 @@ def _looks_like_question(text: str) -> bool:
     )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WikiDoc:
     title: str
     slug: str
