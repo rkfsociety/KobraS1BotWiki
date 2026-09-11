@@ -126,6 +126,7 @@ class _FormReadError(ValueError):
 
 _COOKIE_NAME = "panel_session"
 _MAX_PANEL_SESSIONS = 4096
+_TG_FUTURE_AUTH_SKEW_SECONDS = 300
 
 
 def _read_proc_metrics() -> tuple[float, float]:
@@ -153,7 +154,8 @@ def _verify_telegram_auth(data: dict[str, str], bot_token: str, *, max_age: int 
         auth_date = int(data.get("auth_date", "0"))
     except ValueError:
         auth_date = 0
-    if auth_date <= 0 or (time.time() - auth_date) > max_age:
+    now = time.time()
+    if auth_date <= 0 or now - auth_date > max_age or auth_date - now > _TG_FUTURE_AUTH_SKEW_SECONDS:
         return False, "данные входа устарели, попробуйте снова"
     return True, ""
 

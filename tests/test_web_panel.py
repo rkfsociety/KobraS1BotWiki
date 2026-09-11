@@ -468,6 +468,18 @@ def test_verify_telegram_auth_valid_and_tampered():
     assert not ok3
 
 
+def test_verify_telegram_auth_rejects_future_timestamp():
+    import time as _t
+
+    from app.web_panel import _verify_telegram_auth
+
+    data = _sign_tg({"id": 111, "auth_date": int(_t.time()) + 301}, "123456:TESTTOKEN")
+
+    ok, _ = _verify_telegram_auth(data, "123456:TESTTOKEN")
+
+    assert not ok
+
+
 def test_tg_auth_admin_allowed(panel, monkeypatch):
     import time as _t
     from urllib.parse import urlencode
