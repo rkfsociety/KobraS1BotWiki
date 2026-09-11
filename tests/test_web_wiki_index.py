@@ -45,6 +45,32 @@ def test_indexer_normalizes_corrupted_state_without_refetching_valid_urls(tmp_pa
     assert indexer._state.done_notified is False
 
 
+def test_indexer_refetches_urls_when_saved_configuration_is_stale(tmp_path, monkeypatch):
+    state_path = tmp_path / "state.json"
+    state_path.write_text(
+        '{"cache_version": 2, "sitemap_url": "https://wiki.test/old.xml", '
+        '"base_url": "https://wiki.test", "max_pages": 10, '
+        '"urls": ["https://wiki.test/old"], "next_idx": 1}',
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "app.web_wiki_index._read_sitemap_urls",
+        lambda *_args, **_kwargs: ["https://wiki.test/new"],
+    )
+    indexer = WebWikiIndexer(
+        index=WebWikiIndex.empty(),
+        cache_path=str(tmp_path / "cache.json"),
+        state_path=str(state_path),
+        sitemap_url="https://wiki.test/new.xml",
+        base_url="https://wiki.test",
+        max_pages=20,
+    )
+
+    assert indexer._state.urls == ["https://wiki.test/new"]
+    assert indexer._state.next_idx == 0
+
+
 def test_extracts_wikijs_template_contents_instead_of_app_shell():
     title, text = _extract_text_from_html(
         """

@@ -691,7 +691,12 @@ class WebWikiIndexer:
 
                 )
 
-                if st.urls and cache_version >= _INDEX_CACHE_VERSION:
+                config_matches = (
+                    st.sitemap_url == self.sitemap_url
+                    and st.base_url == self.base_url
+                    and st.max_pages == self.max_pages
+                )
+                if st.urls and cache_version >= _INDEX_CACHE_VERSION and config_matches:
 
                     st.urls = _dedupe_urls(st.urls + list(self.extra_urls), base_url=self.base_url)
 
