@@ -46,6 +46,17 @@ def test_design_reply_present():
     assert "rfid" in expl.lower() or "чип" in expl.lower()
 
 
+def test_ace_slot_intent_reuses_cached_classification():
+    _topic_is_ace_filament_slot_intent.cache_clear()
+    before = _topic_is_ace_filament_slot_intent.cache_info()
+    assert _topic_is_ace_filament_slot_intent(_QUESTION)
+    middle = _topic_is_ace_filament_slot_intent.cache_info()
+    assert _topic_is_ace_filament_slot_intent(_QUESTION)
+    after = _topic_is_ace_filament_slot_intent.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
 def test_ace_mention_reuses_bounded_cache():
     _ace_mentioned.cache_clear()
 

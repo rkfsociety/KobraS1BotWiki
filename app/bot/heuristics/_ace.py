@@ -62,6 +62,7 @@ def _topic_is_ace_connection_intent(text: str | None) -> bool:
     return has_connection_issue or only_in_ace
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_ace_filament_slot_intent(text: str | None) -> bool:
     """ACE Pro: слот/RFID запомнил PETG, не сменить / сброс — не clarify принтера."""
     if not text:
