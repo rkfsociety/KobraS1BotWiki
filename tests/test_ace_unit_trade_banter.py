@@ -33,3 +33,14 @@ def test_ace_notes_rejected():
 def test_drying_help_not_trade_banter():
     assert not _is_ace_unit_trade_banter(_DRYING_HELP)
     assert _topic_is_ace_filament_drying_intent(_DRYING_HELP)
+
+
+def test_ace_trade_banter_reuses_cached_classification():
+    _is_ace_unit_trade_banter.cache_clear()
+    before = _is_ace_unit_trade_banter.cache_info()
+    assert _is_ace_unit_trade_banter(_QUESTION)
+    middle = _is_ace_unit_trade_banter.cache_info()
+    assert _is_ace_unit_trade_banter(_QUESTION)
+    after = _is_ace_unit_trade_banter.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1

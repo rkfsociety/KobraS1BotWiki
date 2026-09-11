@@ -97,6 +97,7 @@ def _topic_is_ace_filament_slot_intent(text: str | None) -> bool:
     )
 
 
+@lru_cache(maxsize=4096)
 def _is_ace_unit_trade_banter(text: str | None) -> bool:
     """«Продать? … ТПУ из аськи не сможет, сушить есть где» — тред про продажу ACE."""
     if not text or not text.strip():
