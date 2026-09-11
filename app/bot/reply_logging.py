@@ -21,6 +21,7 @@ from app.bot.decision_log import LOG_MIRROR_TEXT_MAX, _msg_ids, incoming_text_fo
 # --- буфер последних ответов (для дашборда веб-панели) ---
 _RECENT_REPLIES_KEY = "recent_replies"
 _RECENT_REPLIES_MAX = 2000
+_MAX_RECENT_REPLIES_BYTES = 16 * 1024 * 1024
 _REPLIES_SAVE_LOCK = threading.Lock()
 
 
@@ -52,6 +53,13 @@ def load_recent_replies(bot_data: dict[str, Any]) -> None:
     try:
         p = _replies_path()
         if not p.exists():
+            return
+        file_size = p.stat().st_size
+        if file_size > _MAX_RECENT_REPLIES_BYTES:
+            logging.warning(
+                "recent_replies: файл слишком большой, пропускаем загрузку (байт: %d)",
+                file_size,
+            )
             return
         raw = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(raw, list):

@@ -49,6 +49,20 @@ def test_load_recent_replies_tolerates_malformed_timestamps(tmp_path, monkeypatc
     ]
 
 
+def test_load_recent_replies_rejects_oversized_file_before_json_decode(tmp_path, monkeypatch):
+    import app.bot.reply_logging as reply_logging
+
+    path = tmp_path / "recent_replies.json"
+    path.write_text("[]" * 20, encoding="utf-8")
+    monkeypatch.setattr(reply_logging, "_replies_path", lambda: path)
+    monkeypatch.setattr(reply_logging, "_MAX_RECENT_REPLIES_BYTES", 10)
+    bot_data: dict = {}
+
+    load_recent_replies(bot_data)
+
+    assert "recent_replies" not in bot_data
+
+
 def test_recent_replies_panel_tolerates_malformed_timestamp():
     class _Application:
         bot_data = {
