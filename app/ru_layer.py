@@ -3,6 +3,7 @@ from __future__ import annotations
 
 
 import re
+from functools import lru_cache
 
 
 
@@ -123,7 +124,8 @@ _MAP: list[tuple[re.Pattern[str], str]] = [
 
 
 
-def expand_queries(text: str) -> list[str]:
+@lru_cache(maxsize=2048)
+def _expand_queries_cached(text: str) -> tuple[str, ...]:
 
     """
 
@@ -141,7 +143,7 @@ def expand_queries(text: str) -> list[str]:
 
     if not base:
 
-        return []
+        return ()
 
 
 
@@ -149,7 +151,7 @@ def expand_queries(text: str) -> list[str]:
 
     if not _CYRILLIC_RE.search(base):
 
-        return out
+        return (base,)
 
 
 
@@ -242,7 +244,10 @@ def expand_queries(text: str) -> list[str]:
 
             uniq.append(item)
 
-    return uniq
+    return tuple(uniq)
 
 
+def expand_queries(text: str) -> list[str]:
+    """Возвращает независимую копию кэшированных вариантов запроса."""
+    return list(_expand_queries_cached(text))
 

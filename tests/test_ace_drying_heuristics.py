@@ -33,3 +33,10 @@ def test_path_bonus_prefers_notes_over_replacement():
 def test_expand_queries_adds_drying_hint():
     variants = expand_queries(_QUESTION)
     assert any("drying" in v.lower() or "moisture" in v.lower() for v in variants)
+
+
+def test_expand_queries_returns_independent_cached_lists():
+    first = expand_queries(_QUESTION)
+    first.clear()
+
+    assert expand_queries(_QUESTION)
