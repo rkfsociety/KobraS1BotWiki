@@ -984,6 +984,18 @@ def test_creality_spelling_detected():
     assert _mentions_competitor_printer("креалити")
 
 
+def test_competitor_printer_detection_reuses_cached_classification():
+    text = "креалти"
+    _mentions_competitor_printer.cache_clear()
+    before = _mentions_competitor_printer.cache_info()
+    assert _mentions_competitor_printer(text)
+    middle = _mentions_competitor_printer.cache_info()
+    assert _mentions_competitor_printer(text)
+    after = _mentions_competitor_printer.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
 def test_competitor_showcase_request_is_chatter():
     assert _is_competitor_showcase_request(_CREALITY_SHOWCASE)
     assert _is_conversational_chatter(_CREALITY_SHOWCASE)

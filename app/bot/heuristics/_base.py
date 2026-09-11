@@ -47,6 +47,7 @@ def _ace_mentioned(text: str) -> bool:
     )
 
 
+@lru_cache(maxsize=4096)
 def _mentions_competitor_printer(text: str) -> bool:
     """Bambu, P2S и др. — не путать с Anycubic Kobra в вики."""
     if not text:
