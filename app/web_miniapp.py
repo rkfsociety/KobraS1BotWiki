@@ -434,6 +434,19 @@ def _as_mapping(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def _normalized_search_matches(matches: object) -> list[tuple[Any, int]]:
+    """Оставляет только парные результаты поиска с безопасным числовым score."""
+    if not isinstance(matches, (list, tuple)):
+        return []
+    normalized: list[tuple[Any, int]] = []
+    for match in matches:
+        if not isinstance(match, (list, tuple)) or len(match) != 2:
+            continue
+        doc, score = match
+        normalized.append((doc, _safe_int(score)))
+    return normalized
+
+
 def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, Any]]:
     """Проверяет Telegram initData и создаёт короткую сессию участника группы."""
     try:
@@ -571,7 +584,7 @@ def search_payload(state: Any, authorization: str, query: str) -> tuple[int, dic
     if index is None:
         return 503, {"error": "Индекс вики ещё не готов."}
     try:
-        matches = index.search(query, top_k=5)
+        matches = _normalized_search_matches(index.search(query, top_k=5))
     except Exception:
         return 500, {"error": "Поиск временно недоступен."}
     results = []
@@ -596,7 +609,10 @@ def question_payload(state: Any, authorization: str, text: str) -> tuple[int, di
         return 200, {"answered": True, "source": "manual", "answer": answer, "title": title}
 
     index = bot_data.get("wiki_index")
-    matches = index.search(text, top_k=1) if index is not None else []
+    try:
+        matches = _normalized_search_matches(index.search(text, top_k=1)) if index is not None else []
+    except Exception:
+        return 503, {"error": "Поиск по вики временно недоступен."}
     if matches:
         doc, score = matches[0]
         score = int(score)
@@ -729,7 +745,7 @@ def chat_message_payload(state: Any, authorization: str, text: str) -> tuple[int
     else:
         try:
             index = bot_data.get("wiki_index")
-            matches = index.search(text, top_k=1) if index is not None else []
+            matches = _normalized_search_matches(index.search(text, top_k=1)) if index is not None else []
         except Exception:
             answer = "Поиск по вики временно недоступен. Попробуйте повторить вопрос позже."
             source = "error"

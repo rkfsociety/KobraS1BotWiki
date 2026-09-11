@@ -421,6 +421,26 @@ def test_admin_can_search_wiki_from_miniapp(mini_panel):
     }
 
 
+def test_miniapp_search_skips_malformed_index_matches(mini_panel):
+    port, status_box = mini_panel
+    session = _create_session(port)
+    status_box["application"].bot_data["wiki_index"] = types.SimpleNamespace(
+        search=lambda query, top_k=5: [
+            "broken",
+            (types.SimpleNamespace(title="valid", url="https://wiki.example/valid"), "bad"),
+            (types.SimpleNamespace(title="good", url="https://wiki.example/good"), 88),
+        ]
+    )
+    c = _conn(port)
+    c.request("GET", "/api/app/search?" + urlencode({"q": "первый слой"}), headers={"Authorization": f"Bearer {session}"})
+    response = c.getresponse()
+    payload = json.loads(response.read())
+
+    assert response.status == 200
+    assert [item["title"] for item in payload["results"]] == ["valid", "good"]
+    assert payload["results"][0]["score"] == 0
+
+
 def test_empty_wiki_search_is_rejected(mini_panel):
     port, _ = mini_panel
     session = _create_session(port)
