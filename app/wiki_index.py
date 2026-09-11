@@ -86,10 +86,10 @@ class WikiIndex:
             self._search_cache.move_to_end(cache_key)
             return list(cached)
 
-        scored: list[tuple[int, int]] = []
-        for i, text in enumerate(self._texts):
-            score = int(fuzz.token_set_ratio(q, text))
-            scored.append((score, i))
+        scored = (
+            (int(fuzz.token_set_ratio(q, text)), i)
+            for i, text in enumerate(self._texts)
+        )
         best = nlargest(limit, scored, key=lambda item: (item[0], -item[1]))
         results: list[tuple[WikiDoc, int]] = []
         for score, idx in best:

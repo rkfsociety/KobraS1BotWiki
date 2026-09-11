@@ -519,16 +519,16 @@ class WebWikiIndex:
             any(k in q for k in ("extrud", "hotend", "nozzle", "print-head", "printhead")),
             "kobra" in q,
         )
-        scored: list[tuple[int, int]] = []
+        scored = (
+            (
+                self._score_one(q, docs[i], blob, q_tokens, blob_tokens[i], query_flags),
+                i,
+            )
+            for i, blob in enumerate(blobs)
+        )
 
-        for i, blob in enumerate(blobs):
-
-            score = self._score_one(q, docs[i], blob, q_tokens, blob_tokens[i], query_flags)
-
-            scored.append((score, i))
-
-        # В рабочем режиме top_k обычно равен 1 или 5. Не сортируем весь
-        # индекс, сохраняя исходный порядок документов при равных score.
+        # В рабочем режиме top_k обычно равен 1 или 5. Генератор не хранит
+        # scores для всего индекса, а nlargest держит только top_k результатов.
         best = nlargest(limit, scored, key=lambda item: (item[0], -item[1]))
         result = [(docs[i], score) for score, i in best]
 
