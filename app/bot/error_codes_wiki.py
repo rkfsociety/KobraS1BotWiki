@@ -49,6 +49,9 @@ def _error_code_target_suffix(text: str) -> str | None:
 
 
 def _error_code_candidates(index: WebWikiIndex, code: str) -> list[WebWikiDoc]:
+    indexed = getattr(index, "error_code_candidates", None)
+    if callable(indexed):
+        return indexed(code)
     target = f"/error-codes/{code}-code"
     out: list[WebWikiDoc] = []
     for d in getattr(index, "_docs", []):  # type: ignore[attr-defined]

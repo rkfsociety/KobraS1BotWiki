@@ -122,6 +122,28 @@ def test_replace_docs_rebuilds_search_blobs():
     assert index.search("new")[0][0].url == "https://wiki.test/new"
 
 
+def test_error_code_candidates_are_indexed_and_updated():
+    first = WebWikiDoc(
+        title="11518", url="https://wiki.test/en/error-codes/11518-code/s1", text="blockage"
+    )
+    index = WebWikiIndex([first])
+    assert index.error_code_candidates("11518") == [first]
+    assert index.error_code_candidates("11519") == []
+
+    second = WebWikiDoc(
+        title="11519", url="https://wiki.test/en/error-codes/11519-code", text="feeding"
+    )
+    index.add_docs([second])
+    assert index.error_code_candidates("11519") == [second]
+
+    replacement = WebWikiDoc(
+        title="11520", url="https://wiki.test/en/error-codes/11520-code", text="sensor"
+    )
+    index.replace_docs([replacement])
+    assert index.error_code_candidates("11518") == []
+    assert index.error_code_candidates("11520") == [replacement]
+
+
 def test_search_top_k_keeps_document_order_for_equal_scores():
     index = WebWikiIndex([
         WebWikiDoc(title="same", url="https://wiki.test/first", text="same"),

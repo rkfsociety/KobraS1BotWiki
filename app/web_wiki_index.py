@@ -343,6 +343,7 @@ class WebWikiDoc:
 
 
 _SEARCH_CACHE_SIZE = 500
+_ERROR_CODE_URL_RE = re.compile(r"/error-codes/(?P<code>\d+)-code(?:/|$)", re.IGNORECASE)
 _INDEX_CACHE_VERSION = 2
 _MAX_INDEX_CACHE_BYTES = 64 * 1024 * 1024
 _MAX_SITEMAP_BYTES = 16 * 1024 * 1024
@@ -353,11 +354,22 @@ _DEFAULT_EXTRA_WIKI_URLS = (
 )
 
 
+def _build_error_code_docs(docs: tuple[WebWikiDoc, ...]) -> dict[str, list[WebWikiDoc]]:
+    result: dict[str, list[WebWikiDoc]] = {}
+    for doc in docs:
+        match = _ERROR_CODE_URL_RE.search(doc.url or "")
+        if match:
+            result.setdefault(match.group("code"), []).append(doc)
+    return result
+
+
 class WebWikiIndex:
 
     def __init__(self, docs: list[WebWikiDoc]) -> None:
 
         self._docs = tuple(docs)
+
+        self._error_code_docs = _build_error_code_docs(self._docs)
 
         self._blobs = tuple(_make_search_blob(d) for d in self._docs)
 
@@ -379,6 +391,11 @@ class WebWikiIndex:
         with self._lock:
 
             return len(self._docs)
+
+    def error_code_candidates(self, code: str) -> list[WebWikiDoc]:
+        """Возвращает страницы кода без полного прохода по индексу."""
+        with self._lock:
+            return list(self._error_code_docs.get(str(code), ()))
 
 
 
@@ -542,6 +559,8 @@ class WebWikiIndex:
             self._docs = (*self._docs, *new_docs)
             self._blobs = (*self._blobs, *new_blobs)
             self._blob_tokens = (*self._blob_tokens, *(frozenset(blob.split()) for blob in new_blobs))
+            for code, docs in _build_error_code_docs(tuple(new_docs)).items():
+                self._error_code_docs.setdefault(code, []).extend(docs)
 
             self._version += 1
             self._search_cache.clear()
@@ -551,6 +570,7 @@ class WebWikiIndex:
             self._docs = tuple(docs)
             self._blobs = tuple(_make_search_blob(d) for d in self._docs)
             self._blob_tokens = tuple(frozenset(blob.split()) for blob in self._blobs)
+            self._error_code_docs = _build_error_code_docs(self._docs)
             self._version += 1
             self._search_cache.clear()
 
