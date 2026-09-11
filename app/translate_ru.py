@@ -16,6 +16,7 @@ import httpx
 
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 _LATIN_RE = re.compile(r"[A-Za-z]")
+_MAX_TRANSLATION_RESPONSE_BYTES = 1 * 1024 * 1024
 
 
 def _cache_timestamp(entry: object) -> float:
@@ -161,6 +162,8 @@ class Translator:
             async with httpx.AsyncClient(timeout=12.0, follow_redirects=True) as client:
                 r = await client.get(url, headers={"User-Agent": "KobraS1BotWiki/1.0"})
                 r.raise_for_status()
+                if len(r.content) > _MAX_TRANSLATION_RESPONSE_BYTES:
+                    raise ValueError("ответ translation API превышает допустимый размер")
                 data = r.json()
             resp = data.get("responseData", {}) if isinstance(data, dict) else {}
             ru = resp.get("translatedText") if isinstance(resp, dict) else None

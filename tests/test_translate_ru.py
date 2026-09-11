@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from app.translate_ru import Translator
 
 
@@ -48,3 +50,36 @@ def test_translation_cache_load_is_bounded(tmp_path, monkeypatch):
 
     assert translator._get_cached("entry 4") == "перевод"
     assert set(translator._cache) == {"entry 3", "entry 4"}
+
+
+@pytest.mark.asyncio
+async def test_translation_rejects_oversized_http_response(tmp_path, monkeypatch):
+    import app.translate_ru as translate_ru
+
+    class Response:
+        content = b"x" * 100
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self):
+            raise AssertionError("oversized response must not be decoded")
+
+    class Client:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args) -> None:
+            return None
+
+        async def get(self, *args, **kwargs):
+            return Response()
+
+    monkeypatch.setattr(translate_ru.httpx, "AsyncClient", Client)
+    monkeypatch.setattr(translate_ru, "_MAX_TRANSLATION_RESPONSE_BYTES", 10)
+    translator = Translator(cache_path=tmp_path / "translations.json")
+
+    assert await translator.translate_en_ru("a sufficiently long text") == "a sufficiently long text"
