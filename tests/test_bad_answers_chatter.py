@@ -28,6 +28,7 @@ from app.bot.text_heuristics import (
 )
 from app.bot.heuristics import _is_experience_or_assertion_chat
 from app.bot.heuristics import _is_print_task_planning_statement
+from app.bot.heuristics import _is_causal_continuation
 
 # --- сами ошибочные ответы (должны стать болтовнёй) ---
 
@@ -281,6 +282,18 @@ def test_print_task_planning_reuses_cached_classification():
     middle = _is_print_task_planning_statement.cache_info()
     assert _is_print_task_planning_statement(text)
     after = _is_print_task_planning_statement.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
+def test_causal_continuation_reuses_cached_classification():
+    text = "Потому что он уже всё проверил"
+    _is_causal_continuation.cache_clear()
+    before = _is_causal_continuation.cache_info()
+    assert _is_causal_continuation(text)
+    middle = _is_causal_continuation.cache_info()
+    assert _is_causal_continuation(text)
+    after = _is_causal_continuation.cache_info()
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
 

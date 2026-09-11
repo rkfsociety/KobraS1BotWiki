@@ -2069,6 +2069,7 @@ def _is_multicolor_flow_calibration_chat(text: str | None) -> bool:
 
 
 
+@lru_cache(maxsize=4096)
 def _is_causal_continuation(text: str) -> bool:
     r"""«Потому что...» / «Ну потому...» — продолжение чужой реплики, не вопрос к боту.
 
