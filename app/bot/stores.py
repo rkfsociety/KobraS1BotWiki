@@ -128,7 +128,7 @@ def _answer_ctx_timestamp(entry: object) -> float:
         return 0.0
     try:
         value = float(entry.get("ts", 0.0) or 0.0)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 0.0
     return value if math.isfinite(value) else 0.0
 

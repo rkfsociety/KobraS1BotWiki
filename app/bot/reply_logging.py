@@ -28,7 +28,7 @@ def _reply_timestamp(item: dict[str, Any]) -> float:
     """Безопасно извлекает время записи для сортировки повреждённой ленты."""
     try:
         timestamp = float(item.get("ts", 0) or 0)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return 0.0
     return timestamp if math.isfinite(timestamp) else 0.0
 
@@ -37,7 +37,7 @@ def _reply_timestamp_key(item: dict[str, Any]) -> float | None:
     """Возвращает ключ дедупликации только для корректного finite-ts."""
     try:
         timestamp = float(item.get("ts"))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return timestamp if math.isfinite(timestamp) else None
 

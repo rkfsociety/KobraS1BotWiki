@@ -67,7 +67,7 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
         result = float(value)
         return result if math.isfinite(result) else default
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 

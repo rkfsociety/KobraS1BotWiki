@@ -106,14 +106,14 @@ def _safe_float(value: object, default: float = 0.0) -> float:
     try:
         parsed = float(value)
         return parsed if math.isfinite(parsed) else default
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
 def _safe_int(value: object, default: int = 0) -> int:
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 

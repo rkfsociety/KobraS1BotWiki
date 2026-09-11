@@ -100,6 +100,8 @@ def test_missed_entry_numeric_helpers_tolerate_corrupted_values():
     assert _safe_float(float("inf"), default=7.0) == 7.0
     assert _safe_int({"bad": True}, default=3) == 3
     assert _safe_int("4") == 4
+    assert _safe_float(10**1000, default=7.0) == 7.0
+    assert _safe_int(float("inf"), default=3) == 3
 
 
 def test_panel_sections_tolerate_corrupted_timestamps(monkeypatch):
