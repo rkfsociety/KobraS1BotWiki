@@ -137,6 +137,7 @@ def _topic_is_filament_bed_removal_intent(text: str | None) -> bool:
     )
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_filament_material_choice_intent(text: str | None) -> bool:
     """Какой пластик/TPU/фирму взять — не замена сопла и не подача филамента."""
     if not text:

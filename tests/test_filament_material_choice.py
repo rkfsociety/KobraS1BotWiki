@@ -112,3 +112,15 @@ def test_vague_filament_with_specific_type_not_caught():
     # Конкретный тип материала — бот может дать содержательный ответ
     assert not _is_vague_filament_thread_reference("а petg такого план какой лучше ?")
     assert not _is_vague_filament_thread_reference("а tpu такого плана какой лучше ?")
+
+
+def test_material_intent_reuses_bounded_cache():
+    _topic_is_filament_material_choice_intent.cache_clear()
+
+    assert _topic_is_filament_material_choice_intent(_TPU_MSG)
+    before = _topic_is_filament_material_choice_intent.cache_info()
+    assert _topic_is_filament_material_choice_intent(_TPU_MSG)
+    after = _topic_is_filament_material_choice_intent.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize
