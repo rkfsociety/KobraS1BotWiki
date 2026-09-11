@@ -32,6 +32,7 @@ _STATS_KEY = "bot_stats"
 _SAVE_LOCK = threading.Lock()
 _SAVE_INTERVAL = 60.0
 _MAX_UNIQUE_QUESTIONS = 2000
+_MAX_WIKI_PAGES = 3000
 _MAX_TRACKED_USERS = 3000
 # v2: hourly_activity = все входящие в allowed-чатах (раньше считались только ответы бота).
 _STATS_VERSION = 2
@@ -71,6 +72,16 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _bound_counter(values: dict[str, int], *, max_entries: int) -> dict[str, int]:
+    if len(values) <= max_entries:
+        return values
+    remove_count = len(values) - max_entries
+    rare = nsmallest(remove_count, values.items(), key=lambda item: item[1])
+    for key, _ in rare:
+        values.pop(key, None)
+    return values
+
+
 def load_bot_stats(bot_data: dict[str, Any]) -> None:
     """Загружает статистику с диска при старте бота."""
     try:
@@ -84,10 +95,16 @@ def load_bot_stats(bot_data: dict[str, Any]) -> None:
         stats = _empty_stats()
         wp = raw.get("wiki_pages")
         if isinstance(wp, dict):
-            stats["wiki_pages"] = {k: max(0, _safe_int(v)) for k, v in wp.items() if isinstance(k, str)}
+            stats["wiki_pages"] = _bound_counter(
+                {k: max(0, _safe_int(v)) for k, v in wp.items() if isinstance(k, str)},
+                max_entries=_MAX_WIKI_PAGES,
+            )
         qs = raw.get("questions")
         if isinstance(qs, dict):
-            stats["questions"] = {k: max(0, _safe_int(v)) for k, v in qs.items() if isinstance(k, str)}
+            stats["questions"] = _bound_counter(
+                {k: max(0, _safe_int(v)) for k, v in qs.items() if isinstance(k, str)},
+                max_entries=_MAX_UNIQUE_QUESTIONS,
+            )
         stats["total_answers"] = max(0, _safe_int(raw.get("total_answers", 0)))
         stats["total_incoming"] = max(0, _safe_int(raw.get("total_incoming", 0)))
         stats["last_updated"] = _safe_float(raw.get("last_updated", 0.0))
@@ -269,6 +286,7 @@ def record_answer(
             pages = {}
             stats["wiki_pages"] = pages
         pages[url] = max(0, _safe_int(pages.get(url, 0))) + 1
+        _bound_counter(pages, max_entries=_MAX_WIKI_PAGES)
 
     q_norm = " ".join((question or "").strip().lower().split())
     if q_norm:
@@ -277,11 +295,7 @@ def record_answer(
             questions = {}
             stats["questions"] = questions
         questions[q_norm] = max(0, _safe_int(questions.get(q_norm, 0))) + 1
-        if len(questions) > _MAX_UNIQUE_QUESTIONS:
-            # обрезаем самые редкие вопросы (встречались лишь раз)
-            rare = [k for k, v in questions.items() if v == 1]
-            for k in rare[: len(questions) - _MAX_UNIQUE_QUESTIONS]:
-                del questions[k]
+        _bound_counter(questions, max_entries=_MAX_UNIQUE_QUESTIONS)
 
     stats["total_answers"] = max(0, _safe_int(stats.get("total_answers", 0))) + 1
     stats["last_updated"] = now

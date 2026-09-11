@@ -193,3 +193,39 @@ def test_user_limit_handles_corrupted_entry_and_keeps_bounded_size(monkeypatch):
 
     assert len(bd["bot_stats"]["user_messages"]) == bot_stats._MAX_TRACKED_USERS
     assert "corrupted" not in bd["bot_stats"]["user_messages"]
+
+
+def test_counter_limits_apply_on_load_and_runtime(monkeypatch, tmp_path):
+    import json
+    import app.bot.bot_stats as bot_stats
+
+    monkeypatch.setattr(bot_stats, "_MAX_WIKI_PAGES", 2)
+    monkeypatch.setattr(bot_stats, "_MAX_UNIQUE_QUESTIONS", 2)
+    path = tmp_path / "bot_stats.json"
+    path.write_text(
+        json.dumps({
+            "wiki_pages": {"low": 1, "mid": 2, "high": 3},
+            "questions": {"low": 1, "mid": 2, "high": 3},
+            "stats_version": 2,
+            "hourly_activity_kind": "incoming",
+            "hourly_activity": [0] * 24,
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(bot_stats, "_stats_path", lambda: path)
+    loaded: dict = {}
+    bot_stats.load_bot_stats(loaded)
+
+    assert set(loaded["bot_stats"]["wiki_pages"]) == {"mid", "high"}
+    assert set(loaded["bot_stats"]["questions"]) == {"mid", "high"}
+
+    monkeypatch.setattr(bot_stats, "_persist", lambda *_args, **_kwargs: None)
+    runtime: dict = {"bot_stats": bot_stats._empty_stats()}
+    for _ in range(3):
+        bot_stats.record_answer(runtime, url="high", question="high", source="wiki")
+    for _ in range(2):
+        bot_stats.record_answer(runtime, url="mid", question="mid", source="wiki")
+    bot_stats.record_answer(runtime, url="low", question="low", source="wiki")
+
+    assert set(runtime["bot_stats"]["wiki_pages"]) == {"mid", "high"}
+    assert set(runtime["bot_stats"]["questions"]) == {"mid", "high"}
