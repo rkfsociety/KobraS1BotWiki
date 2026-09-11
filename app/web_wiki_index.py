@@ -480,14 +480,15 @@ class WebWikiIndex:
         if not q:
             return []
         limit = max(1, top_k)
-        cache_key = f"{q}\x00{limit}"
+        cache_key = q
 
         with self._lock:
-            if cache_key in self._search_cache:
+            cached = self._search_cache.get(cache_key)
+            if cached is not None and len(cached) >= limit:
                 self._search_cache.move_to_end(cache_key)
                 # Не отдаём внутренний список: вызывающий код может изменить его
                 # и тем самым повредить результат для следующих запросов.
-                return list(self._search_cache[cache_key])
+                return list(cached[:limit])
             # Коллекции immutable: snapshot — это только несколько ссылок,
             # без копирования всего индекса под lock.
             blobs = self._blobs
@@ -518,7 +519,9 @@ class WebWikiIndex:
             # Обновление индекса могло произойти, пока считались fuzzy scores.
             # Не возвращаем устаревший snapshot в кэш после такого обновления.
             if version == self._version:
-                self._search_cache[cache_key] = result
+                cached = self._search_cache.get(cache_key)
+                if cached is None or len(result) >= len(cached):
+                    self._search_cache[cache_key] = result
                 self._search_cache.move_to_end(cache_key)
                 if len(self._search_cache) > _SEARCH_CACHE_SIZE:
                     self._search_cache.popitem(last=False)

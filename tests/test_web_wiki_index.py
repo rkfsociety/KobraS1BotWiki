@@ -154,6 +154,28 @@ def test_search_cache_hit_returns_copy():
     assert [doc.title for doc, _ in index.search("printer", top_k=2)] == ["one", "two"]
 
 
+def test_search_reuses_wider_cache_for_smaller_top_k(monkeypatch):
+    index = WebWikiIndex([
+        WebWikiDoc(title="one", url="https://example.test/one", text="printer bed"),
+        WebWikiDoc(title="two", url="https://example.test/two", text="printer nozzle"),
+    ])
+    calls = 0
+    original = index._score_one
+
+    def counted(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(index, "_score_one", counted)
+
+    wide = index.search("printer", top_k=2)
+    narrow = index.search("printer", top_k=1)
+
+    assert calls == 2
+    assert narrow == wide[:1]
+
+
 def test_search_normalizes_equivalent_top_k_cache_keys():
     index = WebWikiIndex([
         WebWikiDoc(title="one", url="https://example.test/one", text="printer bed"),
