@@ -346,6 +346,7 @@ _SEARCH_CACHE_SIZE = 500
 _INDEX_CACHE_VERSION = 2
 _MAX_INDEX_CACHE_BYTES = 64 * 1024 * 1024
 _MAX_SITEMAP_BYTES = 16 * 1024 * 1024
+_MAX_WIKI_PAGE_BYTES = 16 * 1024 * 1024
 _DEFAULT_EXTRA_WIKI_URLS = (
     "https://wiki.anycubic.com/en/fdm-3d-printer/anycubic-kobra-x",
     "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-4-combo",
@@ -1019,7 +1020,11 @@ def _fetch_docs(urls: list[str]) -> list[WebWikiDoc]:
                 r = client.get(url)
                 if r.status_code != 200:
                     continue
-                title, text = _extract_text_from_html(r.text)
+                page_text = r.text
+                if len(page_text.encode("utf-8")) > _MAX_WIKI_PAGE_BYTES:
+                    logging.warning("Пропущена слишком большая страница wiki: %s", url)
+                    continue
+                title, text = _extract_text_from_html(page_text)
                 docs.append(WebWikiDoc(title=title, url=url, text=text))
             except Exception:
                 continue

@@ -359,3 +359,31 @@ def test_fetch_docs_client_closes_when_unexpected_error(monkeypatch):
         _fetch_docs(["https://wiki.test/page"])
 
     assert clients and clients[0].closed
+
+
+def test_fetch_docs_skips_oversized_page_before_html_parse(monkeypatch):
+    import app.web_wiki_index as wiki_index
+
+    class Response:
+        status_code = 200
+        text = "<html>" + ("x" * 100) + "</html>"
+
+    class Client:
+        def __init__(self, **kwargs):
+            self.closed = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.closed = True
+            return False
+
+        def get(self, url):
+            return Response()
+
+    monkeypatch.setattr(wiki_index.httpx, "Client", Client)
+    monkeypatch.setattr(wiki_index, "_MAX_WIKI_PAGE_BYTES", 10)
+
+    with pytest.raises(RuntimeError, match="скачать страницы"):
+        _fetch_docs(["https://wiki.test/page"])
