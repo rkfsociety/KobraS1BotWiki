@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import secrets
 import threading
 import time
@@ -35,17 +36,33 @@ def _store(application: Any) -> tuple[dict[str, dict[str, Any]], threading.Lock]
         # Должен быть создан в lifecycle до старта; на всякий случай — создаём здесь.
         lock = threading.Lock()
         application.bot_data["panel_login_lock"] = lock
-    codes = application.bot_data.setdefault("panel_login_codes", {})
+    codes = application.bot_data.get("panel_login_codes")
+    if not isinstance(codes, dict):
+        codes = {}
+        application.bot_data["panel_login_codes"] = codes
     return codes, lock
 
 
+def _safe_float(value: object, default: float = 0.0) -> float:
+    try:
+        parsed = float(value)
+        return parsed if math.isfinite(parsed) else default
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
 def _gc(codes: dict[str, dict[str, Any]], now: float) -> None:
-    dead = [c for c, r in codes.items() if r.get("exp", 0) < now]
+    dead = [
+        c for c, r in codes.items()
+        if not isinstance(r, dict) or _safe_float(r.get("exp")) < now
+    ]
     for c in dead:
         codes.pop(c, None)
     # подстраховка от разрастания
     if len(codes) > _MAX_CODES:
-        for c in sorted(codes, key=lambda k: codes[k].get("created", 0))[: len(codes) - _MAX_CODES]:
+        for c in sorted(codes, key=lambda k: _safe_float(codes[k].get("created"))):
+            if len(codes) <= _MAX_CODES:
+                break
             codes.pop(c, None)
 
 
@@ -74,7 +91,7 @@ def get_code_status(application: Any, code: str) -> str:
     now = time.time()
     with lock:
         rec = codes.get(code)
-        if not rec or rec.get("exp", 0) < now:
+        if not isinstance(rec, dict) or _safe_float(rec.get("exp")) < now:
             return "expired"
         return str(rec.get("status", "expired"))
 
@@ -85,7 +102,7 @@ def consume_authorized(application: Any, code: str, nonce: str) -> tuple[dict[st
     now = time.time()
     with lock:
         rec = codes.get(code)
-        if not rec or rec.get("exp", 0) < now:
+        if not isinstance(rec, dict) or _safe_float(rec.get("exp")) < now:
             return None, "expired"
         if not secrets.compare_digest(str(rec.get("nonce", "")), nonce or ""):
             return None, "nonce"
@@ -126,7 +143,11 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     now = time.time()
     with lock:
         rec = codes.get(payload)
-        valid = bool(rec and rec.get("exp", 0) > now and rec.get("status") == "pending")
+        valid = bool(
+            isinstance(rec, dict)
+            and _safe_float(rec.get("exp")) > now
+            and rec.get("status") == "pending"
+        )
     if not valid:
         await msg.reply_text("Ссылка для входа в панель недействительна или истекла. Откройте панель и начните вход заново.")
         return
@@ -147,7 +168,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     label = f"@{user.username}" if user.username else (user.full_name or str(user.id))
     with lock:
         rec = codes.get(payload)
-        if not rec or rec.get("exp", 0) < now:
+        if not isinstance(rec, dict) or _safe_float(rec.get("exp")) < now:
             await msg.reply_text("Ссылка истекла, начните вход заново.")
             return
         rec["uid"] = user.id

@@ -179,6 +179,21 @@ def test_login_failure_cache_recovers_from_corrupted_timestamps(monkeypatch):
     assert state.login_fails["1.2.3.4"] == [950.0]
 
 
+def test_panel_login_store_recovers_from_corrupted_runtime_state(monkeypatch):
+    import app.bot.panel_login as panel_login
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(panel_login.time, "time", lambda: 1000.0)
+    application = SimpleNamespace(bot_data={"panel_login_codes": ["broken"]})
+
+    code = panel_login.create_login_code(application, "nonce")
+    assert isinstance(application.bot_data["panel_login_codes"], dict)
+    assert panel_login.get_code_status(application, code) == "pending"
+
+    application.bot_data["panel_login_codes"]["broken"] = {"exp": "bad"}
+    assert panel_login.get_code_status(application, "broken") == "expired"
+
+
 def _login(c: http.client.HTTPConnection) -> str:
     c.request(
         "POST",
