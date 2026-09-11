@@ -513,6 +513,7 @@ def _is_sarcastic_printer_banter(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_sarcastic_thread_banter(text: str) -> bool:
     """Сарказм в треде («спал бы», «зачем тебе») — не запрос к вики."""
     if not text or not text.strip():
