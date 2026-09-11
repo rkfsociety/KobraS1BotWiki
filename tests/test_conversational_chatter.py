@@ -19,6 +19,7 @@ from app.bot.text_heuristics import (
     _topic_is_marketplace_commerce_intent,
 )
 from app.bot.heuristics import _is_slicer_app_disambiguation
+from app.bot.heuristics import _is_other_printer_maintenance_story
 from app.web_wiki_index import _looks_like_question
 
 _BED_COMPARE_MSG = "Разберемся, тут кстати стол регулируется не сверху как на кобре"
@@ -430,6 +431,17 @@ def test_other_printer_extruder_story_is_chatter():
     assert _is_conversational_chatter(_BAMBU_EXTRUDER_STORY)
     assert not needs_model_clarification_for(_BAMBU_EXTRUDER_STORY)
     assert not _looks_like_question(_BAMBU_EXTRUDER_STORY)
+
+
+def test_other_printer_maintenance_reuses_cached_classification():
+    _is_other_printer_maintenance_story.cache_clear()
+    before = _is_other_printer_maintenance_story.cache_info()
+    assert _is_other_printer_maintenance_story(_BAMBU_EXTRUDER_STORY)
+    middle = _is_other_printer_maintenance_story.cache_info()
+    assert _is_other_printer_maintenance_story(_BAMBU_EXTRUDER_STORY)
+    after = _is_other_printer_maintenance_story.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
 
 
 _ORCA_OPINION = "А зачем для кобры орка? Стандартный слайсер огонь"

@@ -738,6 +738,7 @@ def _is_other_printer_experience_story(text: str) -> bool:
     return story and (maint or _mentions_competitor_printer(text))
 
 
+@lru_cache(maxsize=4096)
 def _is_other_printer_maintenance_story(text: str) -> bool:
     """Личная история про Bambu/P2S и разбор экструдера — не гайд Kobra."""
     if not text or not text.strip() or "?" in text:
