@@ -1305,6 +1305,7 @@ def _is_peer_diagnostic_interrogation(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_peer_action_experience_question(text: str) -> bool:
     """«А ты замерял резонанс?» / «Прошивку 2.7.2.7 ставили?» — спрашивают собеседников об их опыте, не бота."""
     if not text or not text.strip() or "?" not in text:
