@@ -28,6 +28,17 @@ class _Index:
         return True
 
 
+class _CountingIndex:
+    doc_count = 0
+
+    def __init__(self) -> None:
+        self.looks_calls = 0
+
+    def looks_like_question(self, _text: str) -> bool:
+        self.looks_calls += 1
+        return True
+
+
 def _context() -> types.SimpleNamespace:
     return types.SimpleNamespace(
         application=types.SimpleNamespace(
@@ -111,6 +122,33 @@ def test_manual_answer_route_is_reached_after_message_gates(monkeypatch):
     asyncio.run(message_module.on_message(_update(), _context()))
 
     assert calls == ["как настроить первый слой?"]
+
+
+def test_question_classification_is_reused_between_message_gates(monkeypatch):
+    _patch_message_side_effects(monkeypatch)
+    monkeypatch.setattr(message_module, "chat_topic_in_allowed_lists", lambda **kwargs: True)
+
+    async def can_process(*args, **kwargs):
+        return True, None
+
+    monkeypatch.setattr(message_module, "should_process_incoming_wiki_message", can_process)
+    monkeypatch.setattr(message_module, "can_bot_reply_in_context", lambda **kwargs: True)
+    monkeypatch.setattr(message_module, "_is_triggered_message", lambda *args, **kwargs: False)
+    monkeypatch.setattr(message_module, "_reply_is_expected_by_bot", lambda *args, **kwargs: False)
+    monkeypatch.setattr(message_module, "_is_conversational_chatter", lambda _text: False)
+
+    async def manual(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr(message_module, "_try_reply_manual_qa", manual)
+    context = _context()
+    context.application.bot_data["settings"].require_trigger = True
+    index = _CountingIndex()
+    context.application.bot_data["wiki_index"] = index
+
+    asyncio.run(message_module.on_message(_update(), context))
+
+    assert index.looks_calls == 1
 
 
 def test_lifecycle_registers_commands_update_and_message_handlers_in_order():

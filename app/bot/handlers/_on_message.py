@@ -256,6 +256,9 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             text[:LOG_MIRROR_TEXT_MAX],
         )
 
+    # Классификация может понадобиться двум gate-ам ниже; не считаем её дважды.
+    looks_like_question: bool | None = None
+
     # В группах: на вопросы отвечаем без @; @ или reply нужны для прочих сообщений (если REQUIRE_TRIGGER).
     if can_reply and settings.require_trigger:
         bot_username = context.application.bot_data.get("bot_username")
@@ -263,7 +266,9 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         triggered = _is_triggered_message(update, bot_username=bot_username, bot_id=bot_id) or _reply_is_expected_by_bot(
             update, context
         )
-        if not triggered and not index.looks_like_question(text):
+        if not triggered:
+            looks_like_question = index.looks_like_question(text)
+        if not triggered and not looks_like_question:
             if settings.log_decisions:
                 log_skip(chat_id, "not_triggered", msg=msg)
             return
@@ -289,10 +294,13 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             log_skip(chat_id, "conversational_chatter", msg=msg)
         return
 
-    if settings.questions_only and not index.looks_like_question(text):
-        if settings.log_decisions:
-            log_skip(chat_id, "not_a_question", msg=msg)
-        return
+    if settings.questions_only:
+        if looks_like_question is None:
+            looks_like_question = index.looks_like_question(text)
+        if not looks_like_question:
+            if settings.log_decisions:
+                log_skip(chat_id, "not_a_question", msg=msg)
+            return
 
     # Вне настроенного контекста отвечать нельзя, но вопрос сохраняем в общей очереди.
     if not can_reply:
