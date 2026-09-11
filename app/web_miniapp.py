@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from heapq import nsmallest
 import json
 import math
 import secrets
@@ -483,10 +484,11 @@ def create_miniapp_session(state: Any, init_data: str) -> tuple[int, dict[str, A
                 sessions.pop(old_token, None)
         if len(sessions) >= _MAX_MINIAPP_SESSIONS:
             overflow = len(sessions) - _MAX_MINIAPP_SESSIONS + 1
-            for old_token in sorted(
-                sessions,
-                key=lambda token: _session_exp(sessions[token]),
-            )[:overflow]:
+            for old_token, _session in nsmallest(
+                overflow,
+                sessions.items(),
+                key=lambda item: _session_exp(item[1]),
+            ):
                 sessions.pop(old_token, None)
         sessions[token] = {"exp": now + ttl, "user": user, "role": role}
     return 200, {"session": token, "user": user, "role": role, "capabilities": {"admin": role == "admin"}}
