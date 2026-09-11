@@ -699,7 +699,11 @@ class WebWikiIndexer:
                 )
                 if st.urls and cache_version >= _INDEX_CACHE_VERSION and config_matches:
 
-                    st.urls = _dedupe_urls(st.urls + list(self.extra_urls), base_url=self.base_url)
+                    st.urls = _dedupe_urls(
+                        st.urls + list(self.extra_urls),
+                        base_url=self.base_url,
+                        max_pages=self.max_pages,
+                    )
 
                     st.next_idx = min(st.next_idx, len(st.urls))
 
