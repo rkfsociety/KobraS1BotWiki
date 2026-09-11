@@ -89,6 +89,18 @@ def test_tower_disable_question_not_chatter():
     assert not _is_multicolor_tower_rhetoric("как отключить башню при многоцветной печати?")
 
 
+def test_multicolor_tower_rhetoric_reuses_cached_classification():
+    text = "многоцвет же без башни не чепятается ?"
+    _is_multicolor_tower_rhetoric.cache_clear()
+    before = _is_multicolor_tower_rhetoric.cache_info()
+    assert _is_multicolor_tower_rhetoric(text)
+    middle = _is_multicolor_tower_rhetoric.cache_info()
+    assert _is_multicolor_tower_rhetoric(text)
+    after = _is_multicolor_tower_rhetoric.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
 # --- вторая партия ошибочных ответов ---
 
 def test_peer_diagnostic_checklist_is_chatter():

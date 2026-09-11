@@ -1923,6 +1923,7 @@ def _is_print_task_planning_statement(text: str) -> bool:
     return task and reason
 
 
+@lru_cache(maxsize=4096)
 def _is_multicolor_tower_rhetoric(text: str) -> bool:
     """«Без башни никак / без башни не печатается?» — риторика про нужность Prime Tower, не запрос к вики.
 
