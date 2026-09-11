@@ -28,6 +28,7 @@ from app.bot.heuristics import _is_cross_chat_tip_sharing
 from app.bot.heuristics import _is_chat_past_incident_recollection
 from app.bot.heuristics import _is_sarcastic_thread_banter
 from app.bot.heuristics import _is_sarcastic_printer_banter
+from app.bot.heuristics import _is_peer_social_printer_question
 from app.web_wiki_index import _looks_like_question
 
 _BED_COMPARE_MSG = "Разберемся, тут кстати стол регулируется не сверху как на кобре"
@@ -455,6 +456,19 @@ def test_sarcastic_printer_banter_reuses_cached_classification():
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
     assert not _is_sarcastic_printer_banter("Как убрать люфт стола?")
+
+
+def test_peer_social_printer_question_reuses_cached_classification():
+    text = "У тебя ещё кобра на гарантии?"
+    _is_peer_social_printer_question.cache_clear()
+    before = _is_peer_social_printer_question.cache_info()
+    assert _is_peer_social_printer_question(text)
+    middle = _is_peer_social_printer_question.cache_info()
+    assert _is_peer_social_printer_question(text)
+    after = _is_peer_social_printer_question.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_peer_social_printer_question("Как настроить кобру?")
 
 
 _TWO_ACE_BANTER = "а говорит многоцвет не печатает, вот зачем ему две аськи?"

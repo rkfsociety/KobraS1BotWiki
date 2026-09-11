@@ -1175,6 +1175,7 @@ def _is_price_hyperbole_banter(text: str) -> bool:
     return price and (hyperbole_noun or speculative)
 
 
+@lru_cache(maxsize=4096)
 def _is_peer_social_printer_question(text: str) -> bool:
     """Вопрос к человеку в чате (гарантия, «у тебя ещё кобра»), не к боту/вики."""
     if not text or not text.strip():
