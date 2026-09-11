@@ -12,6 +12,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 PARSER_VERSION = 2
+_MAX_CACHED_CODES = 1000
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,28 @@ def _normalize_code(s: str) -> str | None:
     if s.isdigit() and 4 <= len(s) <= 7:
         return s
     return None
+
+
+def _decode_cached_codes(data: object) -> dict[str, ErrorCodeInfo]:
+    """Восстанавливает валидные записи, не отбрасывая весь кэш из-за одной битой."""
+    if not isinstance(data, dict):
+        return {}
+    result: dict[str, ErrorCodeInfo] = {}
+    for key, raw in data.items():
+        if not isinstance(raw, dict):
+            continue
+        code = _normalize_code(str(raw.get("code") or key))
+        if not code:
+            continue
+        result[code] = ErrorCodeInfo(
+            code=code,
+            title=str(raw.get("title") or ""),
+            cause=str(raw.get("cause") or ""),
+            fix=str(raw.get("fix") or ""),
+        )
+        if len(result) >= _MAX_CACHED_CODES:
+            break
+    return result
 
 
 def _extract_text(el) -> str:
@@ -202,8 +225,9 @@ async def ensure_error_codes_catalog(
             and (_now() - ts) < float(refresh_hours) * 3600.0
         ):
             data = cached.get("codes", {})
-            if isinstance(data, dict):
-                return {k: ErrorCodeInfo(**v) for k, v in data.items() if isinstance(v, dict)}
+            decoded = _decode_cached_codes(data)
+            if decoded:
+                return decoded
 
     url = base_url.rstrip("/") + "/en/error-codes"
     try:
@@ -214,8 +238,9 @@ async def ensure_error_codes_catalog(
             # Если парсер не вытащил ничего, не перетираем возможный непустой кэш.
             if not codes and cached and isinstance(cached, dict):
                 data = cached.get("codes", {})
-                if isinstance(data, dict) and data:
-                    return {k: ErrorCodeInfo(**v) for k, v in data.items() if isinstance(v, dict)}
+                decoded = _decode_cached_codes(data)
+                if decoded:
+                    return decoded
             _save_json(
                 cache_file,
                 {
@@ -231,8 +256,7 @@ async def ensure_error_codes_catalog(
         # если сеть/парсинг упали — отдаём что есть в кэше, либо пусто
         if cached and isinstance(cached, dict):
             data = cached.get("codes", {})
-            if isinstance(data, dict):
-                return {k: ErrorCodeInfo(**v) for k, v in data.items() if isinstance(v, dict)}
+            return _decode_cached_codes(data)
         return {}
 
 

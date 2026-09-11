@@ -39,3 +39,25 @@ async def test_invalid_cache_metadata_does_not_abort_refresh(tmp_path, monkeypat
     )
 
     assert result["11527"].title == "Test error"
+
+
+@pytest.mark.asyncio
+async def test_corrupted_cached_entry_does_not_hide_valid_entries(tmp_path, monkeypatch):
+    path = tmp_path / "catalog.json"
+    path.write_text(
+        '{"ts": 1000, "count": 2, "parser_version": 2, "codes": {'
+        '"11527": {"code": "11527", "title": "Valid"}, '
+        '"broken": {"title": 7}, '
+        '"11528": {"code": "11528", "cause": "Cause"}}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(catalog, "_now", lambda: 1001.0)
+
+    result = await catalog.ensure_error_codes_catalog(
+        base_url="https://wiki.anycubic.com",
+        cache_path=path,
+        refresh_hours=24,
+    )
+
+    assert set(result) == {"11527", "11528"}
+    assert result["11527"].title == "Valid"
