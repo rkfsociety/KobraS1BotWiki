@@ -24,6 +24,7 @@ from app.bot.heuristics import _is_other_printer_maintenance_story
 from app.bot.heuristics import _is_print_quality_meta_curiosity
 from app.bot.heuristics import _is_printing_status_announcement
 from app.bot.heuristics import _is_colloquial_printer_fragment
+from app.bot.heuristics import _is_cross_chat_tip_sharing
 from app.web_wiki_index import _looks_like_question
 
 _BED_COMPARE_MSG = "Разберемся, тут кстати стол регулируется не сверху как на кобре"
@@ -401,6 +402,17 @@ def test_cross_chat_chitu_tip_is_chatter():
     assert _is_conversational_chatter(_CHITU_CHAT_TIP)
     assert not needs_model_clarification_for(_CHITU_CHAT_TIP)
     assert not _looks_like_question(_CHITU_CHAT_TIP)
+
+
+def test_cross_chat_tip_reuses_cached_classification():
+    _is_cross_chat_tip_sharing.cache_clear()
+    before = _is_cross_chat_tip_sharing.cache_info()
+    assert _is_cross_chat_tip_sharing(_CHITU_CHAT_TIP)
+    middle = _is_cross_chat_tip_sharing.cache_info()
+    assert _is_cross_chat_tip_sharing(_CHITU_CHAT_TIP)
+    after = _is_cross_chat_tip_sharing.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
 
 
 _TWO_ACE_BANTER = "а говорит многоцвет не печатает, вот зачем ему две аськи?"
