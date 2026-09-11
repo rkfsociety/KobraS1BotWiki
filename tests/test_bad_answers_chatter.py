@@ -36,6 +36,7 @@ from app.bot.heuristics import _is_filament_feed_test_probe
 from app.bot.heuristics import _is_offbeat_social_banter
 from app.bot.heuristics import _is_pure_numeric_or_symbol_message
 from app.bot.heuristics import _is_bare_rhetorical_context_question
+from app.bot.heuristics import _is_personal_chat_action_reference
 
 # --- сами ошибочные ответы (должны стать болтовнёй) ---
 
@@ -394,6 +395,19 @@ def test_bare_rhetorical_question_reuses_cached_classification():
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
     assert not _is_bare_rhetorical_context_question("Как настроить стол?")
+
+
+def test_personal_chat_reference_reuses_cached_classification():
+    text = "Я тут выше писал про стол"
+    _is_personal_chat_action_reference.cache_clear()
+    before = _is_personal_chat_action_reference.cache_info()
+    assert _is_personal_chat_action_reference(text)
+    middle = _is_personal_chat_action_reference.cache_info()
+    assert _is_personal_chat_action_reference(text)
+    after = _is_personal_chat_action_reference.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_personal_chat_action_reference("Где найти то, что я писал выше?")
 
 
 # --- разбор recent_replies / bad_answers 2026-06 (отвеченные) ---

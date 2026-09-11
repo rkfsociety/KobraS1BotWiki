@@ -1812,6 +1812,7 @@ def _is_bare_rhetorical_context_question(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_personal_chat_action_reference(text: str) -> bool:
     """«Я тут где-то скидывал/спрашивал» — ссылка на своё прошлое действие в чате, не вопрос к боту."""
     if not text or not text.strip():
