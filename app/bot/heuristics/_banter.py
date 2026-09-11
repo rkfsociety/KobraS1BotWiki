@@ -2036,6 +2036,7 @@ def _message_has_help_intent(text: str) -> bool:
     )
 
 
+@lru_cache(maxsize=4096)
 def _is_multicolor_flow_calibration_chat(text: str | None) -> bool:
     """Вопрос про работу авто-калибровки потока в многоцветной печати — в вики нет ответа.
 

@@ -36,3 +36,14 @@ def test_specific_material_slicing_still_works():
     # Конкретный материал + поток — это уже настройки слайсинга, не общий вопрос о фиче.
     msg = "Какой поток ставить для TPU при печати?"
     assert not _is_multicolor_flow_calibration_chat(msg)
+
+
+def test_multicolor_flow_calibration_reuses_cached_classification():
+    _is_multicolor_flow_calibration_chat.cache_clear()
+    before = _is_multicolor_flow_calibration_chat.cache_info()
+    assert _is_multicolor_flow_calibration_chat(_MSG)
+    middle = _is_multicolor_flow_calibration_chat.cache_info()
+    assert _is_multicolor_flow_calibration_chat(_MSG)
+    after = _is_multicolor_flow_calibration_chat.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
