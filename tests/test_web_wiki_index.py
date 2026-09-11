@@ -10,10 +10,24 @@ from app.web_wiki_index import (
     WebWikiIndexer,
     _extract_text_from_html,
     _fetch_docs,
+    _looks_like_question,
     _load_cache,
     _read_sitemap_urls,
     _save_cache,
 )
+
+
+def test_looks_like_question_reuses_bounded_cache():
+    text = "как настроить стол на kobra s1?"
+    _looks_like_question.cache_clear()
+
+    assert _looks_like_question(text)
+    before = _looks_like_question.cache_info()
+    assert _looks_like_question(text)
+    after = _looks_like_question.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize
 
 
 def test_indexer_normalizes_corrupted_state_without_refetching_valid_urls(tmp_path, monkeypatch):

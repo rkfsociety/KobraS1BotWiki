@@ -168,6 +168,7 @@ def _make_search_blob(doc: WebWikiDoc) -> str:
 
 
 
+@lru_cache(maxsize=4096)
 def _looks_like_question(text: str) -> bool:
 
     if _is_marketplace_promo_message(text):
