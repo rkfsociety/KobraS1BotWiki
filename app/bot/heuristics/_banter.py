@@ -1652,6 +1652,7 @@ def _is_relay_to_peer_chatter(text: str) -> bool:
     return relay and third_party and media
 
 
+@lru_cache(maxsize=4096)
 def _is_money_worth_banter(text: str) -> bool:
     """«в моих деньгах это как 2 кобры, а в ваших и с скидками 3» — болтовня о ценности, не вопрос."""
     if not text or not text.strip():

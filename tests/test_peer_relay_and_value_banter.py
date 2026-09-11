@@ -40,6 +40,18 @@ def test_money_worth_banter():
     assert _is_non_wiki_chatter_message(_MONEY)
 
 
+def test_money_worth_banter_reuses_cached_classification():
+    _is_money_worth_banter.cache_clear()
+    before = _is_money_worth_banter.cache_info()
+    assert _is_money_worth_banter(_MONEY)
+    middle = _is_money_worth_banter.cache_info()
+    assert _is_money_worth_banter(_MONEY)
+    after = _is_money_worth_banter.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_money_worth_banter("Подскажите какую кобру купить, в моих деньгах это дорого")
+
+
 def test_design_feature_car_sarcasm():
     assert _is_design_feature_car_sarcasm(_CAR)
     assert _is_non_wiki_chatter_message(_CAR)
