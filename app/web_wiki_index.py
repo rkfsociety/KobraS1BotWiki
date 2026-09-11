@@ -571,6 +571,17 @@ class WikiState:
     cache_version: int = 0
 
 
+def _safe_nonnegative_int(value: object, default: int) -> int:
+    """Читает целое из state-файла без отрицательных и boolean-значений."""
+    if isinstance(value, bool):
+        return default
+    try:
+        result = int(value)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return result if result >= 0 else default
+
+
 
 
 
@@ -640,20 +651,42 @@ class WebWikiIndexer:
 
                 raw = json.loads(self.state_file.read_text(encoding="utf-8"))
 
-                cache_version = int(raw.get("cache_version") or 0)
+                if not isinstance(raw, dict):
+                    raise ValueError("некорректный формат state")
+
+                raw_urls = raw.get("urls")
+                urls = (
+                    [url.strip() for url in raw_urls if isinstance(url, str) and url.strip()]
+                    if isinstance(raw_urls, list)
+                    else []
+                )
+                stored_sitemap_url = raw.get("sitemap_url")
+                stored_base_url = raw.get("base_url")
+                sitemap_url = (
+                    stored_sitemap_url.strip()
+                    if isinstance(stored_sitemap_url, str) and stored_sitemap_url.strip()
+                    else self.sitemap_url
+                )
+                base_url = (
+                    stored_base_url.strip()
+                    if isinstance(stored_base_url, str) and stored_base_url.strip()
+                    else self.base_url
+                )
+
+                cache_version = _safe_nonnegative_int(raw.get("cache_version"), 0)
                 st = WikiState(
 
-                    sitemap_url=str(raw.get("sitemap_url") or self.sitemap_url),
+                    sitemap_url=sitemap_url,
 
-                    base_url=str(raw.get("base_url") or self.base_url),
+                    base_url=base_url,
 
-                    max_pages=int(raw.get("max_pages") or self.max_pages),
+                    max_pages=_safe_nonnegative_int(raw.get("max_pages"), self.max_pages),
 
-                    urls=list(raw.get("urls") or []),
+                    urls=urls,
 
-                    next_idx=int(raw.get("next_idx") or 0),
+                    next_idx=_safe_nonnegative_int(raw.get("next_idx"), 0),
 
-                    done_notified=bool(raw.get("done_notified") or False),
+                    done_notified=raw.get("done_notified") if isinstance(raw.get("done_notified"), bool) else False,
                     cache_version=cache_version,
 
                 )

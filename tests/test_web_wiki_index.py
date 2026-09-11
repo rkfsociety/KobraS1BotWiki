@@ -7,11 +7,41 @@ import pytest
 from app.web_wiki_index import (
     WebWikiIndex,
     WebWikiDoc,
+    WebWikiIndexer,
     _extract_text_from_html,
     _fetch_docs,
     _read_sitemap_urls,
     _save_cache,
 )
+
+
+def test_indexer_normalizes_corrupted_state_without_refetching_valid_urls(tmp_path, monkeypatch):
+    state_path = tmp_path / "state.json"
+    cache_path = tmp_path / "cache.json"
+    state_path.write_text(
+        '{"cache_version": "2", "sitemap_url": 7, "base_url": null, '
+        '"max_pages": -1, "urls": [" https://wiki.test/a ", 3], '
+        '"next_idx": -4, "done_notified": "false"}',
+        encoding="utf-8",
+    )
+
+    def fail_refetch(*_args, **_kwargs):
+        raise AssertionError("valid cached URLs must not trigger sitemap fetch")
+
+    monkeypatch.setattr("app.web_wiki_index._read_sitemap_urls", fail_refetch)
+    indexer = WebWikiIndexer(
+        index=WebWikiIndex.empty(),
+        cache_path=str(cache_path),
+        state_path=str(state_path),
+        sitemap_url="https://wiki.test/sitemap.xml",
+        base_url="https://wiki.test",
+        max_pages=100,
+    )
+
+    assert indexer._state.urls == ["https://wiki.test/a"]
+    assert indexer._state.next_idx == 0
+    assert indexer._state.max_pages == 100
+    assert indexer._state.done_notified is False
 
 
 def test_extracts_wikijs_template_contents_instead_of_app_shell():
