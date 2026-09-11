@@ -55,6 +55,25 @@ def test_ace_not_detected_intent():
     assert _user_already_replaced_motherboard(_ACE_MSG)
 
 
+def test_ace_not_detected_intent_reuses_cached_classification():
+
+    _topic_is_ace_not_detected_intent.cache_clear()
+
+    before = _topic_is_ace_not_detected_intent.cache_info()
+
+    assert _topic_is_ace_not_detected_intent(_ACE_MSG)
+
+    middle = _topic_is_ace_not_detected_intent.cache_info()
+
+    assert _topic_is_ace_not_detected_intent(_ACE_MSG)
+
+    after = _topic_is_ace_not_detected_intent.cache_info()
+
+    assert middle.misses == before.misses + 1
+
+    assert after.hits == middle.hits + 1
+
+
 
 
 
@@ -167,6 +186,5 @@ def test_ace_connection_intent_not_blocking_page():
     assert _response_wiki_url_acceptable(_ACE_CONN_MSG, network)
 
     assert _topic_path_bonus(_ACE_CONN_MSG, binding) > _topic_path_bonus(_ACE_CONN_MSG, blocking)
-
 
 

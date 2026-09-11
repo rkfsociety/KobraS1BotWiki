@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from app.bot.heuristics._base import _ace_mentioned
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_ace_not_detected_intent(text: str) -> bool:
     """Принтер/софт не видит ACE Pro (аська)."""
     t = text.lower()
@@ -30,6 +32,7 @@ def _topic_is_ace_not_detected_intent(text: str) -> bool:
     return bool(has_not_seen)
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_ace_connection_intent(text: str | None) -> bool:
     """ACE подключена, но сбои: ошибки/выброс из печати, неисправность связи."""
     if not text:
