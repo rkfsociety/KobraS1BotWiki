@@ -18,6 +18,7 @@ import math
 import secrets
 import threading
 import time
+from heapq import nsmallest
 from typing import Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
@@ -60,9 +61,8 @@ def _gc(codes: dict[str, dict[str, Any]], now: float) -> None:
         codes.pop(c, None)
     # подстраховка от разрастания
     if len(codes) > _MAX_CODES:
-        for c in sorted(codes, key=lambda k: _safe_float(codes[k].get("created"))):
-            if len(codes) <= _MAX_CODES:
-                break
+        overflow = len(codes) - _MAX_CODES
+        for c in nsmallest(overflow, codes, key=lambda k: _safe_float(codes[k].get("created"))):
             codes.pop(c, None)
 
 
