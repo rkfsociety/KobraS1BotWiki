@@ -9,6 +9,7 @@ import threading
 import time
 from pathlib import Path
 from functools import lru_cache
+from heapq import nlargest, nsmallest
 from typing import Any
 
 from telegram.ext import ContextTypes
@@ -22,6 +23,7 @@ from app.bot.constants import (
 
 _STORE_SAVE_LOCK = threading.Lock()
 _ANSWER_CTX_SAVE_INTERVAL = 60.0
+_MAX_ANSWER_CTX_ENTRIES = 800
 
 
 def _save_interval_elapsed(last_value: object, *, now: float, interval: float) -> bool:
@@ -76,12 +78,33 @@ def _save_clarify_store(data: dict[str, dict]) -> None:
 def _norm_text(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").lower()).strip()
 
+def _bound_answer_ctx_store(raw: object) -> dict[str, dict]:
+    if not isinstance(raw, dict):
+        return {}
+    valid = {
+        key: value
+        for key, value in raw.items()
+        if isinstance(key, str) and isinstance(value, dict)
+    }
+    if len(valid) <= _MAX_ANSWER_CTX_ENTRIES and len(valid) == len(raw):
+        return raw
+    if len(valid) <= _MAX_ANSWER_CTX_ENTRIES:
+        return valid
+    return dict(
+        nlargest(
+            _MAX_ANSWER_CTX_ENTRIES,
+            valid.items(),
+            key=lambda item: _answer_ctx_timestamp(item[1]),
+        )
+    )
+
+
 def _load_answer_ctx_store() -> dict[str, dict]:
     try:
         if not ANSWER_CTX_STORE.exists():
             return {}
         raw = json.loads(ANSWER_CTX_STORE.read_text(encoding="utf-8"))
-        return raw if isinstance(raw, dict) else {}
+        return _bound_answer_ctx_store(raw)
     except Exception:
         return {}
 
@@ -90,6 +113,10 @@ def _get_answer_ctx_store(bot_data: dict[str, Any]) -> dict[str, dict]:
     """Возвращает store из памяти и читает диск только при первом обращении."""
     store = bot_data.get("answer_ctx_store")
     if isinstance(store, dict):
+        bounded = _bound_answer_ctx_store(store)
+        if bounded is not store:
+            bot_data["answer_ctx_store"] = bounded
+            store = bounded
         return store
     store = _load_answer_ctx_store()
     bot_data["answer_ctx_store"] = store
@@ -153,10 +180,14 @@ def _record_bot_answer_context(
         "ts": time.time(),
     }
     # Ограничим размер, чтобы не разрасталось бесконечно
-    if len(store) > 800:
-        # удаляем самые старые
-        items = sorted(store.items(), key=lambda kv: _answer_ctx_timestamp(kv[1]))
-        for k, _ in items[:200]:
+    if len(store) > _MAX_ANSWER_CTX_ENTRIES:
+        # удаляем самые старые, не сортируя весь store
+        items = nsmallest(
+            len(store) - (_MAX_ANSWER_CTX_ENTRIES - 200),
+            store.items(),
+            key=lambda item: _answer_ctx_timestamp(item[1]),
+        )
+        for k, _ in items:
             store.pop(k, None)
     _save_answer_ctx_store(store, bot_data=context.application.bot_data)
 

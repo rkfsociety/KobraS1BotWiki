@@ -55,6 +55,25 @@ def test_answer_context_accessor_loads_disk_only_when_missing(monkeypatch):
     assert calls == [1]
 
 
+def test_answer_context_loader_discards_malformed_and_old_entries(monkeypatch, tmp_path):
+    import app.bot.stores as stores
+
+    payload = {
+        "bad": "not-a-record",
+        **{str(index): {"ts": index, "q": "q"} for index in range(900)},
+    }
+    path = tmp_path / "answer-context.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(stores, "ANSWER_CTX_STORE", path)
+
+    result = stores._load_answer_ctx_store()
+
+    assert len(result) == stores._MAX_ANSWER_CTX_ENTRIES
+    assert "bad" not in result
+    assert "0" not in result
+    assert "899" in result
+
+
 def test_save_json_atomic_uses_no_fixed_temp_name(tmp_path):
     path = tmp_path / "state.json"
 
@@ -85,7 +104,7 @@ def test_answer_context_pruning_tolerates_malformed_entries(monkeypatch, tmp_pat
             context=_Context(), chat_id=1, bot_message_id=index, query="q", url=None
         )
 
-    assert len(_App.bot_data["answer_ctx_store"]) == 603
+    assert len(_App.bot_data["answer_ctx_store"]) == 601
 
 
 def test_answer_context_persistence_is_throttled_and_flushable(monkeypatch):
