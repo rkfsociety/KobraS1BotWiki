@@ -226,8 +226,14 @@ class _PanelState:
         """Множество user_id админов группы (с кэшем). Возвращает (ids, ошибка)."""
         with self.lock:
             c = self.admin_cache
-            if c and c.get("chat") == chat_id and c.get("exp", 0) > time.time():
-                return set(c["ids"]), None
+            cached_ids = c.get("ids") if isinstance(c, dict) else None
+            if (
+                isinstance(c, dict)
+                and c.get("chat") == chat_id
+                and _safe_float(c.get("exp")) > time.time()
+                and isinstance(cached_ids, (set, list, tuple, frozenset))
+            ):
+                return set(cached_ids), None
         try:
             resp = _telegram_api(token, "getChatAdministrators", {"chat_id": chat_id})
         except Exception as e:  # noqa: BLE001
@@ -292,7 +298,7 @@ class _PanelState:
     def login_blocked(self, ip: str) -> bool:
         now = time.time()
         with self.lock:
-            fails = [t for t in self.login_fails.get(ip, []) if now - t < 300]
+            fails = _fresh_login_failures(self.login_fails.get(ip), now=now)
             self.login_fails[ip] = fails
             return len(fails) >= 8
 
@@ -301,11 +307,12 @@ class _PanelState:
         with self.lock:
             # Чистим не только текущий IP: иначе поток уникальных адресов
             # может неограниченно раздувать память публичной панели.
-            self.login_fails = {
-                key: [timestamp for timestamp in timestamps if now - timestamp < 300]
+            fresh_fails = {
+                key: fresh
                 for key, timestamps in self.login_fails.items()
-                if any(now - timestamp < 300 for timestamp in timestamps)
+                if (fresh := _fresh_login_failures(timestamps, now=now))
             }
+            self.login_fails = fresh_fails
             self.login_fails.setdefault(ip, []).append(now)
             if len(self.login_fails) > _MAX_LOGIN_FAIL_IPS:
                 oldest = sorted(
@@ -318,6 +325,17 @@ class _PanelState:
     def clear_login_fails(self, ip: str) -> None:
         with self.lock:
             self.login_fails.pop(ip, None)
+
+
+def _fresh_login_failures(values: object, *, now: float) -> list[float]:
+    if not isinstance(values, list):
+        return []
+    fresh: list[float] = []
+    for value in values:
+        timestamp = _safe_float(value)
+        if now - timestamp < 300:
+            fresh.append(timestamp)
+    return fresh
 
 
 # ------------------------- HTML -------------------------

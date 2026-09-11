@@ -166,6 +166,19 @@ def test_panel_sessions_ignore_corrupted_or_infinite_expiry(tmp_path, monkeypatc
     assert state.get_session("broken") is None
 
 
+def test_login_failure_cache_recovers_from_corrupted_timestamps(monkeypatch):
+    import app.web_panel as panel
+    import threading
+
+    monkeypatch.setattr(panel.time, "time", lambda: 1000.0)
+    state = panel._PanelState.__new__(panel._PanelState)
+    state.lock = threading.Lock()
+    state.login_fails = {"1.2.3.4": ["broken", float("nan"), 950.0]}
+
+    assert state.login_blocked("1.2.3.4") is False
+    assert state.login_fails["1.2.3.4"] == [950.0]
+
+
 def _login(c: http.client.HTTPConnection) -> str:
     c.request(
         "POST",
