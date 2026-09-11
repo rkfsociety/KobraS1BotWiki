@@ -66,6 +66,7 @@ def topic_requires_printer_model(text: str) -> bool:
     return _topic_needs_printer_model(text) or topic_is_layer_slicing_intent(text)
 
 
+@lru_cache(maxsize=4096)
 def needs_model_clarification_for(text: str) -> bool:
     if _is_error_code_query(text):
         return False

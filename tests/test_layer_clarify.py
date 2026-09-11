@@ -81,3 +81,15 @@ def test_model_requirement_reuses_bounded_cache():
 
     assert after.hits == before.hits + 1
     assert after.currsize == before.currsize
+
+
+def test_clarify_gate_reuses_bounded_cache():
+    needs_model_clarification_for.cache_clear()
+
+    assert needs_model_clarification_for(_LAYER_QUESTION)
+    before = needs_model_clarification_for.cache_info()
+    assert needs_model_clarification_for(_LAYER_QUESTION)
+    after = needs_model_clarification_for.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize
