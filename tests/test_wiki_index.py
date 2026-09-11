@@ -51,3 +51,25 @@ def test_legacy_question_classification_reuses_bounded_cache():
 
     assert after.hits == before.hits + 1
     assert after.currsize == before.currsize
+
+
+def test_search_reuses_wider_cache_for_smaller_top_k(monkeypatch):
+    index = WikiIndex([
+        WikiDoc(title="one", slug="one", text="printer bed"),
+        WikiDoc(title="two", slug="two", text="printer nozzle"),
+    ])
+    calls = 0
+    module = __import__("app.wiki_index", fromlist=["fuzz"])
+    original = module.fuzz.token_set_ratio
+
+    def counted_ratio(query, text):
+        nonlocal calls
+        calls += 1
+        return original(query, text)
+
+    monkeypatch.setattr(module.fuzz, "token_set_ratio", counted_ratio)
+    wide = index.search("printer", top_k=2)
+    narrow = index.search("printer", top_k=1)
+
+    assert calls == 2
+    assert narrow == wide[:1]

@@ -56,7 +56,7 @@ class WikiIndex:
     def __init__(self, docs: list[WikiDoc]) -> None:
         self._docs = tuple(docs)
         self._texts = tuple(d.text for d in self._docs)
-        self._search_cache: OrderedDict[tuple[str, int], list[tuple[WikiDoc, int]]] = OrderedDict()
+        self._search_cache: OrderedDict[str, list[tuple[WikiDoc, int]]] = OrderedDict()
 
     @property
     def doc_count(self) -> int:
@@ -87,11 +87,11 @@ class WikiIndex:
         if not q:
             return []
         limit = max(1, top_k)
-        cache_key = (q, limit)
+        cache_key = q
         cached = self._search_cache.get(cache_key)
-        if cached is not None:
+        if cached is not None and len(cached) >= limit:
             self._search_cache.move_to_end(cache_key)
-            return list(cached)
+            return list(cached[:limit])
 
         scored = (
             (int(fuzz.token_set_ratio(q, text)), i)
@@ -101,7 +101,9 @@ class WikiIndex:
         results: list[tuple[WikiDoc, int]] = []
         for score, idx in best:
             results.append((self._docs[idx], score))
-        self._search_cache[cache_key] = results
+        cached = self._search_cache.get(cache_key)
+        if cached is None or len(results) >= len(cached):
+            self._search_cache[cache_key] = results
         self._search_cache.move_to_end(cache_key)
         if len(self._search_cache) > _SEARCH_CACHE_SIZE:
             self._search_cache.popitem(last=False)
