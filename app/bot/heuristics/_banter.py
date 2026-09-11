@@ -1713,6 +1713,7 @@ def _is_pure_numeric_or_symbol_message(text: str) -> bool:
     return not words
 
 
+@lru_cache(maxsize=4096)
 def _is_offbeat_social_banter(text: str) -> bool:
     """Болтовня без темы 3D-печати: сон, алкоголь, запрещённые вещества.
 

@@ -33,6 +33,7 @@ from app.bot.heuristics import _is_peer_diagnostic_interrogation
 from app.bot.heuristics import _is_chat_meta_discussion
 from app.bot.heuristics import _is_filament_testing_plan_sharing
 from app.bot.heuristics import _is_filament_feed_test_probe
+from app.bot.heuristics import _is_offbeat_social_banter
 
 # --- сами ошибочные ответы (должны стать болтовнёй) ---
 
@@ -352,6 +353,19 @@ def test_filament_feed_probe_reuses_cached_classification():
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
     assert not _is_filament_feed_test_probe("Почему пластик неравномерно выходит?")
+
+
+def test_offbeat_social_banter_reuses_cached_classification():
+    text = "Картофельную водку?"
+    _is_offbeat_social_banter.cache_clear()
+    before = _is_offbeat_social_banter.cache_info()
+    assert _is_offbeat_social_banter(text)
+    middle = _is_offbeat_social_banter.cache_info()
+    assert _is_offbeat_social_banter(text)
+    after = _is_offbeat_social_banter.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_offbeat_social_banter("Как настроить печать?")
 
 
 # --- разбор recent_replies / bad_answers 2026-06 (отвеченные) ---
