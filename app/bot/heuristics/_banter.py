@@ -112,6 +112,7 @@ def _is_cross_chat_tip_sharing(text: str) -> bool:
     return other_chat and relay
 
 
+@lru_cache(maxsize=4096)
 def _is_chat_meta_discussion(text: str) -> bool:
     """Цитата чужого «помогите» или разговор об истории чата — не запрос к боту."""
     if not text or not text.strip():

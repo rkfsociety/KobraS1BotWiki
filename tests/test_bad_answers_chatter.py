@@ -30,6 +30,7 @@ from app.bot.heuristics import _is_experience_or_assertion_chat
 from app.bot.heuristics import _is_print_task_planning_statement
 from app.bot.heuristics import _is_causal_continuation
 from app.bot.heuristics import _is_peer_diagnostic_interrogation
+from app.bot.heuristics import _is_chat_meta_discussion
 
 # --- сами ошибочные ответы (должны стать болтовнёй) ---
 
@@ -310,6 +311,19 @@ def test_peer_diagnostic_interrogation_reuses_cached_classification():
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
     assert not _is_peer_diagnostic_interrogation("Почему температура какая была?")
+
+
+def test_chat_meta_discussion_reuses_cached_classification():
+    text = 'В чате раньше писали «помогите...»'
+    _is_chat_meta_discussion.cache_clear()
+    before = _is_chat_meta_discussion.cache_info()
+    assert _is_chat_meta_discussion(text)
+    middle = _is_chat_meta_discussion.cache_info()
+    assert _is_chat_meta_discussion(text)
+    after = _is_chat_meta_discussion.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_chat_meta_discussion("Помогите настроить стол")
 
 
 # --- разбор recent_replies / bad_answers 2026-06 (отвеченные) ---
