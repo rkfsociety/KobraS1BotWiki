@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from app.bot.text_heuristics import (
     _is_error_code_query,
@@ -73,11 +74,13 @@ def needs_model_clarification_for(text: str) -> bool:
     return topic_requires_printer_model(text) and not model_specifically_identified(text)
 
 
+@lru_cache(maxsize=4096)
 def is_wiki_model_overview_url(url: str) -> bool:
     u = url.lower().split("?")[0].rstrip("/")
     return bool(re.search(r"/fdm-3d-printer/[^/]+$", u))
 
 
+@lru_cache(maxsize=4096)
 def overview_url_penalty(topic: str | None, url: str) -> int:
     if not topic or not is_wiki_model_overview_url(url):
         return 0

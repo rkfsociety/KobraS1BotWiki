@@ -45,3 +45,15 @@ def test_hobby_miniature_print_not_layer_intent():
     text = "А как же печать миниатюр по вахе ?"
     assert not topic_is_layer_slicing_intent(text)
     assert not needs_model_clarification_for(text)
+
+
+def test_overview_penalty_reuses_bounded_cache():
+    overview_url_penalty.cache_clear()
+
+    assert overview_url_penalty(_LAYER_QUESTION, _KOBRA2_OVERVIEW) >= 70
+    before = overview_url_penalty.cache_info()
+    assert overview_url_penalty(_LAYER_QUESTION, _KOBRA2_OVERVIEW) >= 70
+    after = overview_url_penalty.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize
