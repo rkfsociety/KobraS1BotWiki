@@ -1984,6 +1984,7 @@ def _is_expert_deferral_chatter(text: str) -> bool:
     return bool(_DEFER_TO_EXPERT_RE.search(t))
 
 
+@lru_cache(maxsize=4096)
 def _message_has_help_intent(text: str) -> bool:
     """Пользователь ищет помощь / инструкцию, а не просто комментирует чат."""
     if not text or not text.strip():

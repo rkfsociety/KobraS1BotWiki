@@ -535,6 +535,17 @@ def test_generic_help_filter_reuses_cached_classification():
     assert after.hits == middle.hits + 1
 
 
+def test_help_intent_reuses_cached_classification():
+    _message_has_help_intent.cache_clear()
+    before = _message_has_help_intent.cache_info()
+    assert _message_has_help_intent(_REAL_QUESTION)
+    middle = _message_has_help_intent.cache_info()
+    assert _message_has_help_intent(_REAL_QUESTION)
+    after = _message_has_help_intent.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
 def test_conversational_skepticism_reuses_cached_classification():
     _is_conversational_skepticism.cache_clear()
     before = _is_conversational_skepticism.cache_info()
