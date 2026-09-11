@@ -35,8 +35,10 @@ _BAD = (
 class _FakeIndex:
     def __init__(self, docs: list[WebWikiDoc]) -> None:
         self._docs = docs
+        self.search_calls = 0
 
     def search(self, q: str, top_k: int = 28):
+        self.search_calls += 1
         from rapidfuzz import fuzz
 
         from app.web_wiki_index import _make_search_blob, _normalize
@@ -89,6 +91,20 @@ def test_search_prefers_print_tpu_over_nozzle_replace():
     assert score >= 60
     assert "print-tpu" in doc.url or "filament-guide" in doc.url
     assert _response_wiki_url_acceptable(_TPU_MSG, doc.url)
+
+
+def test_ranking_deduplicates_query_variants():
+    idx = _FakeIndex(_docs_from_urls(_GOOD))
+    doc, score = _search_best_with_model_bias(
+        idx,
+        ["какой TPU выбрать", " какой TPU выбрать ", "какой TPU выбрать"],
+        context_text=_TPU_MSG,
+        topic_for_keywords=_TPU_MSG,
+    )
+
+    assert doc is not None
+    assert score >= 0
+    assert idx.search_calls == 1
 
 
 # --- Vague thread reference (log 06:52:12): «а пластик такого план какой лучше ?» ---

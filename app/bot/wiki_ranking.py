@@ -1168,14 +1168,17 @@ def _search_best_with_model_bias(
     from app.bot.layer_model_gate import overview_url_penalty
 
     by_url: dict[str, tuple[WebWikiDoc, int]] = {}
+    seen_queries: set[str] = set()
 
     for q in variants:
 
         q = (q or "").strip()
 
-        if not q:
+        if not q or q in seen_queries:
 
             continue
+
+        seen_queries.add(q)
 
         for doc, score in index.search(q, top_k=top_k):
 
@@ -1267,14 +1270,17 @@ def _search_best_with_model_bias_excluding(
         hints = _model_slug_hints(context_text)
 
         by_url: dict[str, tuple[WebWikiDoc, int]] = {}
+        seen_queries: set[str] = set()
 
         for q in variants:
 
             q = (q or "").strip()
 
-            if not q:
+            if not q or q in seen_queries:
 
                 continue
+
+            seen_queries.add(q)
 
             for d2, sc in index.search(q, top_k=top_k):
 
