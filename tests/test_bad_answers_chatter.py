@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from app.bot.text_heuristics import (
+    _is_ace_unit_price_shopping_chatter,
     _is_bare_combo_variant_fragment,
     _is_bare_fragment_question,
     _is_community_experience_poll,
@@ -251,6 +252,18 @@ def test_real_help_not_missed_chatter_filters():
 def test_ace_price_shopping_chatter():
     assert _is_conversational_chatter("Где аськи по 5 тыщ")
     assert _is_conversational_chatter("Тысячи 2-3?)")
+
+
+def test_ace_price_shopping_reuses_cached_classification():
+    text = "Где аськи по 5 тыщ"
+    _is_ace_unit_price_shopping_chatter.cache_clear()
+    before = _is_ace_unit_price_shopping_chatter.cache_info()
+    assert _is_ace_unit_price_shopping_chatter(text)
+    middle = _is_ace_unit_price_shopping_chatter.cache_info()
+    assert _is_ace_unit_price_shopping_chatter(text)
+    after = _is_ace_unit_price_shopping_chatter.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
 
 
 def test_fitting_fragment_is_chatter():

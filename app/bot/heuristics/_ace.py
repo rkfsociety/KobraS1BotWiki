@@ -197,6 +197,7 @@ def _is_combo_ace_marketplace_chat(text: str | None) -> bool:
     )
 
 
+@lru_cache(maxsize=4096)
 def _is_ace_unit_price_shopping_chatter(text: str | None) -> bool:
     """«Где аськи по 5 тыщ», «Тысячи 2-3?» — поиск б/у ACE по цене, не запрос к вики."""
     if not text or not text.strip():
