@@ -47,6 +47,20 @@ def test_load_context_skips_bad_timestamps_and_duplicate_records(tmp_path, monke
     ]
 
 
+def test_load_context_rejects_oversized_file_before_json_decode(tmp_path, monkeypatch):
+    import app.bot.user_context as user_context
+
+    path = tmp_path / "user_ctx.json"
+    path.write_text("{}" * 20, encoding="utf-8")
+    monkeypatch.setattr(user_context, "_ctx_path", lambda: path)
+    monkeypatch.setattr(user_context, "_MAX_CONTEXT_CACHE_BYTES", 10)
+    bot_data: dict = {}
+
+    _load_from_disk(bot_data)
+
+    assert bot_data == {}
+
+
 def test_runtime_context_methods_skip_malformed_timestamps():
     bot_data = {
         "_user_ctx_loaded": True,

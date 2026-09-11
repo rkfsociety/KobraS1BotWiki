@@ -34,6 +34,7 @@ _USER_TTL      = 1800   # с — TTL пользовательского конт
 _CHAT_TTL      = 600    # с — TTL чатового контекста (10 мин)
 _MAX_USER_CONTEXT_KEYS = 4096
 _MAX_CHAT_CONTEXT_KEYS = 1024
+_MAX_CONTEXT_CACHE_BYTES = 8 * 1024 * 1024
 _SHORT_WORDS   = 3      # запрос ≤ N слов → обогащать всегда
 _CTX_WORDS_MAX = 6      # макс. добавляемых контекстных слов
 
@@ -146,6 +147,8 @@ def _load_from_disk(bot_data: dict[str, Any]) -> None:
     try:
         p = _ctx_path()
         if not p.exists():
+            return
+        if p.stat().st_size > _MAX_CONTEXT_CACHE_BYTES:
             return
         raw = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
