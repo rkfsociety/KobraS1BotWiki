@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import fcntl
 import logging
 import os
 import sys
@@ -10,6 +9,11 @@ import threading
 import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows fallback
+    fcntl = None  # type: ignore[assignment]
 
 from dotenv import load_dotenv
 from telegram import Update
@@ -108,7 +112,8 @@ def _acquire_process_lock(lock_path: Path) -> int:
     except OSError as exc:
         raise RuntimeError(f"Не удалось открыть bot.lock: {exc}") from exc
     try:
-        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if fcntl is not None:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         os.ftruncate(lock_fd, 0)
         os.write(lock_fd, str(os.getpid()).encode("ascii"))
         return lock_fd

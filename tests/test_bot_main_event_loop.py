@@ -75,3 +75,16 @@ def test_process_lock_rejects_second_process_and_releases_on_close(tmp_path: Pat
         import os
 
         os.close(first_fd)
+
+
+def test_process_lock_has_non_posix_fallback(monkeypatch, tmp_path: Path):
+    import app.bot.lifecycle as lifecycle
+    import os
+
+    lock_path = tmp_path / "bot.lock"
+    monkeypatch.setattr(lifecycle, "fcntl", None)
+    lock_fd = _acquire_process_lock(lock_path)
+    try:
+        assert lock_path.read_text(encoding="utf-8") == str(os.getpid())
+    finally:
+        os.close(lock_fd)
