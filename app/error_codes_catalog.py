@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 
 PARSER_VERSION = 2
 _MAX_CACHED_CODES = 1000
+_MAX_CACHE_BYTES = 8 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,8 @@ def _now() -> float:
 def _load_json(path: Path) -> dict[str, Any] | None:
     try:
         if not path.exists():
+            return None
+        if path.stat().st_size > _MAX_CACHE_BYTES:
             return None
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:

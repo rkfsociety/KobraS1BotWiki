@@ -61,3 +61,11 @@ async def test_corrupted_cached_entry_does_not_hide_valid_entries(tmp_path, monk
 
     assert set(result) == {"11527", "11528"}
     assert result["11527"].title == "Valid"
+
+
+def test_cache_loader_rejects_oversized_file_before_json_decode(tmp_path, monkeypatch):
+    path = tmp_path / "catalog.json"
+    path.write_text("{}" * 20, encoding="utf-8")
+    monkeypatch.setattr(catalog, "_MAX_CACHE_BYTES", 10)
+
+    assert catalog._load_json(path) is None
