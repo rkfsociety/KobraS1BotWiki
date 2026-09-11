@@ -147,6 +147,7 @@ def _is_chat_meta_discussion(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_chat_past_incident_recollection(text: str) -> bool:
     """«Тут же было в чате как-то, кобра глюкнула когда свет отрубили» — байка из чата, не запрос к вики."""
     if not text or not text.strip() or "?" in text:

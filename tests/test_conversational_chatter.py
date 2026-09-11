@@ -25,6 +25,7 @@ from app.bot.heuristics import _is_print_quality_meta_curiosity
 from app.bot.heuristics import _is_printing_status_announcement
 from app.bot.heuristics import _is_colloquial_printer_fragment
 from app.bot.heuristics import _is_cross_chat_tip_sharing
+from app.bot.heuristics import _is_chat_past_incident_recollection
 from app.web_wiki_index import _looks_like_question
 
 _BED_COMPARE_MSG = "Разберемся, тут кстати стол регулируется не сверху как на кобре"
@@ -413,6 +414,19 @@ def test_cross_chat_tip_reuses_cached_classification():
     after = _is_cross_chat_tip_sharing.cache_info()
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
+
+
+def test_past_incident_recollection_reuses_cached_classification():
+    text = "Тут в чате было как-то: кобра глюкнула, когда свет отрубили"
+    _is_chat_past_incident_recollection.cache_clear()
+    before = _is_chat_past_incident_recollection.cache_info()
+    assert _is_chat_past_incident_recollection(text)
+    middle = _is_chat_past_incident_recollection.cache_info()
+    assert _is_chat_past_incident_recollection(text)
+    after = _is_chat_past_incident_recollection.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_chat_past_incident_recollection("Почему принтер глюкнул?")
 
 
 _TWO_ACE_BANTER = "а говорит многоцвет не печатает, вот зачем ему две аськи?"
