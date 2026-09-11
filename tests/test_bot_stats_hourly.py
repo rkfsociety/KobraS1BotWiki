@@ -158,3 +158,24 @@ def test_readers_tolerate_corrupted_runtime_stats():
     assert get_peak_hours(bd, limit=0) == []
     assert get_daily_distribution(bd)["пн"] == 5
     assert get_daily_distribution(bd)["вт"] == 0
+
+
+def test_writers_recover_corrupted_runtime_stats():
+    bd = {
+        "bot_stats": {
+            "user_messages": "broken",
+            "wiki_pages": [],
+            "questions": "broken",
+            "total_incoming": "bad",
+            "total_answers": object(),
+        }
+    }
+
+    record_incoming_activity(bd, user_id=42)
+    record_answer(bd, url="https://wiki.example/x", question="как смазать", source="wiki")
+
+    assert bd["bot_stats"]["total_incoming"] == 1
+    assert bd["bot_stats"]["total_answers"] == 1
+    assert bd["bot_stats"]["user_messages"]["42"]["count"] == 1
+    assert bd["bot_stats"]["wiki_pages"] == {"https://wiki.example/x": 1}
+    assert bd["bot_stats"]["questions"] == {"как смазать": 1}

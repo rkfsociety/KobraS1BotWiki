@@ -151,6 +151,15 @@ def _persist(bot_data: dict[str, Any], *, force: bool = False) -> None:
             log.warning("bot_stats: ошибка сохранения — %s", exc)
 
 
+def _runtime_stats(bot_data: dict[str, Any]) -> dict[str, Any]:
+    """Возвращает изменяемую runtime-структуру статистики, восстанавливая мусор."""
+    stats = bot_data.get(_STATS_KEY)
+    if not isinstance(stats, dict):
+        stats = _empty_stats()
+        bot_data[_STATS_KEY] = stats
+    return stats
+
+
 def flush_bot_stats(bot_data: dict[str, Any]) -> None:
     """Принудительно сохраняет свежую статистику перед остановкой процесса."""
     _persist(bot_data, force=True)
@@ -180,12 +189,19 @@ def _bump_user_message(
     username: str | None = None,
     first_name: str | None = None,
 ) -> None:
-    users: dict[str, dict[str, Any]] = stats.setdefault("user_messages", {})
+    users = stats.get("user_messages")
+    if not isinstance(users, dict):
+        users = {}
+        stats["user_messages"] = users
     key = str(user_id)
-    entry = users.setdefault(
-        key,
-        {"user_id": user_id, "label": _user_label(user_id=user_id, username=username, first_name=first_name), "count": 0},
-    )
+    entry = users.get(key)
+    if not isinstance(entry, dict):
+        entry = {
+            "user_id": user_id,
+            "label": _user_label(user_id=user_id, username=username, first_name=first_name),
+            "count": 0,
+        }
+        users[key] = entry
     entry["label"] = _user_label(
         user_id=user_id,
         username=username or entry.get("username"),
@@ -195,7 +211,7 @@ def _bump_user_message(
         entry["username"] = username
     if first_name:
         entry["first_name"] = first_name
-    entry["count"] = int(entry.get("count", 0)) + 1
+    entry["count"] = max(0, _safe_int(entry.get("count", 0))) + 1
 
     if len(users) > _MAX_TRACKED_USERS:
         ranked = sorted(users.items(), key=lambda kv: int((kv[1] or {}).get("count", 0)))
@@ -211,11 +227,11 @@ def record_incoming_activity(
     first_name: str | None = None,
 ) -> None:
     """Учитывает каждое входящее сообщение, которое Telegram доставил боту."""
-    stats: dict[str, Any] = bot_data.setdefault(_STATS_KEY, _empty_stats())
+    stats = _runtime_stats(bot_data)
     now = time.time()
     hour = time.localtime(now).tm_hour
     _bump_hour(stats, hour)
-    stats["total_incoming"] = int(stats.get("total_incoming", 0)) + 1
+    stats["total_incoming"] = max(0, _safe_int(stats.get("total_incoming", 0))) + 1
     if user_id is not None:
         _bump_user_message(stats, user_id=user_id, username=username, first_name=first_name)
     stats["hourly_activity_kind"] = "incoming"
@@ -238,25 +254,31 @@ def record_answer(
 
     Гистограмму по часам не трогает — она считает входящие (record_incoming_activity).
     """
-    stats: dict[str, Any] = bot_data.setdefault(_STATS_KEY, _empty_stats())
+    stats = _runtime_stats(bot_data)
 
     now = time.time()
 
     if source == "wiki" and url:
-        pages: dict[str, int] = stats.setdefault("wiki_pages", {})
-        pages[url] = pages.get(url, 0) + 1
+        pages = stats.get("wiki_pages")
+        if not isinstance(pages, dict):
+            pages = {}
+            stats["wiki_pages"] = pages
+        pages[url] = max(0, _safe_int(pages.get(url, 0))) + 1
 
     q_norm = " ".join((question or "").strip().lower().split())
     if q_norm:
-        questions: dict[str, int] = stats.setdefault("questions", {})
-        questions[q_norm] = questions.get(q_norm, 0) + 1
+        questions = stats.get("questions")
+        if not isinstance(questions, dict):
+            questions = {}
+            stats["questions"] = questions
+        questions[q_norm] = max(0, _safe_int(questions.get(q_norm, 0))) + 1
         if len(questions) > _MAX_UNIQUE_QUESTIONS:
             # обрезаем самые редкие вопросы (встречались лишь раз)
             rare = [k for k, v in questions.items() if v == 1]
             for k in rare[: len(questions) - _MAX_UNIQUE_QUESTIONS]:
                 del questions[k]
 
-    stats["total_answers"] = stats.get("total_answers", 0) + 1
+    stats["total_answers"] = max(0, _safe_int(stats.get("total_answers", 0))) + 1
     stats["last_updated"] = now
 
     _persist(bot_data)
