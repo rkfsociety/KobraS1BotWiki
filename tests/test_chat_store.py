@@ -32,6 +32,7 @@ def test_creates_database_schema_and_indexes(tmp_path: Path) -> None:
             "idx_chat_messages_user_id_id",
             "idx_chat_messages_user_id_created_at",
             "idx_chat_messages_duplicate_lookup",
+            "idx_chat_messages_role_id",
             "idx_rate_limit_events_created_at",
         } <= indexes
         assert journal_mode.lower() == "wal"
