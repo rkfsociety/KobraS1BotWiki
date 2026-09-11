@@ -126,6 +126,7 @@ class _FormReadError(ValueError):
 
 _COOKIE_NAME = "panel_session"
 _MAX_PANEL_SESSIONS = 4096
+_MAX_PANEL_SESSIONS_BYTES = 4 * 1024 * 1024
 _TG_FUTURE_AUTH_SKEW_SECONDS = 300
 _MAX_TELEGRAM_RESPONSE_BYTES = 1 * 1024 * 1024
 
@@ -199,6 +200,10 @@ class _PanelState:
         try:
             p = _sessions_file()
             if not p.exists():
+                return
+            file_size = p.stat().st_size
+            if file_size > _MAX_PANEL_SESSIONS_BYTES:
+                logging.warning("panel: файл сессий слишком большой, пропускаем загрузку (байт: %d)", file_size)
                 return
             raw = json.loads(p.read_text(encoding="utf-8"))
             if not isinstance(raw, dict):

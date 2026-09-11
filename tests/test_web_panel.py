@@ -207,6 +207,21 @@ def test_panel_sessions_ignore_corrupted_or_infinite_expiry(tmp_path, monkeypatc
     assert state.get_session("broken") is None
 
 
+def test_panel_sessions_reject_oversized_file_before_json_decode(tmp_path, monkeypatch):
+    import app.web_panel as panel
+
+    path = tmp_path / "panel_sessions.json"
+    path.write_text("{}" * 20, encoding="utf-8")
+    monkeypatch.setattr(panel, "_sessions_file", lambda: path)
+    monkeypatch.setattr(panel, "_MAX_PANEL_SESSIONS_BYTES", 10)
+    state = panel._PanelState.__new__(panel._PanelState)
+    state.sessions = {}
+
+    state._load_sessions()
+
+    assert state.sessions == {}
+
+
 def test_panel_sessions_remain_bounded(monkeypatch):
     import app.web_panel as panel_module
 
