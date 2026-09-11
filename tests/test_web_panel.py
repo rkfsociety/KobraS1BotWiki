@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import http.client
+import json
 import threading
 import time
 import types
@@ -116,6 +117,24 @@ def test_panel_sections_tolerate_corrupted_timestamps(monkeypatch):
 
     assert "q" in _bad_answers_section(None, "csrf")
     assert "q" in _missed_questions_section("csrf")
+
+
+def test_reindex_webhook_rejects_oversized_body(panel, monkeypatch):
+    import app.web_panel as panel_module
+
+    monkeypatch.setattr(panel_module, "_MAX_WEBHOOK_BODY_BYTES", 10)
+    monkeypatch.setattr(
+        panel_module,
+        "handle_reindex_webhook",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("webhook called")),
+    )
+    _app, port = panel
+    connection = _conn(port)
+    connection.request("POST", "/api/webhook/reindex", body="x" * 11)
+    response = connection.getresponse()
+
+    assert response.status == 413
+    assert json.loads(response.read())["status"] == "error"
 
 
 def test_login_fail_cache_is_bounded_and_prunes_expired_ips(monkeypatch):

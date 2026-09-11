@@ -99,6 +99,7 @@ from app.web_miniapp import (
 log = logging.getLogger(__name__)
 
 _MAX_FORM_BODY_BYTES = 32 * 1024
+_MAX_WEBHOOK_BODY_BYTES = 16 * 1024
 _MAX_LOGIN_FAIL_IPS = 4096
 
 
@@ -2041,12 +2042,27 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             self._send(payload, content_type="application/json; charset=utf-8")
 
         def _reindex_webhook(self) -> None:
-            length = int(self.headers.get("Content-Length") or 0)
+            raw_length = self.headers.get("Content-Length")
+            try:
+                length = int(raw_length or 0)
+            except ValueError:
+                self._send_json({"status": "error", "message": "Некорректный Content-Length."}, status=400)
+                return
+            if length < 0:
+                self._send_json({"status": "error", "message": "Некорректный Content-Length."}, status=400)
+                return
+            if length > _MAX_WEBHOOK_BODY_BYTES:
+                self._send_json({"status": "error", "message": "Размер webhook превышает допустимый лимит."}, status=413)
+                return
             raw = self.rfile.read(length) if length else b"{}"
             try:
                 body = json.loads(raw)
-            except Exception:
-                body = {}
+            except (TypeError, UnicodeDecodeError, json.JSONDecodeError):
+                self._send_json({"status": "error", "message": "Некорректный JSON."}, status=400)
+                return
+            if not isinstance(body, dict):
+                self._send_json({"status": "error", "message": "JSON webhook должен быть объектом."}, status=400)
+                return
             application = state.application if hasattr(state, "application") else None
             status_code, resp = handle_reindex_webhook(body, application)
             payload = json.dumps(resp, ensure_ascii=False).encode("utf-8")
