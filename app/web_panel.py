@@ -238,16 +238,34 @@ class _PanelState:
             resp = _telegram_api(token, "getChatAdministrators", {"chat_id": chat_id})
         except Exception as e:  # noqa: BLE001
             return None, f"не удалось получить список админов: {e}"
+        if not isinstance(resp, dict):
+            return None, "Telegram: некорректный ответ"
         if not resp.get("ok"):
             return None, f"Telegram: {resp.get('description', 'ошибка')}"
+        result = resp.get("result", [])
+        if not isinstance(result, list):
+            return None, "Telegram: некорректный список администраторов"
         ids: set[int] = set()
-        for m in resp.get("result", []):
+        for m in result:
+            if not isinstance(m, dict):
+                continue
             u = m.get("user") or {}
+            if not isinstance(u, dict):
+                continue
             uid = u.get("id")
             if uid is not None and not u.get("is_bot"):
-                ids.add(int(uid))
+                try:
+                    uid_int = int(uid)
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                if uid_int > 0:
+                    ids.add(uid_int)
         with self.lock:
-            self.admin_cache = {"chat": chat_id, "ids": set(ids), "exp": time.time() + ttl}
+            self.admin_cache = {
+                "chat": chat_id,
+                "ids": set(ids),
+                "exp": time.time() + max(0.0, _safe_float(ttl)),
+            }
         return ids, None
 
     def get_session(self, token: str | None) -> dict[str, Any] | None:

@@ -179,6 +179,33 @@ def test_login_failure_cache_recovers_from_corrupted_timestamps(monkeypatch):
     assert state.login_fails["1.2.3.4"] == [950.0]
 
 
+def test_admin_ids_skips_malformed_telegram_entries(monkeypatch):
+    import app.web_panel as panel_module
+
+    state = panel_module._PanelState.__new__(panel_module._PanelState)
+    state.lock = threading.Lock()
+    state.admin_cache = {}
+    monkeypatch.setattr(
+        panel_module,
+        "_telegram_api",
+        lambda *args, **kwargs: {
+            "ok": True,
+            "result": [
+                "broken",
+                {"user": "broken"},
+                {"user": {"id": "42"}},
+                {"user": {"id": "bad"}},
+                {"user": {"id": 7, "is_bot": True}},
+            ],
+        },
+    )
+
+    ids, error = state.admin_ids("token", -1001)
+
+    assert ids == {42}
+    assert error is None
+
+
 def test_panel_login_store_recovers_from_corrupted_runtime_state(monkeypatch):
     import app.bot.panel_login as panel_login
     from types import SimpleNamespace
