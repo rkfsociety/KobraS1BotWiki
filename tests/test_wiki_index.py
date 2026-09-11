@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.wiki_index import WikiDoc, WikiIndex
+from app.wiki_index import WikiDoc, WikiIndex, _looks_like_question
 
 
 def test_search_top_k_keeps_document_order_for_equal_scores():
@@ -38,3 +38,16 @@ def test_search_reuses_bounded_cache_without_exposing_cached_list(monkeypatch):
 
     assert calls == 2
     assert [doc.slug for doc, _ in second] == ["one", "two"]
+
+
+def test_legacy_question_classification_reuses_bounded_cache():
+    text = "ошибка 11518 на kobra"
+    _looks_like_question.cache_clear()
+
+    assert _looks_like_question(text)
+    before = _looks_like_question.cache_info()
+    assert _looks_like_question(text)
+    after = _looks_like_question.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize

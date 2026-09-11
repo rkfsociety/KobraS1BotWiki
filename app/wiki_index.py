@@ -25,6 +25,7 @@ def _normalize_query(text: str) -> str:
     return _normalize(text)
 
 
+@lru_cache(maxsize=4096)
 def _looks_like_question(text: str) -> bool:
     t = _normalize(text)
     if "?" in text:
