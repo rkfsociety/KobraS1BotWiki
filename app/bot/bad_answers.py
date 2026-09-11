@@ -17,6 +17,7 @@ from app.bot.git_autopull import project_repo_root
 from app.bot.stores import _save_json_atomic
 
 _LOCK = threading.RLock()
+_MAX_FILE_BYTES = 16 * 1024 * 1024
 
 
 def _bad_answers_path() -> Path:
@@ -28,6 +29,8 @@ def load_bad_answers() -> list[dict[str, Any]]:
         p = _bad_answers_path()
         try:
             if not p.exists():
+                return []
+            if p.stat().st_size > _MAX_FILE_BYTES:
                 return []
             raw = json.loads(p.read_text(encoding="utf-8"))
             if isinstance(raw, list):

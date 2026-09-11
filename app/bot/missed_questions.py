@@ -19,6 +19,7 @@ from app.bot.git_autopull import project_repo_root
 from app.bot.stores import _save_json_atomic
 
 _LOCK = threading.Lock()
+_MAX_FILE_BYTES = 16 * 1024 * 1024
 
 # --- Санитайзер: чистим приватные/запрещённые данные перед сохранением (файл уходит в публичный git) ---
 _URL_RE = re.compile(r"(?:https?://|www\.|t\.me/)\S+", re.IGNORECASE)
@@ -86,6 +87,8 @@ def load_missed_questions() -> list[dict[str, Any]]:
     p = _path()
     try:
         if not p.exists():
+            return []
+        if p.stat().st_size > _MAX_FILE_BYTES:
             return []
         raw = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(raw, list):

@@ -77,6 +77,29 @@ def test_bad_answers_save_replaces_file_atomically(tmp_path, monkeypatch):
     assert not list(tmp_path.glob(".bad_answers.json.*.tmp"))
 
 
+def test_analytics_loaders_reject_oversized_json_before_decode(tmp_path, monkeypatch):
+    import app.bot.bad_answers as bad_answers
+    import app.bot.manual_qa as manual_qa
+    import app.bot.missed_questions as missed_questions
+
+    bad_path = tmp_path / "bad.json"
+    manual_path = tmp_path / "manual.json"
+    missed_path = tmp_path / "missed.json"
+    for path in (bad_path, manual_path, missed_path):
+        path.write_text("x" * 20, encoding="utf-8")
+
+    monkeypatch.setattr(bad_answers, "_bad_answers_path", lambda: bad_path)
+    monkeypatch.setattr(manual_qa, "_manual_qa_path", lambda: manual_path)
+    monkeypatch.setattr(missed_questions, "_path", lambda: missed_path)
+    monkeypatch.setattr(bad_answers, "_MAX_FILE_BYTES", 10)
+    monkeypatch.setattr(manual_qa, "_MAX_FILE_BYTES", 10)
+    monkeypatch.setattr(missed_questions, "_MAX_FILE_BYTES", 10)
+
+    assert bad_answers.load_bad_answers() == []
+    assert manual_qa.load_manual_qa_store() == []
+    assert missed_questions.load_missed_questions() == []
+
+
 def test_missed_questions_save_replaces_file_atomically(tmp_path, monkeypatch):
     monkeypatch.setattr("app.bot.missed_questions._path", lambda: tmp_path / "missed_questions.json")
 

@@ -25,6 +25,7 @@ from app.bot.stores import _norm_text, _save_json_atomic
 # В файле уже есть больше 250 рабочих FAQ; запас предотвращает потерю
 # существующих ответов при следующем /qaadd до плановой чистки дублей.
 _MAX_ENTRIES = 300
+_MAX_FILE_BYTES = 8 * 1024 * 1024
 _MIN_SUBSTR_LEN = 6
 _MATCH_CACHE_SIZE = 8
 
@@ -124,6 +125,8 @@ def load_manual_qa_store() -> list[dict[str, Any]]:
     p = _manual_qa_path()
     try:
         if not p.exists():
+            return _default_entries()
+        if p.stat().st_size > _MAX_FILE_BYTES:
             return _default_entries()
         raw = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(raw, list):
