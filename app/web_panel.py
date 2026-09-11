@@ -1473,17 +1473,37 @@ def _fixes_list(state: _PanelState, csrf: str, flash: str = "") -> bytes:
 
 
 def _tail_lines(path: Path, limit: int, needle: str = "") -> list[str]:
+    if limit <= 0:
+        return []
     try:
         if not path.exists():
             return []
-        with path.open("r", encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
+        matches: list[str] = []
+        needle_lower = needle.lower()
+        chunk_size = 64 * 1024
+        with path.open("rb") as f:
+            position = f.seek(0, 2)
+            carry = b""
+            while position > 0 and len(matches) < limit:
+                size = min(chunk_size, position)
+                position -= size
+                f.seek(position)
+                parts = (f.read(size) + carry).split(b"\n")
+                if position > 0:
+                    carry = parts.pop(0)
+                else:
+                    carry = b""
+                    if parts and parts[-1] == b"":
+                        parts.pop()
+                for raw_line in reversed(parts):
+                    line = raw_line.decode("utf-8", errors="replace").rstrip("\r")
+                    if not needle_lower or needle_lower in line.lower():
+                        matches.append(line)
+                        if len(matches) >= limit:
+                            break
     except Exception as e:
         return [f"(ошибка чтения лога: {e})"]
-    if needle:
-        nl = needle.lower()
-        lines = [ln for ln in lines if nl in ln.lower()]
-    return [ln.rstrip("\n") for ln in lines[-limit:]]
+    return list(reversed(matches))
 
 
 def _logs_page(state: _PanelState, query: str, limit: int, csrf: str = "", flash: str = "") -> bytes:

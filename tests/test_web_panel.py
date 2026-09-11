@@ -17,6 +17,7 @@ from app.web_panel import (
     _bot_stats_section,
     _missed_questions_section,
     _sort_missed_entries,
+    _tail_lines,
     _safe_float,
     _safe_int,
     start_web_panel,
@@ -94,6 +95,14 @@ def test_sort_missed_entries_uses_requested_order_once():
         "score-first",
         "count-first",
     ]
+
+
+def test_tail_lines_reads_matching_tail_and_handles_zero_limit(tmp_path):
+    path = tmp_path / "bot.log"
+    path.write_text("\n".join(f"line-{index}" for index in range(20_000)) + "\nneedle-last\n", encoding="utf-8")
+
+    assert _tail_lines(path, 2, "needle") == ["needle-last"]
+    assert _tail_lines(path, 0) == []
 
 
 def test_missed_entry_numeric_helpers_tolerate_corrupted_values():
