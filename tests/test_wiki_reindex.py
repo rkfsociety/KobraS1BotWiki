@@ -92,6 +92,37 @@ def test_unchanged_sitemap_does_not_rewrite_state(tmp_path, monkeypatch):
     assert monitor._state["last_check"] > 0
 
 
+def test_sitemap_monitor_rejects_oversized_response(tmp_path, monkeypatch):
+    monitor = SitemapMonitor("https://example.test/sitemap.xml", cache_dir=tmp_path)
+    monkeypatch.setattr("app.bot.wiki_reindex._MAX_SITEMAP_BYTES", 10)
+
+    class _Response:
+        text = "x" * 100
+
+        def raise_for_status(self):
+            return None
+
+    class _Client:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, *_args, **_kwargs):
+            return _Response()
+
+    monkeypatch.setattr("app.bot.wiki_reindex.httpx.AsyncClient", _Client)
+
+    changed, reason = asyncio.run(monitor._check_for_changes())
+
+    assert changed is False
+    assert "превышает допустимый размер" in reason
+
+
 def test_sitemap_checks_are_serialized(tmp_path, monkeypatch):
     monitor = SitemapMonitor("https://example.test/sitemap.xml", cache_dir=tmp_path)
     active = 0

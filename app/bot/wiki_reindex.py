@@ -13,6 +13,8 @@ from typing import Any
 
 import httpx
 
+_MAX_SITEMAP_BYTES = 16 * 1024 * 1024
+
 
 class SitemapMonitor:
     """Мониторит sitemap на предмет изменений (хеш, количество URL, временные метки)."""
@@ -76,6 +78,8 @@ class SitemapMonitor:
                 response = await client.get(self.sitemap_url, headers={"User-Agent": "WikiBot/1.0"})
                 response.raise_for_status()
                 content = response.text
+                if len(content.encode("utf-8")) > _MAX_SITEMAP_BYTES:
+                    raise ValueError("ответ sitemap превышает допустимый размер")
 
             # Вычисляем хеш контента sitemap
             new_hash = hashlib.sha256(content.encode()).hexdigest()
