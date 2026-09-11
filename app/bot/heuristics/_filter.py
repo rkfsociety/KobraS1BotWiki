@@ -302,6 +302,7 @@ def _is_conversational_chatter(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_generic_help_without_context(text: str) -> bool:
     """
     "помогите/спасите" без конкретики — лучше попросить уточнение, а не искать по вики наугад.
