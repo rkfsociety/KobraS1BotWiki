@@ -57,3 +57,15 @@ def test_overview_penalty_reuses_bounded_cache():
 
     assert after.hits == before.hits + 1
     assert after.currsize == before.currsize
+
+
+def test_layer_intent_reuses_bounded_cache():
+    topic_is_layer_slicing_intent.cache_clear()
+
+    assert topic_is_layer_slicing_intent(_LAYER_QUESTION)
+    before = topic_is_layer_slicing_intent.cache_info()
+    assert topic_is_layer_slicing_intent(_LAYER_QUESTION)
+    after = topic_is_layer_slicing_intent.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize

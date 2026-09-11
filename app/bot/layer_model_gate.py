@@ -18,6 +18,7 @@ def model_specifically_identified(text: str) -> bool:
     return bool(_model_slug_hints(text))
 
 
+@lru_cache(maxsize=4096)
 def topic_is_layer_slicing_intent(text: str | None) -> bool:
     if not text:
         return False
