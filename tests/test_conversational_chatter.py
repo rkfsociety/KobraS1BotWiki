@@ -27,6 +27,7 @@ from app.bot.heuristics import _is_colloquial_printer_fragment
 from app.bot.heuristics import _is_cross_chat_tip_sharing
 from app.bot.heuristics import _is_chat_past_incident_recollection
 from app.bot.heuristics import _is_sarcastic_thread_banter
+from app.bot.heuristics import _is_sarcastic_printer_banter
 from app.web_wiki_index import _looks_like_question
 
 _BED_COMPARE_MSG = "Разберемся, тут кстати стол регулируется не сверху как на кобре"
@@ -441,6 +442,19 @@ def test_sarcastic_thread_banter_reuses_cached_classification():
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
     assert not _is_sarcastic_thread_banter("Как убрать люфт стола?")
+
+
+def test_sarcastic_printer_banter_reuses_cached_classification():
+    text = "Принтер печатает на бумаге?"
+    _is_sarcastic_printer_banter.cache_clear()
+    before = _is_sarcastic_printer_banter.cache_info()
+    assert _is_sarcastic_printer_banter(text)
+    middle = _is_sarcastic_printer_banter.cache_info()
+    assert _is_sarcastic_printer_banter(text)
+    after = _is_sarcastic_printer_banter.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_sarcastic_printer_banter("Как убрать люфт стола?")
 
 
 _TWO_ACE_BANTER = "а говорит многоцвет не печатает, вот зачем ему две аськи?"
