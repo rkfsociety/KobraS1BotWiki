@@ -33,3 +33,14 @@ def test_ace_unit_price_banter_detected():
 
 def test_ace_price_banter_rejects_filament_guide():
     assert not _response_wiki_url_acceptable(_ACE_PRICE_BANTER, _BAD_URL)
+
+
+def test_combo_ace_marketplace_reuses_cached_classification():
+    _is_combo_ace_marketplace_chat.cache_clear()
+    before = _is_combo_ace_marketplace_chat.cache_info()
+    assert _is_combo_ace_marketplace_chat(_QUESTION)
+    middle = _is_combo_ace_marketplace_chat.cache_info()
+    assert _is_combo_ace_marketplace_chat(_QUESTION)
+    after = _is_combo_ace_marketplace_chat.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1

@@ -148,6 +148,7 @@ def _topic_is_ace_filament_drying_intent(text: str | None) -> bool:
     return has_dry
 
 
+@lru_cache(maxsize=4096)
 def _is_combo_ace_marketplace_chat(text: str | None) -> bool:
     """Цена ACE/комбо на маркетплейсе или «дорого?» в треде — не замена филамента."""
     if not text or not text.strip():
