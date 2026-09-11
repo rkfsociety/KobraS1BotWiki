@@ -84,6 +84,17 @@ def test_geo_with_ace_is_not_geo_only():
     assert not _is_geo_social_only_request(_ACE_MSG)
 
 
+def test_geo_cues_reuses_cached_classification():
+    _has_geo_social_cues.cache_clear()
+    before = _has_geo_social_cues.cache_info()
+    assert _has_geo_social_cues(_ACE_MSG)
+    middle = _has_geo_social_cues.cache_info()
+    assert _has_geo_social_cues(_ACE_MSG)
+    after = _has_geo_social_cues.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
 
 
 
@@ -205,4 +216,3 @@ def test_ace_connection_intent_not_blocking_page():
     assert _response_wiki_url_acceptable(_ACE_CONN_MSG, network)
 
     assert _topic_path_bonus(_ACE_CONN_MSG, binding) > _topic_path_bonus(_ACE_CONN_MSG, blocking)
-

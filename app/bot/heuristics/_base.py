@@ -158,6 +158,7 @@ def _is_error_code_query(text: str) -> bool:
     return any(k in t for k in ("ошибк", "error", "err"))
 
 
+@lru_cache(maxsize=4096)
 def _has_geo_social_cues(text: str) -> bool:
     """Просьба найти владельцев принтера поблизости (не тех. вопрос)."""
     t = text.lower()
