@@ -31,3 +31,16 @@ def test_printer_mention_reuses_bounded_cache():
 
     assert after.hits == before.hits + 1
     assert after.currsize == before.currsize
+
+
+def test_model_intent_reuses_bounded_cache():
+    text = "как настроить стол на kobra s1?"
+    _topic_needs_printer_model.cache_clear()
+
+    assert _topic_needs_printer_model(text)
+    before = _topic_needs_printer_model.cache_info()
+    assert _topic_needs_printer_model(text)
+    after = _topic_needs_printer_model.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize

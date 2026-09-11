@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from app.bot.heuristics._base import (
     _is_error_code_query,
@@ -392,6 +393,7 @@ def _topic_is_slicer_choice_opinion_intent(text: str | None) -> bool:
     return _is_slicer_app_disambiguation(text)
 
 
+@lru_cache(maxsize=4096)
 def _topic_needs_printer_model(text: str) -> bool:
     """Тема вопроса обычно специфична для модели (без модели ответ легко промахнется)."""
     t = text.lower()
