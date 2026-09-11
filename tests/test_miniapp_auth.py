@@ -68,6 +68,14 @@ def test_validate_init_data_rejects_missing_user():
         validate_init_data(unsigned, BOT_TOKEN)
 
 
+@pytest.mark.parametrize("user_id", [0, -1, True])
+def test_validate_init_data_rejects_invalid_user_id(user_id):
+    raw = _signed_init_data(user={"id": user_id})
+
+    with pytest.raises(MiniAppAuthError):
+        validate_init_data(raw, BOT_TOKEN)
+
+
 def test_validate_init_data_rejects_duplicate_critical_field():
     raw = _signed_init_data() + "&auth_date=123"
 

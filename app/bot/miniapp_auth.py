@@ -63,7 +63,13 @@ def validate_init_data(
         user = json.loads(user_raw)
     except (TypeError, json.JSONDecodeError) as exc:
         raise MiniAppAuthError("некорректные данные пользователя") from exc
-    if not isinstance(user, dict) or not isinstance(user.get("id"), int):
+    user_id = user.get("id") if isinstance(user, dict) else None
+    if (
+        not isinstance(user, dict)
+        or not isinstance(user_id, int)
+        or isinstance(user_id, bool)
+        or user_id <= 0
+    ):
         raise MiniAppAuthError("данные пользователя отсутствуют")
 
     result: dict[str, Any] = dict(values)
