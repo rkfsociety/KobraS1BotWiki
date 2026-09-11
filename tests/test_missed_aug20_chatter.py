@@ -115,3 +115,15 @@ def test_short_fragment_question_needs_no_answer() -> None:
     )
     # код ошибки в коротком сообщении — не обрывок
     assert not _is_missed_aug20_thread_noise("ошибка 11518?")
+
+
+def test_aug20_noise_reuses_cached_classification() -> None:
+    text = "Кайму ?"
+    _is_missed_aug20_thread_noise.cache_clear()
+    before = _is_missed_aug20_thread_noise.cache_info()
+    assert _is_missed_aug20_thread_noise(text)
+    middle = _is_missed_aug20_thread_noise.cache_info()
+    assert _is_missed_aug20_thread_noise(text)
+    after = _is_missed_aug20_thread_noise.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1

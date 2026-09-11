@@ -4181,6 +4181,7 @@ def _is_experience_or_assertion_chat(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_missed_aug20_thread_noise(text: str) -> bool:
     """Болтовня из recent_replies и missed за 2026-08-18…20 — бот отвечал зря."""
     if not text or not text.strip():
