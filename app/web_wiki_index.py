@@ -380,6 +380,10 @@ class WebWikiIndex:
 
         self._blobs = tuple(_make_search_blob(d) for d in self._docs)
 
+        # URL-признаки неизменяемы до add_docs/replace_docs: не понижаем URL
+        # заново для каждого документа при каждом поисковом запросе.
+        self._url_lower = tuple((d.url or "").lower() for d in self._docs)
+
         # Блобы неизменяемы до add_docs/replace_docs: не разбираем их
         # заново в set на каждом поисковом запросе.
         self._blob_tokens = tuple(frozenset(blob.split()) for blob in self._blobs)
@@ -430,6 +434,7 @@ class WebWikiIndex:
         q_tokens: set[str] | None = None,
         b_tokens: frozenset[str] | set[str] | None = None,
         query_flags: tuple[bool, bool, bool] | None = None,
+        url_lower: str | None = None,
     ) -> int:
 
         if not q:
@@ -457,6 +462,7 @@ class WebWikiIndex:
                 "kobra" in q,
             )
         is_replacement_query, is_component_query, has_kobra = query_flags
+        normalized_url = (doc.url or "").lower() if url_lower is None else url_lower
 
         overlap = len(q_tokens & b_tokens)
 
@@ -466,7 +472,7 @@ class WebWikiIndex:
 
         if is_replacement_query:
 
-            if "replacement" in doc.url or "replace" in doc.url or "install" in doc.url:
+            if "replacement" in normalized_url or "replace" in normalized_url or "install" in normalized_url:
 
                 bonus += 10
 
@@ -474,7 +480,7 @@ class WebWikiIndex:
 
         if is_component_query:
 
-            if "/faq" in doc.url or doc.url.rstrip("/").endswith("/faq"):
+            if "/faq" in normalized_url or normalized_url.rstrip("/").endswith("/faq"):
 
                 bonus -= 14
 
@@ -517,6 +523,7 @@ class WebWikiIndex:
             # без копирования всего индекса под lock.
             blobs = self._blobs
             blob_tokens = self._blob_tokens
+            url_lower = self._url_lower
             docs = self._docs
             version = self._version
 
@@ -528,7 +535,7 @@ class WebWikiIndex:
         )
         scored = (
             (
-                self._score_one(q, docs[i], blob, q_tokens, blob_tokens[i], query_flags),
+                self._score_one(q, docs[i], blob, q_tokens, blob_tokens[i], query_flags, url_lower[i]),
                 i,
             )
             for i, blob in enumerate(blobs)
@@ -563,8 +570,10 @@ class WebWikiIndex:
         with self._lock:
 
             new_blobs = [_make_search_blob(d) for d in new_docs]
+            new_url_lower = tuple((d.url or "").lower() for d in new_docs)
             self._docs = (*self._docs, *new_docs)
             self._blobs = (*self._blobs, *new_blobs)
+            self._url_lower = (*self._url_lower, *new_url_lower)
             self._blob_tokens = (*self._blob_tokens, *(frozenset(blob.split()) for blob in new_blobs))
             for code, docs in _build_error_code_docs(tuple(new_docs)).items():
                 self._error_code_docs.setdefault(code, []).extend(docs)
@@ -576,6 +585,7 @@ class WebWikiIndex:
         with self._lock:
             self._docs = tuple(docs)
             self._blobs = tuple(_make_search_blob(d) for d in self._docs)
+            self._url_lower = tuple((d.url or "").lower() for d in self._docs)
             self._blob_tokens = tuple(frozenset(blob.split()) for blob in self._blobs)
             self._error_code_docs = _build_error_code_docs(self._docs)
             self._version += 1
