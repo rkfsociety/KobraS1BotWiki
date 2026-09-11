@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import json
+from types import SimpleNamespace
 
+from app.bot.wiki_reindex_handler import handle_reindex_webhook
 from app.bot.wiki_reindex import SitemapMonitor, WikiReindexer, _atomic_write_text
 
 
@@ -81,3 +83,21 @@ def test_parallel_reindex_requests_do_not_duplicate_sitemap_check(tmp_path, monk
 
     assert asyncio.run(run_requests()) == [False, False]
     assert checks == 1
+
+
+def test_reindex_webhook_rejects_non_object_body(monkeypatch):
+    monkeypatch.setenv("WIKI_REINDEX_SECRET", "secret")
+
+    status, payload = handle_reindex_webhook(["broken"], None)
+
+    assert status == 400
+    assert payload["status"] == "error"
+
+
+def test_reindex_webhook_reports_application_not_ready(monkeypatch):
+    monkeypatch.setenv("WIKI_REINDEX_SECRET", "secret")
+
+    status, payload = handle_reindex_webhook({"secret": "secret"}, SimpleNamespace())
+
+    assert status == 503
+    assert payload["message"] == "Application not ready"

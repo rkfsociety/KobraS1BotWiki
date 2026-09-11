@@ -21,6 +21,9 @@ def handle_reindex_webhook(body: dict[str, Any], application: Any) -> tuple[int,
     Returns:
         (status_code, response_dict) для возврата как JSON.
     """
+    if not isinstance(body, dict):
+        return 400, {"status": "error", "message": "Invalid JSON body"}
+
     secret = body.get("secret", "")
 
     # Простая защита: требуем secret из окружения
@@ -29,9 +32,14 @@ def handle_reindex_webhook(body: dict[str, Any], application: Any) -> tuple[int,
         log.warning("wiki_reindex webhook: неверный secret")
         return 401, {"status": "error", "message": "Unauthorized"}
 
+    bot_data = getattr(application, "bot_data", None)
+    if not isinstance(bot_data, dict):
+        log.warning("wiki_reindex webhook: application или bot_data недоступны")
+        return 503, {"status": "error", "message": "Application not ready"}
+
     # Получаем переиндексер и монитор
-    reindexer = application.bot_data.get("wiki_reindexer")
-    monitor = application.bot_data.get("sitemap_monitor")
+    reindexer = bot_data.get("wiki_reindexer")
+    monitor = bot_data.get("sitemap_monitor")
 
     if not reindexer or not monitor:
         log.warning("wiki_reindex webhook: reindexer или monitor недоступны")
@@ -41,7 +49,7 @@ def handle_reindex_webhook(body: dict[str, Any], application: Any) -> tuple[int,
     import asyncio
 
     try:
-        loop = application.bot_data.get("main_loop")
+        loop = bot_data.get("main_loop")
         if not loop:
             return 503, {"status": "error", "message": "No event loop available"}
 
