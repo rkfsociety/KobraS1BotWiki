@@ -24,3 +24,12 @@ def test_safe_message_id_rejects_corrupted_values():
     assert clarify._safe_message_id("123") == 123
     assert clarify._safe_message_id("broken") is None
     assert clarify._safe_message_id(float("nan")) is None
+
+
+def test_runtime_dict_recovers_corrupted_clarify_container():
+    bot_data = {"clarify_pending": ["broken"]}
+
+    result = clarify._runtime_dict(bot_data, "clarify_pending")
+
+    assert result == {}
+    assert bot_data["clarify_pending"] is result

@@ -92,6 +92,15 @@ def _safe_message_id(value: object) -> int | None:
     except (TypeError, ValueError, OverflowError):
         return None
 
+
+def _runtime_dict(bot_data: dict, key: str) -> dict:
+    """Возвращает безопасный изменяемый словарь состояния уточнений."""
+    value = bot_data.get(key)
+    if not isinstance(value, dict):
+        value = {}
+        bot_data[key] = value
+    return value
+
 def _sync_clarify_pending_from_disk(pending: dict[tuple[int, int], dict]) -> None:
 
     """
@@ -190,7 +199,7 @@ async def _try_send_error_code_clarify(
         disable_web_page_preview=True,
     )
 
-    pending = context.application.bot_data.setdefault("clarify_pending", {})
+    pending = _runtime_dict(context.application.bot_data, "clarify_pending")
 
     ckey = (chat_id, msg.from_user.id)
 
@@ -279,13 +288,13 @@ def _arm_clarify_correction_window(
 
     key = (chat_id, user_id)
 
-    cd = context.application.bot_data.setdefault("clarify_correction_cooldown_until", {})
+    cd = _runtime_dict(context.application.bot_data, "clarify_correction_cooldown_until")
 
     if not user_id_is_developer(user_id, settings) and time.time() < _safe_timestamp(cd.get(key, 0.0)):
 
         return
 
-    st = context.application.bot_data.setdefault("clarify_correction_state", {})
+    st = _runtime_dict(context.application.bot_data, "clarify_correction_state")
 
     st[key] = {
 
@@ -353,7 +362,7 @@ def _reply_is_expected_by_bot(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     key = (update.effective_chat.id, msg.from_user.id)
 
-    pending = context.application.bot_data.setdefault("clarify_pending", {})
+    pending = _runtime_dict(context.application.bot_data, "clarify_pending")
 
     _sync_clarify_pending_from_disk(pending)
 
@@ -369,7 +378,7 @@ def _reply_is_expected_by_bot(update: Update, context: ContextTypes.DEFAULT_TYPE
             if expected_id is not None and expected_id == reply_id:
                 return True
 
-    st = context.application.bot_data.setdefault("clarify_correction_state", {})
+    st = _runtime_dict(context.application.bot_data, "clarify_correction_state")
 
     corr = st.get(key)
 
@@ -536,7 +545,7 @@ async def _deliver_clarify_combined(
 
         # Разрешаем следующий reply только на этот ответ бота
 
-        st = context.application.bot_data.setdefault("clarify_correction_state", {})
+        st = _runtime_dict(context.application.bot_data, "clarify_correction_state")
 
         if (chat_id, from_user) in st:
 
@@ -595,7 +604,7 @@ async def _deliver_clarify_combined(
 
     # Разрешаем следующий reply только на этот ответ бота
 
-    st = context.application.bot_data.setdefault("clarify_correction_state", {})
+    st = _runtime_dict(context.application.bot_data, "clarify_correction_state")
 
     if (chat_id, from_user) in st:
 
@@ -767,7 +776,7 @@ async def _try_send_printer_clarify(
 
         return None
 
-    cooldown = context.application.bot_data.setdefault("clarify_last_ts", {})
+    cooldown = _runtime_dict(context.application.bot_data, "clarify_last_ts")
 
     ckey = (chat_id, msg.from_user.id)
 
@@ -785,15 +794,15 @@ async def _try_send_printer_clarify(
 
         return "blocked"
 
-    cc_state = context.application.bot_data.setdefault("clarify_correction_state", {})
+    cc_state = _runtime_dict(context.application.bot_data, "clarify_correction_state")
 
     cc_state.pop(ckey, None)
 
-    cd = context.application.bot_data.setdefault("clarify_correction_cooldown_until", {})
+    cd = _runtime_dict(context.application.bot_data, "clarify_correction_cooldown_until")
 
     cd.pop(ckey, None)
 
-    pending = context.application.bot_data.setdefault("clarify_pending", {})
+    pending = _runtime_dict(context.application.bot_data, "clarify_pending")
 
     cooldown[ckey] = now2
 
@@ -876,7 +885,7 @@ async def _maybe_handle_clarification_followup(update: Update, context: ContextT
 
     settings = context.application.bot_data["settings"]
 
-    pending = context.application.bot_data.setdefault("clarify_pending", {})
+    pending = _runtime_dict(context.application.bot_data, "clarify_pending")
 
     _sync_clarify_pending_from_disk(pending)
 
@@ -1080,7 +1089,7 @@ async def _maybe_handle_clarify_correction_followup(update: Update, context: Con
 
         return False
 
-    st = context.application.bot_data.setdefault("clarify_correction_state", {})
+    st = _runtime_dict(context.application.bot_data, "clarify_correction_state")
 
     item = st.get(key)
 
@@ -1186,7 +1195,7 @@ async def _maybe_handle_clarify_correction_followup(update: Update, context: Con
 
         if not user_id_is_developer(from_user, settings):
 
-            cd = context.application.bot_data.setdefault("clarify_correction_cooldown_until", {})
+            cd = _runtime_dict(context.application.bot_data, "clarify_correction_cooldown_until")
 
             cd[key] = now + float(settings.clarify_cooldown_seconds)
 
