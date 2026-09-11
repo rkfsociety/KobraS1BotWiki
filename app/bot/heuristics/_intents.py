@@ -284,6 +284,7 @@ def _topic_is_resonance_pa_tuning_intent(text: str | None) -> bool:
     return explicit_ask
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_slicer_feature_help_intent(text: str | None) -> bool:
     """Убрать «ушко»/brim в слайсере — не quick start вики."""
     if not text:

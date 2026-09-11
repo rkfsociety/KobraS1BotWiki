@@ -25,6 +25,17 @@ def test_slicer_ear_has_help_intent():
     assert _message_has_help_intent(_QUESTION)
 
 
+def test_slicer_ear_intent_reuses_cached_classification():
+    _topic_is_slicer_feature_help_intent.cache_clear()
+    before = _topic_is_slicer_feature_help_intent.cache_info()
+    assert _topic_is_slicer_feature_help_intent(_QUESTION)
+    middle = _topic_is_slicer_feature_help_intent.cache_info()
+    assert _topic_is_slicer_feature_help_intent(_QUESTION)
+    after = _topic_is_slicer_feature_help_intent.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
 def test_slicer_ear_no_model_required():
     assert not _topic_needs_printer_model(_QUESTION)
 
