@@ -1345,6 +1345,7 @@ def _is_peer_action_experience_question(text: str) -> bool:
     return second_person or bare_group or group_query
 
 
+@lru_cache(maxsize=4096)
 def _is_filament_feed_test_probe(text: str) -> bool:
     """«Если дать подачу филамента, пластик идёт ровно?» — диагностический вопрос соседу, не к вики."""
     if not text or not text.strip() or "?" not in text:

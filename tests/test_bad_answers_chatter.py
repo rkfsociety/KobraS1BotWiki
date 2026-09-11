@@ -32,6 +32,7 @@ from app.bot.heuristics import _is_causal_continuation
 from app.bot.heuristics import _is_peer_diagnostic_interrogation
 from app.bot.heuristics import _is_chat_meta_discussion
 from app.bot.heuristics import _is_filament_testing_plan_sharing
+from app.bot.heuristics import _is_filament_feed_test_probe
 
 # --- сами ошибочные ответы (должны стать болтовнёй) ---
 
@@ -338,6 +339,19 @@ def test_filament_testing_plan_reuses_cached_classification():
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
     assert not _is_filament_testing_plan_sharing("Как тестировать катушку?")
+
+
+def test_filament_feed_probe_reuses_cached_classification():
+    text = "Если дать подачу филамента, пластик идёт ровно?"
+    _is_filament_feed_test_probe.cache_clear()
+    before = _is_filament_feed_test_probe.cache_info()
+    assert _is_filament_feed_test_probe(text)
+    middle = _is_filament_feed_test_probe.cache_info()
+    assert _is_filament_feed_test_probe(text)
+    after = _is_filament_feed_test_probe.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_filament_feed_test_probe("Почему пластик неравномерно выходит?")
 
 
 # --- разбор recent_replies / bad_answers 2026-06 (отвеченные) ---
