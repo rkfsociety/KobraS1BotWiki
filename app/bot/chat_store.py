@@ -55,6 +55,8 @@ class ChatStore:
                     ON chat_messages (user_id, role, text, created_at, id);
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_role_id
                     ON chat_messages (role, id);
+                CREATE INDEX IF NOT EXISTS idx_chat_messages_reply_to_role_user
+                    ON chat_messages (reply_to_id, role, user_id);
                 CREATE INDEX IF NOT EXISTS idx_rate_limit_events_user_id_created_at
                     ON rate_limit_events (user_id, created_at);
                 CREATE INDEX IF NOT EXISTS idx_rate_limit_events_created_at
