@@ -13,13 +13,17 @@ class MiniAppAuthError(ValueError):
     """Недействительные или просроченные данные Telegram Mini App."""
 
 
+_MAX_INIT_DATA_LENGTH = 16_384
+_FUTURE_AUTH_SKEW_SECONDS = 300
+
+
 def validate_init_data(
     init_data: str,
     bot_token: str,
     max_age_seconds: int = 86_400,
 ) -> dict[str, Any]:
     """Проверяет подпись Telegram Web Apps и возвращает безопасные данные сессии."""
-    if not init_data or not bot_token:
+    if not init_data or len(init_data) > _MAX_INIT_DATA_LENGTH or not bot_token:
         raise MiniAppAuthError("отсутствуют данные авторизации")
     if max_age_seconds <= 0:
         raise MiniAppAuthError("некорректный срок авторизации")
@@ -55,7 +59,12 @@ def validate_init_data(
         auth_date = int(values.get("auth_date", ""))
     except ValueError as exc:
         raise MiniAppAuthError("некорректная дата авторизации") from exc
-    if auth_date <= 0 or time.time() - auth_date > max_age_seconds:
+    now = time.time()
+    if (
+        auth_date <= 0
+        or now - auth_date > max_age_seconds
+        or auth_date - now > _FUTURE_AUTH_SKEW_SECONDS
+    ):
         raise MiniAppAuthError("срок авторизации истёк")
 
     user_raw = values.get("user", "")

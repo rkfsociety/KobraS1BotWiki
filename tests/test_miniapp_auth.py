@@ -59,6 +59,18 @@ def test_validate_init_data_rejects_expired_auth_date():
         validate_init_data(raw, BOT_TOKEN, max_age_seconds=86_400)
 
 
+def test_validate_init_data_rejects_auth_date_too_far_in_future():
+    raw = _signed_init_data(auth_date=int(time.time()) + 301)
+
+    with pytest.raises(MiniAppAuthError):
+        validate_init_data(raw, BOT_TOKEN)
+
+
+def test_validate_init_data_rejects_oversized_payload():
+    with pytest.raises(MiniAppAuthError):
+        validate_init_data("x" * 16_385, BOT_TOKEN)
+
+
 def test_validate_init_data_rejects_missing_user():
     raw = _signed_init_data()
     fields = [part for part in raw.split("&") if not part.startswith("user=")]
