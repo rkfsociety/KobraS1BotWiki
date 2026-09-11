@@ -33,3 +33,15 @@ def test_real_question_still_detected():
     q = "что делать если kobra s1 не подаёт филамент?"
     assert not _is_marketplace_promo_message(q)
     assert _looks_like_question(q)
+
+
+def test_marketplace_promo_reuses_bounded_cache():
+    _is_marketplace_promo_message.cache_clear()
+
+    assert _is_marketplace_promo_message(_ALI_MSG)
+    before = _is_marketplace_promo_message.cache_info()
+    assert _is_marketplace_promo_message(_ALI_MSG)
+    after = _is_marketplace_promo_message.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize

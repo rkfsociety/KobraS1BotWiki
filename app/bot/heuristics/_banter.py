@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from app.bot.heuristics._base import (
     _is_error_code_query,
@@ -72,6 +73,7 @@ _DEFER_TO_EXPERT_RE = re.compile(
 )
 
 
+@lru_cache(maxsize=4096)
 def _is_marketplace_promo_message(text: str | None) -> bool:
     """Рекламная ссылка на маркетплейс — не вопрос к вики."""
     if not text:
