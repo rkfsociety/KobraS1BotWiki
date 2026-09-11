@@ -95,7 +95,7 @@ def _resolve_path(p: str) -> str:
 
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 
 class Settings:
 

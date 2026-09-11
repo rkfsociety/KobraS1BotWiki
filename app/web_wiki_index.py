@@ -578,7 +578,7 @@ class WebWikiIndex:
 
 
 
-@dataclass
+@dataclass(slots=True)
 
 class WikiState:
 
