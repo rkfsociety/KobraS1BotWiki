@@ -81,7 +81,7 @@ def load_recent_replies(bot_data: dict[str, Any]) -> None:
         logging.warning("recent_replies: ошибка загрузки — %s", exc)
 
 
-def save_recent_replies(bot_data: dict[str, Any]) -> None:
+def save_recent_replies(bot_data: dict[str, Any], *, sort_buffer: bool = True) -> None:
     """Атомарно сохраняет ленту последних ответов на диск."""
     with _REPLIES_SAVE_LOCK:
         try:
@@ -92,7 +92,8 @@ def save_recent_replies(bot_data: dict[str, Any]) -> None:
                 buf = []
                 bot_data[_RECENT_REPLIES_KEY] = buf
             buf[:] = [item for item in buf if isinstance(item, dict)]
-            buf.sort(key=_reply_timestamp, reverse=True)
+            if sort_buffer:
+                buf.sort(key=_reply_timestamp, reverse=True)
             del buf[_RECENT_REPLIES_MAX:]
             temporary_name: str | None = None
             try:
@@ -136,7 +137,9 @@ def add_to_recent_replies(
         "chat_id": chat_id,
     })
     del buf[_RECENT_REPLIES_MAX:]
-    save_recent_replies(bot_data)
+    # Новая запись вставлена в начало, поэтому не сортируем до 2000 элементов
+    # повторно на каждом ответе.
+    save_recent_replies(bot_data, sort_buffer=False)
 
 _TAG_RE = re.compile(r"<[^>]+>")
 

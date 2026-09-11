@@ -66,7 +66,7 @@ def test_recent_replies_panel_tolerates_malformed_timestamp():
 def test_add_recent_reply_recovers_from_corrupted_runtime_buffer(monkeypatch):
     import app.bot.reply_logging as reply_logging
 
-    monkeypatch.setattr(reply_logging, "save_recent_replies", lambda bot_data: None)
+    monkeypatch.setattr(reply_logging, "save_recent_replies", lambda bot_data, **_kwargs: None)
     bot_data = {"recent_replies": "broken"}
 
     add_to_recent_replies(
@@ -86,7 +86,7 @@ def test_add_recent_reply_keeps_buffer_bounded(monkeypatch):
     import app.bot.reply_logging as reply_logging
 
     monkeypatch.setattr(reply_logging, "_RECENT_REPLIES_MAX", 2)
-    monkeypatch.setattr(reply_logging, "save_recent_replies", lambda bot_data: None)
+    monkeypatch.setattr(reply_logging, "save_recent_replies", lambda bot_data, **_kwargs: None)
     bot_data = {"recent_replies": []}
 
     for index in range(3):
