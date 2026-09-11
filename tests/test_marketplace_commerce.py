@@ -40,3 +40,15 @@ def test_filament_guide_rejected_for_commerce():
 def test_expand_skips_plastic_to_filament_for_commerce():
     variants = expand_queries(_WB_TNVED)
     assert not any("filament plastic material" in v for v in variants)
+
+
+def test_marketplace_intent_reuses_bounded_cache():
+    _topic_is_marketplace_commerce_intent.cache_clear()
+
+    assert _topic_is_marketplace_commerce_intent(_WB_TNVED)
+    before = _topic_is_marketplace_commerce_intent.cache_info()
+    assert _topic_is_marketplace_commerce_intent(_WB_TNVED)
+    after = _topic_is_marketplace_commerce_intent.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize

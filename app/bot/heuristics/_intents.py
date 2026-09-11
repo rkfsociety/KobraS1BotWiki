@@ -20,6 +20,7 @@ from app.bot.heuristics._banter import (
 )
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_marketplace_commerce_intent(text: str | None) -> bool:
     """Продажа на WB/Ozon, ТН ВЭД готовых моделей — не тема вики Anycubic."""
     from app.bot.heuristics._ace import _is_combo_ace_marketplace_chat
