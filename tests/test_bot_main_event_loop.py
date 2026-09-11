@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 import sys
 
+from app.bot.lifecycle import _restore_clarify_pending
+
 
 def test_entrypoint_installs_event_loop_without_deprecation_warning():
     code = (
@@ -23,3 +25,13 @@ def test_entrypoint_installs_event_loop_without_deprecation_warning():
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_restore_clarify_pending_skips_malformed_records():
+    restored = _restore_clarify_pending({
+        "-100:42": {"original": "вопрос"},
+        "broken": {"original": "bad"},
+        "-100:43": "broken",
+    })
+
+    assert restored == {(-100, 42): {"original": "вопрос"}}

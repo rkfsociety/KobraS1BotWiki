@@ -64,6 +64,22 @@ from app.resource_limits import apply_posix_virtual_memory_limit_mb
 from app.web_wiki_index import WebWikiIndex, WebWikiIndexer
 
 
+def _restore_clarify_pending(store: object) -> dict[tuple[int, int], dict]:
+    """Восстанавливает только корректные записи уточнений из JSON-store."""
+    if not isinstance(store, dict):
+        return {}
+    pending: dict[tuple[int, int], dict] = {}
+    for key, value in store.items():
+        if not isinstance(value, dict):
+            continue
+        try:
+            chat_s, user_s = str(key).split(":", 1)
+            pending[(int(chat_s), int(user_s))] = value
+        except (TypeError, ValueError):
+            continue
+    return pending
+
+
 def _register_handlers(app: Application) -> None:
     """Регистрирует Telegram-обработчики в порядке, используемом ботом."""
     app.add_handler(CommandHandler("start", cmd_start))
@@ -172,14 +188,7 @@ def main() -> None:
     # восстанавливаем ожидаемые уточнения после перезапуска
     try:
         store = _load_clarify_store()
-        pending2: dict[tuple[int, int], dict] = {}
-        for k, v in store.items():
-            try:
-                chat_s, user_s = k.split(":", 1)
-                pending2[(int(chat_s), int(user_s))] = v
-            except Exception:
-                continue
-        app.bot_data["clarify_pending"] = pending2
+        app.bot_data["clarify_pending"] = _restore_clarify_pending(store)
     except Exception:
         app.bot_data["clarify_pending"] = {}
     try:
