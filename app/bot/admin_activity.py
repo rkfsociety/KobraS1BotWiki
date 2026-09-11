@@ -24,6 +24,7 @@ _SAVE_LOCK = threading.Lock()
 _SAVE_INTERVAL = 60.0
 _MAX_RECENT = 80
 _MAX_ADMINS = 500
+_MAX_ACTIVITY_CACHE_BYTES = 8 * 1024 * 1024
 
 _ACTION_LABELS: dict[str, str] = {
     "ban": "бан",
@@ -90,6 +91,9 @@ def load_admin_activity(bot_data: dict[str, Any]) -> None:
     try:
         p = _activity_path()
         if not p.exists():
+            bot_data[_ACTIVITY_KEY] = _empty_activity()
+            return
+        if p.stat().st_size > _MAX_ACTIVITY_CACHE_BYTES:
             bot_data[_ACTIVITY_KEY] = _empty_activity()
             return
         raw = json.loads(p.read_text(encoding="utf-8"))

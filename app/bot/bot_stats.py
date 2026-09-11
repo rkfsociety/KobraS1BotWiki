@@ -34,6 +34,7 @@ _SAVE_INTERVAL = 60.0
 _MAX_UNIQUE_QUESTIONS = 2000
 _MAX_WIKI_PAGES = 3000
 _MAX_TRACKED_USERS = 3000
+_MAX_STATS_CACHE_BYTES = 16 * 1024 * 1024
 # v2: hourly_activity = все входящие в allowed-чатах (раньше считались только ответы бота).
 _STATS_VERSION = 2
 
@@ -87,6 +88,9 @@ def load_bot_stats(bot_data: dict[str, Any]) -> None:
     try:
         p = _stats_path()
         if not p.exists():
+            bot_data[_STATS_KEY] = _empty_stats()
+            return
+        if p.stat().st_size > _MAX_STATS_CACHE_BYTES:
             bot_data[_STATS_KEY] = _empty_stats()
             return
         raw = json.loads(p.read_text(encoding="utf-8"))

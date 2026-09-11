@@ -82,6 +82,20 @@ def test_load_migrates_old_hourly_to_empty_incoming(tmp_path, monkeypatch):
     assert bd["bot_stats"]["stats_version"] == 2
 
 
+def test_load_stats_rejects_oversized_file_before_json_decode(tmp_path, monkeypatch):
+    import app.bot.bot_stats as bs
+
+    path = tmp_path / "bot_stats.json"
+    path.write_text("{}" * 20, encoding="utf-8")
+    monkeypatch.setattr(bs, "_stats_path", lambda: path)
+    monkeypatch.setattr(bs, "_MAX_STATS_CACHE_BYTES", 10)
+    bd: dict = {}
+
+    load_bot_stats(bd)
+
+    assert bd["bot_stats"] == bs._empty_stats()
+
+
 def test_load_keeps_valid_stats_when_one_value_is_corrupted(tmp_path, monkeypatch):
     import app.bot.bot_stats as bs
 

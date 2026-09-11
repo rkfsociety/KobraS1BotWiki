@@ -57,6 +57,20 @@ def test_load_admin_activity_from_disk(tmp_path, monkeypatch):
     assert summary[0]["counts"]["ban"] == 3
 
 
+def test_load_admin_activity_rejects_oversized_file_before_json_decode(tmp_path, monkeypatch):
+    import app.bot.admin_activity as aa
+
+    path = tmp_path / "admin_activity.json"
+    path.write_text("{}" * 20, encoding="utf-8")
+    monkeypatch.setattr(aa, "_activity_path", lambda: path)
+    monkeypatch.setattr(aa, "_MAX_ACTIVITY_CACHE_BYTES", 10)
+    bd: dict = {}
+
+    load_admin_activity(bd)
+
+    assert bd["admin_activity"] == aa._empty_activity()
+
+
 def test_load_keeps_valid_activity_when_values_are_corrupted(tmp_path, monkeypatch):
     import app.bot.admin_activity as aa
 
