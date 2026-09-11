@@ -27,6 +27,17 @@ def test_vertical_hole_no_model_clarify():
     assert not _needs_model_clarification(_QUESTION)
 
 
+def test_vertical_hole_intent_reuses_cached_classification():
+    _topic_is_slicer_vertical_hole_intent.cache_clear()
+    before = _topic_is_slicer_vertical_hole_intent.cache_info()
+    assert _topic_is_slicer_vertical_hole_intent(_QUESTION)
+    middle = _topic_is_slicer_vertical_hole_intent.cache_info()
+    assert _topic_is_slicer_vertical_hole_intent(_QUESTION)
+    after = _topic_is_slicer_vertical_hole_intent.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
 def test_quick_start_rejected_for_vertical_holes():
     assert not _response_wiki_url_acceptable(_QUESTION, _QUICK_START)
 

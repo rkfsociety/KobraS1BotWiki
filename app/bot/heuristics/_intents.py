@@ -216,6 +216,7 @@ def _topic_is_filament_slicing_settings_intent(text: str | None) -> bool:
     return slicing_ctx or layer_in_slicing
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_slicer_vertical_hole_intent(text: str | None) -> bool:
     """Отверстия в вертикальных стенках: слайсер vs моделирование «каплей» — не quick start."""
     if not text:
