@@ -25,6 +25,7 @@ _STORE_SAVE_LOCK = threading.Lock()
 _ANSWER_CTX_SAVE_INTERVAL = 60.0
 _MAX_ANSWER_CTX_ENTRIES = 800
 _MAX_CLARIFY_ENTRIES = 1024
+_MAX_FIX_ENTRIES = 800
 
 
 def _save_interval_elapsed(last_value: object, *, now: float, interval: float) -> bool:
@@ -275,6 +276,19 @@ def _excluded_urls_for_query(*, context: ContextTypes.DEFAULT_TYPE, query: str) 
     return {str(x) for x in lst if isinstance(x, str)}
 
 
+def _bound_fix_store(raw: object) -> dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    valid = {
+        key: value.strip()
+        for key, value in raw.items()
+        if isinstance(key, str) and isinstance(value, str) and value.strip()
+    }
+    if len(valid) <= _MAX_FIX_ENTRIES and len(valid) == len(raw):
+        return raw
+    return dict(list(valid.items())[-_MAX_FIX_ENTRIES:])
+
+
 def _load_fix_store() -> dict[str, str]:
     """
     query_norm -> good_url
@@ -283,19 +297,13 @@ def _load_fix_store() -> dict[str, str]:
         if not FIX_STORE.exists():
             return {}
         raw = json.loads(FIX_STORE.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            return {}
-        out: dict[str, str] = {}
-        for k, v in raw.items():
-            if isinstance(k, str) and isinstance(v, str) and v.strip():
-                out[k] = v.strip()
-        return out
+        return _bound_fix_store(raw)
     except Exception:
         return {}
 
 
 def _save_fix_store(data: dict[str, str]) -> None:
-    _save_json_atomic(FIX_STORE, data, indent=2)
+    _save_json_atomic(FIX_STORE, _bound_fix_store(data), indent=2)
 
 
 def _remember_good_fix(*, context: ContextTypes.DEFAULT_TYPE, query: str, good_url: str) -> None:
@@ -305,11 +313,9 @@ def _remember_good_fix(*, context: ContextTypes.DEFAULT_TYPE, query: str, good_u
         fixes = {}
         context.application.bot_data["fix_store"] = fixes
     fixes[qn] = good_url
-    # ограничим размер
-    if len(fixes) > 800:
-        # не знаем ts, поэтому просто обрежем по ключам
-        for k in sorted(fixes.keys())[:200]:
-            fixes.pop(k, None)
+    if len(fixes) > _MAX_FIX_ENTRIES:
+        fixes = _bound_fix_store(fixes)
+        context.application.bot_data["fix_store"] = fixes
     _save_fix_store(fixes)
 
 

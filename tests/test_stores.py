@@ -93,6 +93,25 @@ def test_clarify_loader_discards_malformed_and_old_entries(monkeypatch, tmp_path
     assert "1099" in result
 
 
+def test_fix_loader_bounds_entries_and_normalizes_values(monkeypatch, tmp_path):
+    import app.bot.stores as stores
+
+    payload = {
+        "bad": 7,
+        **{str(index): f"  https://example.test/{index}  " for index in range(900)},
+    }
+    path = tmp_path / "fixes.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(stores, "FIX_STORE", path)
+
+    result = stores._load_fix_store()
+
+    assert len(result) == stores._MAX_FIX_ENTRIES
+    assert "bad" not in result
+    assert "0" not in result
+    assert result["899"] == "https://example.test/899"
+
+
 def test_save_json_atomic_uses_no_fixed_temp_name(tmp_path):
     path = tmp_path / "state.json"
 
