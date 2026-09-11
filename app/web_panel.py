@@ -125,6 +125,7 @@ class _FormReadError(ValueError):
         self.message = message
 
 _COOKIE_NAME = "panel_session"
+_MAX_PANEL_SESSIONS = 4096
 
 
 def _read_proc_metrics() -> tuple[float, float]:
@@ -201,6 +202,11 @@ class _PanelState:
                 t: s for t, s in raw.items()
                 if isinstance(t, str) and isinstance(s, dict) and _safe_float(s.get("exp")) > now
             }
+            if len(self.sessions) > _MAX_PANEL_SESSIONS:
+                self.sessions = dict(
+                    sorted(self.sessions.items(), key=lambda item: _safe_float(item[1].get("exp")))
+                    [-_MAX_PANEL_SESSIONS:]
+                )
         except Exception:
             pass
 
@@ -220,6 +226,12 @@ class _PanelState:
         with self.lock:
             self.sessions[token] = {"exp": time.time() + ttl, "csrf": csrf, "user": user}
             self._gc_locked()
+            if len(self.sessions) > _MAX_PANEL_SESSIONS:
+                overflow = len(self.sessions) - _MAX_PANEL_SESSIONS
+                for old_token, _session in sorted(
+                    self.sessions.items(), key=lambda item: _safe_float(item[1].get("exp"))
+                )[:overflow]:
+                    self.sessions.pop(old_token, None)
             self._save_sessions_locked()
         return token, csrf
 

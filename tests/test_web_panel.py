@@ -198,6 +198,21 @@ def test_panel_sessions_ignore_corrupted_or_infinite_expiry(tmp_path, monkeypatc
     assert state.get_session("broken") is None
 
 
+def test_panel_sessions_remain_bounded(monkeypatch):
+    import app.web_panel as panel_module
+
+    state = panel_module._PanelState.__new__(panel_module._PanelState)
+    state.sessions = {}
+    state.lock = threading.Lock()
+    state.settings = types.SimpleNamespace(panel_session_ttl_seconds=3600)
+    monkeypatch.setattr(state, "_save_sessions_locked", lambda: None)
+
+    for index in range(panel_module._MAX_PANEL_SESSIONS + 1):
+        state.new_session(user=str(index))
+
+    assert len(state.sessions) == panel_module._MAX_PANEL_SESSIONS
+
+
 def test_login_failure_cache_recovers_from_corrupted_timestamps(monkeypatch):
     import app.web_panel as panel
     import threading
