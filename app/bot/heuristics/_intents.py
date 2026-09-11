@@ -315,6 +315,7 @@ def _topic_is_slicer_feature_help_intent(text: str | None) -> bool:
     return help_ctx and remove_act
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_multicolor_firmware_intent(text: str | None) -> bool:
     """Сравнение прошивок под многоцветную печать — FDM Combo, не resin."""
     if not text:

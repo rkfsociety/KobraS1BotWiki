@@ -58,6 +58,17 @@ def test_multicolor_firmware_no_model_clarify():
     assert not _needs_model_clarification(_MSG)
 
 
+def test_multicolor_firmware_intent_reuses_cached_classification():
+    _topic_is_multicolor_firmware_intent.cache_clear()
+    before = _topic_is_multicolor_firmware_intent.cache_info()
+    assert _topic_is_multicolor_firmware_intent(_MSG)
+    middle = _topic_is_multicolor_firmware_intent.cache_info()
+    assert _topic_is_multicolor_firmware_intent(_MSG)
+    after = _topic_is_multicolor_firmware_intent.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
 def test_multicolor_firmware_url_plausible():
     for url in (_S1_FW, _K3_LOG, _SLICER):
         assert _multicolor_firmware_guide_url_plausible(url)
