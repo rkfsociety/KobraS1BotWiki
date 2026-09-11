@@ -62,3 +62,14 @@ def test_photo_banter_pa_not_tuning_intent():
 def test_explicit_pa_calibration_still_intent():
     assert _topic_is_resonance_pa_tuning_intent("как откалибровать PA?")
     assert _topic_is_resonance_pa_tuning_intent("почему PA не влияет на результат?")
+
+
+def test_resonance_pa_intent_reuses_cached_classification():
+    _topic_is_resonance_pa_tuning_intent.cache_clear()
+    before = _topic_is_resonance_pa_tuning_intent.cache_info()
+    assert _topic_is_resonance_pa_tuning_intent(_QUESTION)
+    middle = _topic_is_resonance_pa_tuning_intent.cache_info()
+    assert _topic_is_resonance_pa_tuning_intent(_QUESTION)
+    after = _topic_is_resonance_pa_tuning_intent.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1

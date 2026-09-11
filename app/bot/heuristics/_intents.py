@@ -236,6 +236,7 @@ def _topic_is_slicer_vertical_hole_intent(text: str | None) -> bool:
     return deform_ctx or vertical_ctx
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_resonance_pa_tuning_intent(text: str | None) -> bool:
     """Резонанс, PA, затухающие колебания / вибрации — не clarify вместо ответа."""
     if not text:
