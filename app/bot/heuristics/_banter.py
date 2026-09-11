@@ -371,6 +371,7 @@ def _is_technical_opinion_sharing(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_technical_observation_sharing(text: str) -> bool:
     """Делится находкой о настройках/параметрах — не просит помощи у бота."""
     if not text or not text.strip():

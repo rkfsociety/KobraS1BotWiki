@@ -809,6 +809,17 @@ def test_extruder_how_to_infinitive_not_caught():
     assert not _is_technical_observation_sharing("Как через экструдер пропустить нить?")
 
 
+def test_technical_observation_reuses_cached_classification():
+    _is_technical_observation_sharing.cache_clear()
+    before = _is_technical_observation_sharing.cache_info()
+    assert _is_technical_observation_sharing(_EXTRUDER_THREAD_PAST)
+    middle = _is_technical_observation_sharing.cache_info()
+    assert _is_technical_observation_sharing(_EXTRUDER_THREAD_PAST)
+    after = _is_technical_observation_sharing.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
 # --- Лог 08:07:51: «не факт что» + «я думал … а сейчас вижу» ---
 
 _EXTRUDER_SPECULATION = (
