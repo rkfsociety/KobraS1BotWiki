@@ -613,6 +613,7 @@ def _is_multicolor_preset_banter(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_conversational_skepticism(text: str) -> bool:
     """Скепсис в треде — не запрос к вики."""
     if not text or not text.strip() or "?" in text:

@@ -535,6 +535,17 @@ def test_generic_help_filter_reuses_cached_classification():
     assert after.hits == middle.hits + 1
 
 
+def test_conversational_skepticism_reuses_cached_classification():
+    _is_conversational_skepticism.cache_clear()
+    before = _is_conversational_skepticism.cache_info()
+    assert _is_conversational_skepticism(_EXTRUDER_SPECULATION)
+    middle = _is_conversational_skepticism.cache_info()
+    assert _is_conversational_skepticism(_EXTRUDER_SPECULATION)
+    after = _is_conversational_skepticism.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"
