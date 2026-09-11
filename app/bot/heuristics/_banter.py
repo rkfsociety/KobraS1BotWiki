@@ -1894,6 +1894,7 @@ def _is_casual_advice_in_thread(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_print_task_planning_statement(text: str) -> bool:
     """«Надо напечатать X для К3 потому что лоточков не хватает» — объявление задачи в чате, не вопрос к боту."""
     if not text or not text.strip() or "?" in text:

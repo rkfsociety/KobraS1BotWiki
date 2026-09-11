@@ -27,6 +27,7 @@ from app.bot.text_heuristics import (
     _is_works_fine_reassurance,
 )
 from app.bot.heuristics import _is_experience_or_assertion_chat
+from app.bot.heuristics import _is_print_task_planning_statement
 
 # --- сами ошибочные ответы (должны стать болтовнёй) ---
 
@@ -256,6 +257,18 @@ def test_experience_assertion_reuses_cached_classification():
     middle = _is_experience_or_assertion_chat.cache_info()
     assert _is_experience_or_assertion_chat(text)
     after = _is_experience_or_assertion_chat.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
+def test_print_task_planning_reuses_cached_classification():
+    text = "Надо напечатать лоточки для многоцвета потому что не хватает"
+    _is_print_task_planning_statement.cache_clear()
+    before = _is_print_task_planning_statement.cache_info()
+    assert _is_print_task_planning_statement(text)
+    middle = _is_print_task_planning_statement.cache_info()
+    assert _is_print_task_planning_statement(text)
+    after = _is_print_task_planning_statement.cache_info()
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
 
