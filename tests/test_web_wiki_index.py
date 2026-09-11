@@ -10,6 +10,7 @@ from app.web_wiki_index import (
     WebWikiIndexer,
     _extract_text_from_html,
     _fetch_docs,
+    _load_cache,
     _read_sitemap_urls,
     _save_cache,
 )
@@ -117,6 +118,23 @@ def test_index_cache_save_is_atomic(tmp_path):
 
     assert '"title": "тест"' in path.read_text(encoding="utf-8")
     assert not list(path.parent.glob(".*.tmp"))
+
+
+def test_load_cache_skips_corrupted_entries_and_keeps_valid_documents(tmp_path):
+    path = tmp_path / "wiki.json"
+    path.write_text(
+        '[{"url": "https://wiki.test/a", "text": "valid article"}, '
+        '"broken", {"url": "https://wiki.test/a", "text": "x"}, '
+        '{"url": "https://wiki.test/b", "text": "second"}]',
+        encoding="utf-8",
+    )
+
+    docs = _load_cache(path)
+
+    assert [(doc.url, doc.text) for doc in docs] == [
+        ("https://wiki.test/a", "valid article"),
+        ("https://wiki.test/b", "second"),
+    ]
 
 
 def test_search_does_not_cache_snapshot_completed_before_index_update(monkeypatch):

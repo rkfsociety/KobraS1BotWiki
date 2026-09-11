@@ -1051,9 +1051,15 @@ def _load_cache(path: Path) -> list[WebWikiDoc]:
 
         raw = json.loads(path.read_text(encoding="utf-8"))
 
+        if not isinstance(raw, list):
+            return []
+
         by_url: dict[str, WebWikiDoc] = {}
 
         for item in raw:
+
+            if not isinstance(item, dict):
+                continue
 
             title = str(item.get("title") or "").strip() or "Wiki"
 
