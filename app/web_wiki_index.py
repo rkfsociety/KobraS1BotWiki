@@ -345,6 +345,7 @@ class WebWikiDoc:
 _SEARCH_CACHE_SIZE = 500
 _INDEX_CACHE_VERSION = 2
 _MAX_INDEX_CACHE_BYTES = 64 * 1024 * 1024
+_MAX_SITEMAP_BYTES = 16 * 1024 * 1024
 _DEFAULT_EXTRA_WIKI_URLS = (
     "https://wiki.anycubic.com/en/fdm-3d-printer/anycubic-kobra-x",
     "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-4-combo",
@@ -945,7 +946,11 @@ def _read_sitemap_urls(
 
 
 
-    root = ET.fromstring(r.text)
+    sitemap_text = r.text
+    if len(sitemap_text.encode("utf-8")) > _MAX_SITEMAP_BYTES:
+        raise ValueError("ответ sitemap превышает допустимый размер")
+
+    root = ET.fromstring(sitemap_text)
 
     ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 

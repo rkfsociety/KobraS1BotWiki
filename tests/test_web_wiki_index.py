@@ -272,6 +272,39 @@ def test_sitemap_urls_are_deduplicated_and_extra_urls_are_added(monkeypatch):
     assert clients and clients[0].closed
 
 
+def test_sitemap_rejects_oversized_response_before_xml_parse(monkeypatch):
+    import app.web_wiki_index as wiki_index
+
+    class Response:
+        text = "<urlset>" + ("x" * 100) + "</urlset>"
+
+        def raise_for_status(self):
+            return None
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def get(self, url):
+            return Response()
+
+    monkeypatch.setattr(wiki_index.httpx, "Client", Client)
+    monkeypatch.setattr(wiki_index, "_MAX_SITEMAP_BYTES", 10)
+
+    with pytest.raises(ValueError, match="sitemap"):
+        _read_sitemap_urls(
+            "https://wiki.test/sitemap.xml",
+            max_pages=10,
+            base_url="https://wiki.test",
+        )
+
+
 def test_sitemap_client_closes_when_request_fails(monkeypatch):
     clients = []
 
