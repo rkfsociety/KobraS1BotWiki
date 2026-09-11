@@ -1763,6 +1763,7 @@ def _is_offbeat_social_banter(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_bare_rhetorical_context_question(text: str) -> bool:
     """Короткий анафорический/риторический вопрос без темы 3D-печати — реплика в треде, не вопрос к боту.
 

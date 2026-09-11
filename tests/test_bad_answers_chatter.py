@@ -35,6 +35,7 @@ from app.bot.heuristics import _is_filament_testing_plan_sharing
 from app.bot.heuristics import _is_filament_feed_test_probe
 from app.bot.heuristics import _is_offbeat_social_banter
 from app.bot.heuristics import _is_pure_numeric_or_symbol_message
+from app.bot.heuristics import _is_bare_rhetorical_context_question
 
 # --- сами ошибочные ответы (должны стать болтовнёй) ---
 
@@ -380,6 +381,19 @@ def test_pure_numeric_message_reuses_cached_classification():
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
     assert not _is_pure_numeric_or_symbol_message("пластик")
+
+
+def test_bare_rhetorical_question_reuses_cached_classification():
+    text = "А как это связано?"
+    _is_bare_rhetorical_context_question.cache_clear()
+    before = _is_bare_rhetorical_context_question.cache_info()
+    assert _is_bare_rhetorical_context_question(text)
+    middle = _is_bare_rhetorical_context_question.cache_info()
+    assert _is_bare_rhetorical_context_question(text)
+    after = _is_bare_rhetorical_context_question.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_bare_rhetorical_context_question("Как настроить стол?")
 
 
 # --- разбор recent_replies / bad_answers 2026-06 (отвеченные) ---
