@@ -32,6 +32,14 @@ def _safe_runtime_timestamp(value: object, default: float = 0.0) -> float:
     return timestamp if math.isfinite(timestamp) else default
 
 
+def _rate_limit_state(bot_data: dict) -> dict:
+    value = bot_data.get("rate_limit")
+    if not isinstance(value, dict):
+        value = {}
+        bot_data["rate_limit"] = value
+    return value
+
+
 def _rate_limit_dict(rl: dict, key: str) -> dict:
     value = rl.get(key)
     if not isinstance(value, dict):

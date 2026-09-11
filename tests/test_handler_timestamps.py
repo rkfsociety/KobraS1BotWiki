@@ -5,6 +5,7 @@ from collections import deque
 from app.bot.handlers._utils import (
     _rate_limit_dict,
     _rate_limit_queue,
+    _rate_limit_state,
     _rate_limit_url_dict,
     _safe_runtime_timestamp,
 )
@@ -27,3 +28,12 @@ def test_rate_limit_helpers_recover_corrupted_state():
     assert isinstance(_rate_limit_dict(state, "last_reply_ts_by_chat"), dict)
     assert isinstance(_rate_limit_queue(state, 1), deque)
     assert isinstance(_rate_limit_url_dict(state, 1), dict)
+
+
+def test_rate_limit_state_recovers_corrupted_container():
+    bot_data = {"rate_limit": ["broken"]}
+
+    result = _rate_limit_state(bot_data)
+
+    assert result == {}
+    assert bot_data["rate_limit"] is result

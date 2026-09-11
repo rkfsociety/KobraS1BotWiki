@@ -55,6 +55,7 @@ from ._utils import (
     _is_triggered_message,
     _rate_limit_dict,
     _rate_limit_queue,
+    _rate_limit_state,
     _rate_limit_url_dict,
     _safe_runtime_timestamp,
     _trigger_source,
@@ -159,10 +160,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     settings = context.application.bot_data["settings"]
     index: WebWikiIndex = context.application.bot_data["wiki_index"]
-    rl = context.application.bot_data.get("rate_limit")
-    if not isinstance(rl, dict):
-        rl = {}
-        context.application.bot_data["rate_limit"] = rl
+    rl = _rate_limit_state(context.application.bot_data)
 
     chat_id = update.effective_chat.id
     msg = update.effective_message

@@ -19,7 +19,7 @@ from app.bot.wiki_ranking import _response_wiki_url_acceptable, _search_best_wit
 from app.ru_layer import expand_queries
 from app.web_wiki_index import WebWikiIndex
 
-from ._utils import _deny_unless_admin_command_access, _try_reply_manual_qa
+from ._utils import _deny_unless_admin_command_access, _rate_limit_state, _try_reply_manual_qa
 
 
 async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -51,14 +51,7 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         log_bot_reply_for_message("cmd_wiki_usage", msg=msg, reply_text=ut, sent=sent, user_id=uid)
         return
 
-    rl = context.application.bot_data.setdefault(
-        "rate_limit",
-        {
-            "last_reply_ts_by_chat": {},
-            "reply_ts_by_chat": {},
-            "last_url_ts_by_chat": {},
-        },
-    )
+    rl = _rate_limit_state(context.application.bot_data)
 
     # Точный ручной ответ (FAQ) важнее уточнения модели: куратор уже решил, что отвечать.
     if await _try_reply_manual_qa(
