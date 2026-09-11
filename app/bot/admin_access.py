@@ -47,7 +47,8 @@ async def user_has_admin_command_access(
         except Exception as e:
             logging.warning("get_chat_member failed chat=%s user=%s: %s", chat.id, user.id, e)
             return False
-        return member.status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR)
+        status = getattr(member, "status", None)
+        return status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR)
     if chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
         return False
     try:
@@ -55,7 +56,8 @@ async def user_has_admin_command_access(
     except Exception as e:
         logging.warning("get_chat_member failed chat=%s user=%s: %s", chat.id, user.id, e)
         return False
-    return member.status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR)
+    status = getattr(member, "status", None)
+    return status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR)
 
 
 async def user_exempt_from_wiki_reply_spam_limits(
