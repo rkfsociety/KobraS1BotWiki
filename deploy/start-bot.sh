@@ -59,6 +59,18 @@ mkdir -p .cache
 # Отсоединённая сессия: можно закрывать PuTTY, бот продолжит работу
 screen -dmS "$SCREEN_NAME" env PYTHONUNBUFFERED=1 "$PYTHON" -m app.bot
 
+for _ in 1 2 3 4 5; do
+    if pgrep -f '[p]ython.*-m app\.bot' >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+if ! pgrep -f '[p]ython.*-m app\.bot' >/dev/null 2>&1; then
+    echo "[ERROR] screen-сессия создана, но процесс python -m app.bot не запустился."
+    screen -S "$SCREEN_NAME" -X quit 2>/dev/null || true
+    exit 1
+fi
+
 # Для stop-bot.sh: помечаем, что процесс в screen
 echo "screen:${SCREEN_NAME}" > ".cache/bot.lock"
 
