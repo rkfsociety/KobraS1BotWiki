@@ -19,6 +19,7 @@ import math
 import re
 import threading
 import time
+from heapq import nlargest
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,8 @@ _BOT_ANS_MAX   = 4      # последних ответов бота польз�
 _CHAT_MSG_MAX  = 15     # последних сообщений в чате
 _USER_TTL      = 1800   # с — TTL пользовательского контекста (30 мин)
 _CHAT_TTL      = 600    # с — TTL чатового контекста (10 мин)
+_MAX_USER_CONTEXT_KEYS = 4096
+_MAX_CHAT_CONTEXT_KEYS = 1024
 _SHORT_WORDS   = 3      # запрос ≤ N слов → обогащать всегда
 _CTX_WORDS_MAX = 6      # макс. добавляемых контекстных слов
 
@@ -94,6 +97,36 @@ def _list_buffer(store: dict[str, Any], key: str) -> list[dict[str, Any]]:
     return buffer
 
 
+def _latest_context_timestamp(value: object) -> float:
+    """Возвращает время последней записи для выбора живых ключей."""
+    if not isinstance(value, list):
+        return 0.0
+    latest = 0.0
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        try:
+            timestamp = float(item.get("ts", 0.0))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if math.isfinite(timestamp) and timestamp > latest:
+            latest = timestamp
+    return latest
+
+
+def _prune_context_store(store: dict[str, Any], *, max_keys: int) -> None:
+    """Ограничивает число пользователей/чатов, оставляя самые свежие ключи."""
+    if len(store) <= max_keys:
+        return
+    keep = nlargest(
+        max_keys,
+        store.items(),
+        key=lambda item: _latest_context_timestamp(item[1]),
+    )
+    store.clear()
+    store.update(keep)
+
+
 # ── пути и диск ───────────────────────────────────────────────────────────────
 
 def _ctx_path() -> Path:
@@ -139,6 +172,7 @@ def _load_from_disk(bot_data: dict[str, Any]) -> None:
                             buf.append(m)
                             existing_ts.add(m.get("ts"))
                     buf[:] = buf[-max_n:]
+            _prune_context_store(dst, max_keys=_MAX_USER_CONTEXT_KEYS)
     except Exception:
         pass
 
@@ -204,6 +238,7 @@ def record_user_message(
     buf[:] = _fresh_context_items(buf, now=now, ttl=_USER_TTL)
     if len(buf) > _USER_MSG_MAX:
         del buf[:-_USER_MSG_MAX]
+    _prune_context_store(msgs, max_keys=_MAX_USER_CONTEXT_KEYS)
 
     # История чата (все пользователи)
     chat_msgs = _dict_store(bot_data, "chat_ctx_msgs")
@@ -212,6 +247,7 @@ def record_user_message(
     cbuf[:] = _fresh_context_items(cbuf, now=now, ttl=_CHAT_TTL)
     if len(cbuf) > _CHAT_MSG_MAX:
         del cbuf[:-_CHAT_MSG_MAX]
+    _prune_context_store(chat_msgs, max_keys=_MAX_CHAT_CONTEXT_KEYS)
 
     save_ctx_to_disk(bot_data)
 
@@ -234,6 +270,7 @@ def record_bot_answer(
     buf[:] = _fresh_context_items(buf, now=now, ttl=_USER_TTL)
     if len(buf) > _BOT_ANS_MAX:
         del buf[:-_BOT_ANS_MAX]
+    _prune_context_store(ans, max_keys=_MAX_USER_CONTEXT_KEYS)
     save_ctx_to_disk(bot_data)
 
 

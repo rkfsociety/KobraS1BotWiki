@@ -3,12 +3,25 @@ from __future__ import annotations
 import json
 
 from app.bot.user_context import (
+    _prune_context_store,
     _load_from_disk,
     enrich_query,
     get_user_topic_hint,
     record_bot_answer,
     record_user_message,
 )
+
+
+def test_context_store_pruning_keeps_most_recent_keys():
+    store = {
+        "old": [{"ts": 10, "text": "old"}],
+        "new": [{"ts": 30, "text": "new"}],
+        "middle": [{"ts": 20, "text": "middle"}],
+    }
+
+    _prune_context_store(store, max_keys=2)
+
+    assert set(store) == {"new", "middle"}
 
 
 def test_load_context_skips_bad_timestamps_and_duplicate_records(tmp_path, monkeypatch):
