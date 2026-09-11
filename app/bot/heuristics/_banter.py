@@ -1284,6 +1284,7 @@ def _is_peer_claim_debate_relay(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_peer_diagnostic_interrogation(text: str) -> bool:
     """«Температура какая была?» — допрос автора о его прошлых настройках, не запрос к вики."""
     if not text or not text.strip():

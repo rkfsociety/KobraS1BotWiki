@@ -29,6 +29,7 @@ from app.bot.text_heuristics import (
 from app.bot.heuristics import _is_experience_or_assertion_chat
 from app.bot.heuristics import _is_print_task_planning_statement
 from app.bot.heuristics import _is_causal_continuation
+from app.bot.heuristics import _is_peer_diagnostic_interrogation
 
 # --- сами ошибочные ответы (должны стать болтовнёй) ---
 
@@ -296,6 +297,19 @@ def test_causal_continuation_reuses_cached_classification():
     after = _is_causal_continuation.cache_info()
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
+
+
+def test_peer_diagnostic_interrogation_reuses_cached_classification():
+    text = "Температура какая была?"
+    _is_peer_diagnostic_interrogation.cache_clear()
+    before = _is_peer_diagnostic_interrogation.cache_info()
+    assert _is_peer_diagnostic_interrogation(text)
+    middle = _is_peer_diagnostic_interrogation.cache_info()
+    assert _is_peer_diagnostic_interrogation(text)
+    after = _is_peer_diagnostic_interrogation.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_peer_diagnostic_interrogation("Почему температура какая была?")
 
 
 # --- разбор recent_replies / bad_answers 2026-06 (отвеченные) ---
