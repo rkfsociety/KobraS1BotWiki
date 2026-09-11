@@ -1622,6 +1622,7 @@ def _is_hardware_vs_settings_dilemma(text: str) -> bool:
     return hardware and settings and dilemma
 
 
+@lru_cache(maxsize=4096)
 def _is_relay_to_peer_chatter(text: str) -> bool:
     """«Скинь ему видосы · пусть поймёт · так ему и напиши» — указание переслать кому-то, не вопрос боту."""
     if not text or not text.strip():

@@ -23,6 +23,18 @@ def test_relay_to_peer_chatter():
     assert _is_conversational_chatter(_RELAY)
 
 
+def test_relay_to_peer_reuses_cached_classification():
+    _is_relay_to_peer_chatter.cache_clear()
+    before = _is_relay_to_peer_chatter.cache_info()
+    assert _is_relay_to_peer_chatter(_RELAY)
+    middle = _is_relay_to_peer_chatter.cache_info()
+    assert _is_relay_to_peer_chatter(_RELAY)
+    after = _is_relay_to_peer_chatter.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_relay_to_peer_chatter("Скиньте ссылку на калибровку стола")
+
+
 def test_money_worth_banter():
     assert _is_money_worth_banter(_MONEY)
     assert _is_non_wiki_chatter_message(_MONEY)
