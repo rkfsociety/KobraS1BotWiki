@@ -327,6 +327,7 @@ def _topic_is_multicolor_firmware_intent(text: str | None) -> bool:
     return "цвет" in t and bool(re.search(r"\bпечат\w*\b", t))
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_filament_feed_intent(text: str | None) -> bool:
     """
     Подача филамента / экструдер крутит, но не тянет, срывы шестерни, затор.

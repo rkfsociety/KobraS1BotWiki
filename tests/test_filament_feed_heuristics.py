@@ -121,3 +121,15 @@ def test_search_picks_clogging_for_filament_msg():
     assert score >= 72
     assert "clogging" in doc.url or "feeding-timeout" in doc.url or "abnormal-blocking" in doc.url
     assert _response_wiki_url_acceptable(_FILAMENT_MSG, doc.url)
+
+
+def test_filament_feed_intent_reuses_bounded_cache():
+    _topic_is_filament_feed_intent.cache_clear()
+
+    assert _topic_is_filament_feed_intent(_FILAMENT_MSG)
+    before = _topic_is_filament_feed_intent.cache_info()
+    assert _topic_is_filament_feed_intent(_FILAMENT_MSG)
+    after = _topic_is_filament_feed_intent.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize
