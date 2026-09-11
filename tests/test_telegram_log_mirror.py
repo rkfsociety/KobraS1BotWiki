@@ -6,12 +6,27 @@ import logging
 
 from app.bot.decision_log import incoming_text_for_log, telegram_message_link
 from app.bot.telegram_log_mirror import LOG_MIRROR_TEXT_MAX, format_log_for_telegram
+from app.bot.telegram_log_mirror import TelegramLogMirrorHandler, _MAX_LOG_BUFFER_LINES
 from app.bot.reply_logging import add_to_recent_replies, load_recent_replies
 from app.web_panel import _recent_replies_section
 
 
 def test_log_mirror_text_max_reasonable():
     assert LOG_MIRROR_TEXT_MAX >= 500
+
+
+def test_log_mirror_buffer_is_bounded_and_drains_oldest_first():
+    handler = TelegramLogMirrorHandler()
+    for index in range(_MAX_LOG_BUFFER_LINES + 1):
+        handler._buf.append(f"line-{index}")
+
+    assert len(handler._buf) == _MAX_LOG_BUFFER_LINES
+    text = handler.drain(max_chars=100_000)
+
+    assert text is not None
+    assert "line-0" not in text
+    assert text.startswith("line-1")
+    assert text.endswith(f"line-{_MAX_LOG_BUFFER_LINES}")
 
 
 def test_load_recent_replies_deduplicates_file_entries_and_ignores_bad_memory_items(tmp_path, monkeypatch):

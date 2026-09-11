@@ -10,6 +10,8 @@ import re
 
 import threading
 
+from collections import deque
+
 from datetime import datetime
 
 from typing import TYPE_CHECKING
@@ -27,6 +29,7 @@ if TYPE_CHECKING:
     from app.config import Settings
 
 _MAX_CHUNK = 3800
+_MAX_LOG_BUFFER_LINES = 2000
 
 # Полный текст входящего / запроса в зеркале лога (раньше в handlers резали до 120).
 
@@ -594,7 +597,7 @@ class TelegramLogMirrorHandler(logging.Handler):
 
         self._redact = (redact or "").strip() or None
 
-        self._buf: list[str] = []
+        self._buf: deque[str] = deque(maxlen=_MAX_LOG_BUFFER_LINES)
 
         self._lock = threading.Lock()
 
@@ -642,7 +645,7 @@ class TelegramLogMirrorHandler(logging.Handler):
 
                     break
 
-                self._buf.pop(0)
+                self._buf.popleft()
 
                 chunks.append(block)
 
@@ -703,4 +706,3 @@ async def flush_telegram_log_mirror(context) -> None:
     finally:
 
         handler.set_sending(False)
-
