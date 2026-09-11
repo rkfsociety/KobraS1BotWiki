@@ -13,6 +13,7 @@ from app.bot.text_heuristics import (
     _is_product_news_announcement,
     _is_technical_observation_sharing,
     _is_technical_opinion_sharing,
+    _is_expert_deferral_chatter,
     _mentions_competitor_printer,
     _message_has_help_intent,
     _needs_model_clarification,
@@ -76,6 +77,17 @@ def test_real_how_to_question_has_help_intent():
 def test_thermistor_third_party_observation_is_chatter():
     assert _is_conversational_chatter(_THERMISTOR_OBSERVATION)
     assert not _looks_like_question(_THERMISTOR_OBSERVATION)
+
+
+def test_expert_deferral_reuses_cached_classification():
+    _is_expert_deferral_chatter.cache_clear()
+    before = _is_expert_deferral_chatter.cache_info()
+    assert _is_expert_deferral_chatter(_NOZZLE_GUESS_DEFER)
+    middle = _is_expert_deferral_chatter.cache_info()
+    assert _is_expert_deferral_chatter(_NOZZLE_GUESS_DEFER)
+    after = _is_expert_deferral_chatter.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
 
 
 def test_thermistor_help_request_not_chatter():

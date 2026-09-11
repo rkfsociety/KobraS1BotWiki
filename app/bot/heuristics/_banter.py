@@ -1974,6 +1974,7 @@ def _is_colloquial_printer_fragment(text: str) -> bool:
     )
 
 
+@lru_cache(maxsize=4096)
 def _is_expert_deferral_chatter(text: str) -> bool:
     """Делится догадкой и сам предлагает дождаться/спросить опытных — не вопрос боту."""
     if not text or not text.strip():
