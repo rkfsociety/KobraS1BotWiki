@@ -69,3 +69,15 @@ def test_layer_intent_reuses_bounded_cache():
 
     assert after.hits == before.hits + 1
     assert after.currsize == before.currsize
+
+
+def test_model_requirement_reuses_bounded_cache():
+    topic_requires_printer_model.cache_clear()
+
+    assert topic_requires_printer_model(_LAYER_QUESTION)
+    before = topic_requires_printer_model.cache_info()
+    assert topic_requires_printer_model(_LAYER_QUESTION)
+    after = topic_requires_printer_model.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize

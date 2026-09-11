@@ -59,6 +59,7 @@ def topic_is_layer_slicing_intent(text: str | None) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def topic_requires_printer_model(text: str) -> bool:
     from app.bot.text_heuristics import _topic_needs_printer_model
 
