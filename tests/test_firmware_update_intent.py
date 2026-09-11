@@ -47,3 +47,16 @@ def test_firmware_guide_url_acceptable():
         _FW_MSG + " Kobra S1",
         _FW_URL,
     )
+
+
+def test_error_code_detection_reuses_bounded_cache():
+    message = "Ошибка 10802 на Kobra S1"
+    _is_error_code_query.cache_clear()
+
+    assert _is_error_code_query(message)
+    before = _is_error_code_query.cache_info()
+    assert _is_error_code_query(message)
+    after = _is_error_code_query.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize

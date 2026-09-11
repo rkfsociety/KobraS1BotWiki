@@ -129,6 +129,7 @@ def _model_slug_hints(text: str) -> frozenset[str]:
     return frozenset(out)
 
 
+@lru_cache(maxsize=4096)
 def _extract_error_code(text: str) -> str | None:
     """
     Возвращает числовой код ошибки (4–7 цифр), если он явно присутствует в тексте.
@@ -140,6 +141,7 @@ def _extract_error_code(text: str) -> str | None:
     return m.group(1) if m else None
 
 
+@lru_cache(maxsize=4096)
 def _is_error_code_query(text: str) -> bool:
     """
     Сообщение, где ключевой смысл — код ошибки (например "ошибка 11407").
