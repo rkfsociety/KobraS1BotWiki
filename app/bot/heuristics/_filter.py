@@ -271,6 +271,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
     )
 
 
+@lru_cache(maxsize=4096)
 def _is_conversational_chatter(text: str) -> bool:
     """Бытовая реплика в чате — не отвечать ссылкой из вики."""
     if not text or not text.strip():

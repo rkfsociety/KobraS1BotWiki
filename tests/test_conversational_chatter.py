@@ -489,6 +489,17 @@ def test_printing_status_reuses_cached_classification():
     assert after.hits == middle.hits + 1
 
 
+def test_conversational_chatter_reuses_cached_classification():
+    _is_conversational_chatter.cache_clear()
+    before = _is_conversational_chatter.cache_info()
+    assert _is_conversational_chatter(_ORCA_OPINION)
+    middle = _is_conversational_chatter.cache_info()
+    assert _is_conversational_chatter(_ORCA_OPINION)
+    after = _is_conversational_chatter.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
 _FIRST_LAYER_START = "Ну что , первый слой запускаю 😁"
 
 _LAYER_HELP = "первый слой кривой на kobra s1, что делать?"
