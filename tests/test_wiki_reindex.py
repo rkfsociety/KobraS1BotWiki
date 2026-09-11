@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import json
 from types import SimpleNamespace
 
@@ -49,6 +50,46 @@ def test_sitemap_monitor_normalizes_corrupted_state_fields(tmp_path):
     monitor = SitemapMonitor("https://example.test/sitemap.xml", cache_dir=tmp_path)
 
     assert monitor._state == {"hash": None, "url_count": 0, "timestamp": 0.0, "last_check": 42.0}
+
+
+def test_unchanged_sitemap_does_not_rewrite_state(tmp_path, monkeypatch):
+    content = "<urlset><loc>https://wiki.test/a</loc></urlset>"
+    monitor = SitemapMonitor("https://example.test/sitemap.xml", cache_dir=tmp_path)
+    monitor._state.update(
+        hash=hashlib.sha256(content.encode()).hexdigest(),
+        url_count=1,
+    )
+    saves = 0
+
+    class _Response:
+        text = content
+
+        def raise_for_status(self):
+            return None
+
+    class _Client:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, *_args, **_kwargs):
+            return _Response()
+
+    def save_state():
+        nonlocal saves
+        saves += 1
+
+    monkeypatch.setattr("app.bot.wiki_reindex.httpx.AsyncClient", _Client)
+    monkeypatch.setattr(monitor, "_save_state", save_state)
+
+    assert asyncio.run(monitor._check_for_changes()) == (False, "Sitemap без изменений")
+    assert saves == 0
+    assert monitor._state["last_check"] > 0
 
 
 def test_sitemap_checks_are_serialized(tmp_path, monkeypatch):

@@ -68,6 +68,9 @@ class SitemapMonitor:
         Returns:
             (has_changes, reason) — True если обнаружены изменения, строка с причиной.
         """
+        # Время последней проверки нужно для runtime-наблюдения, но не должно
+        # заставлять переписывать state-файл при каждом неизменном опросе.
+        self._state["last_check"] = time.time()
         try:
             async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
                 response = await client.get(self.sitemap_url, headers={"User-Agent": "WikiBot/1.0"})
@@ -103,9 +106,6 @@ class SitemapMonitor:
         except Exception as e:
             logging.error("Ошибка при проверке sitemap: %s", e)
             return False, f"Ошибка: {e}"
-        finally:
-            self._state["last_check"] = time.time()
-            self._save_state()
 
 
 class WikiReindexer:
