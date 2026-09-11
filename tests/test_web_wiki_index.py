@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 
 import pytest
+import app.web_wiki_index as web_wiki_index
 
 from app.web_wiki_index import (
     WebWikiIndex,
@@ -282,6 +283,35 @@ def test_search_does_not_cache_snapshot_completed_before_index_update(monkeypatc
     assert not worker.is_alive()
 
     assert index.search("same")[0][0].url == "https://wiki.test/new"
+
+
+def test_add_docs_prepares_blobs_without_holding_index_lock(monkeypatch):
+    index = WebWikiIndex([
+        WebWikiDoc(title="old", url="https://wiki.test/old", text="printer bed"),
+    ])
+    preparing = threading.Event()
+    release = threading.Event()
+    original_make_blob = web_wiki_index._make_search_blob
+
+    def slow_make_blob(doc):
+        if doc.url.endswith("/new"):
+            preparing.set()
+            assert release.wait(timeout=2)
+        return original_make_blob(doc)
+
+    monkeypatch.setattr(web_wiki_index, "_make_search_blob", slow_make_blob)
+    worker = threading.Thread(
+        target=index.add_docs,
+        args=([WebWikiDoc(title="new", url="https://wiki.test/new", text="printer nozzle")],),
+    )
+    worker.start()
+    assert preparing.wait(timeout=2)
+
+    # Если add_docs держит lock во время подготовки, этот поиск зависнет.
+    assert index.search("printer", top_k=1)
+    release.set()
+    worker.join(timeout=2)
+    assert not worker.is_alive()
 
 
 def test_sitemap_urls_are_deduplicated_and_extra_urls_are_added(monkeypatch):

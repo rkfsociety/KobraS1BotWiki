@@ -568,27 +568,39 @@ class WebWikiIndex:
 
             return
 
+        # Подготовка blobs/token sets не зависит от состояния индекса и не
+        # должна блокировать поиск на время CPU-операций.
+        new_docs_tuple = tuple(new_docs)
+        new_blobs = tuple(_make_search_blob(d) for d in new_docs_tuple)
+        new_url_lower = tuple((d.url or "").lower() for d in new_docs_tuple)
+        new_blob_tokens = tuple(frozenset(blob.split()) for blob in new_blobs)
+        new_error_code_docs = _build_error_code_docs(new_docs_tuple)
+
         with self._lock:
 
-            new_blobs = [_make_search_blob(d) for d in new_docs]
-            new_url_lower = tuple((d.url or "").lower() for d in new_docs)
-            self._docs = (*self._docs, *new_docs)
+            self._docs = (*self._docs, *new_docs_tuple)
             self._blobs = (*self._blobs, *new_blobs)
             self._url_lower = (*self._url_lower, *new_url_lower)
-            self._blob_tokens = (*self._blob_tokens, *(frozenset(blob.split()) for blob in new_blobs))
-            for code, docs in _build_error_code_docs(tuple(new_docs)).items():
+            self._blob_tokens = (*self._blob_tokens, *new_blob_tokens)
+            for code, docs in new_error_code_docs.items():
                 self._error_code_docs.setdefault(code, []).extend(docs)
 
             self._version += 1
             self._search_cache.clear()
 
     def replace_docs(self, docs: list[WebWikiDoc]) -> None:
+        docs_tuple = tuple(docs)
+        blobs = tuple(_make_search_blob(d) for d in docs_tuple)
+        url_lower = tuple((d.url or "").lower() for d in docs_tuple)
+        blob_tokens = tuple(frozenset(blob.split()) for blob in blobs)
+        error_code_docs = _build_error_code_docs(docs_tuple)
+
         with self._lock:
-            self._docs = tuple(docs)
-            self._blobs = tuple(_make_search_blob(d) for d in self._docs)
-            self._url_lower = tuple((d.url or "").lower() for d in self._docs)
-            self._blob_tokens = tuple(frozenset(blob.split()) for blob in self._blobs)
-            self._error_code_docs = _build_error_code_docs(self._docs)
+            self._docs = docs_tuple
+            self._blobs = blobs
+            self._url_lower = url_lower
+            self._blob_tokens = blob_tokens
+            self._error_code_docs = error_code_docs
             self._version += 1
             self._search_cache.clear()
 
