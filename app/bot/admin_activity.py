@@ -107,6 +107,14 @@ def load_admin_activity(bot_data: dict[str, Any]) -> None:
                 if isinstance(counts, dict):
                     entry["counts"] = {str(action): max(0, _safe_int(count)) for action, count in counts.items()}
                 loaded_admins[str(key)] = entry
+            if len(loaded_admins) > _MAX_ADMINS:
+                overflow = len(loaded_admins) - _MAX_ADMINS
+                for drop_key, _ in nsmallest(
+                    overflow,
+                    loaded_admins.items(),
+                    key=lambda item: _admin_action_total(item[1]),
+                ):
+                    loaded_admins.pop(drop_key, None)
             activity["admins"] = loaded_admins
         totals = raw.get("totals")
         if isinstance(totals, dict):

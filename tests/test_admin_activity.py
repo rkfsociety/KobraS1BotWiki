@@ -75,6 +75,31 @@ def test_load_keeps_valid_activity_when_values_are_corrupted(tmp_path, monkeypat
     assert get_admin_activity_summary(bd)[0]["counts"] == {"ban": 3, "kick": 0}
 
 
+def test_load_admin_activity_bounds_admins(tmp_path, monkeypatch):
+    import json
+    import app.bot.admin_activity as aa
+
+    monkeypatch.setattr(aa, "_MAX_ADMINS", 2)
+    p = tmp_path / "admin_activity.json"
+    p.write_text(
+        json.dumps({
+            "admins": {
+                "low": {"user_id": 1, "counts": {"ban": 1}},
+                "mid": {"user_id": 2, "counts": {"ban": 2}},
+                "high": {"user_id": 3, "counts": {"ban": 3}},
+            },
+            "recent": [],
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(aa, "_activity_path", lambda: p)
+    bd: dict = {}
+
+    load_admin_activity(bd)
+
+    assert {row["user_id"] for row in get_admin_activity_summary(bd)} == {2, 3}
+
+
 def test_readers_tolerate_corrupted_runtime_activity():
     bd = {
         "admin_activity": {
