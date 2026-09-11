@@ -14,6 +14,7 @@ _PRINTER_MENTION_RE = re.compile(
 )
 
 
+@lru_cache(maxsize=4096)
 def _printer_mentioned(text: str) -> bool:
     """В тексте явно названа линейка/семейство принтера (латиница или кириллица)."""
     if _PRINTER_MENTION_RE.search(text):
