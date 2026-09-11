@@ -1678,6 +1678,7 @@ def _is_money_worth_banter(text: str) -> bool:
     return compare
 
 
+@lru_cache(maxsize=4096)
 def _is_design_feature_car_sarcasm(text: str) -> bool:
     """«а если у него дверь в машине кривая — тоже особенность конструкции?» — сарказм-аналогия, не вопрос."""
     if not text or not text.strip():

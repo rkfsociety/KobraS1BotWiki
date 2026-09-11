@@ -57,6 +57,18 @@ def test_design_feature_car_sarcasm():
     assert _is_non_wiki_chatter_message(_CAR)
 
 
+def test_design_feature_car_sarcasm_reuses_cached_classification():
+    _is_design_feature_car_sarcasm.cache_clear()
+    before = _is_design_feature_car_sarcasm.cache_info()
+    assert _is_design_feature_car_sarcasm(_CAR)
+    middle = _is_design_feature_car_sarcasm.cache_info()
+    assert _is_design_feature_car_sarcasm(_CAR)
+    after = _is_design_feature_car_sarcasm.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_design_feature_car_sarcasm("Дверца люфтит, это особенность конструкции или брак?")
+
+
 def test_real_questions_not_suppressed():
     # Настоящий вопрос про люфт двери — не сарказм-аналогия.
     assert not _is_design_feature_car_sarcasm("Дверца люфтит, это особенность конструкции или брак?")
