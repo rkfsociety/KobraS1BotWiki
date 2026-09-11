@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 
 from collections import OrderedDict
 from dataclasses import dataclass
+from functools import lru_cache
 from heapq import nlargest
 
 from pathlib import Path
@@ -42,6 +43,12 @@ from app.bot.text_heuristics import (
 def _normalize(text: str) -> str:
 
     return " ".join(text.lower().split())
+
+
+@lru_cache(maxsize=4096)
+def _normalize_query(text: str) -> str:
+    """Кэширует только короткие пользовательские запросы, не тексты документов."""
+    return _normalize(text)
 
 
 
@@ -171,7 +178,7 @@ def _looks_like_question(text: str) -> bool:
 
         return False
 
-    t = _normalize(text)
+    t = _normalize_query(text)
 
     if "?" in text:
 
@@ -493,7 +500,7 @@ class WebWikiIndex:
 
     def search(self, query: str, *, top_k: int = 1) -> list[tuple[WebWikiDoc, int]]:
 
-        q = _normalize(query)
+        q = _normalize_query(query)
         if not q:
             return []
         limit = max(1, top_k)

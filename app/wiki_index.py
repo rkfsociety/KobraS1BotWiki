@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections import OrderedDict
 from dataclasses import dataclass
+from functools import lru_cache
 from heapq import nlargest
 from pathlib import Path
 
@@ -17,6 +18,11 @@ def _normalize(text: str) -> str:
     text = text.lower()
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+@lru_cache(maxsize=4096)
+def _normalize_query(text: str) -> str:
+    return _normalize(text)
 
 
 def _looks_like_question(text: str) -> bool:
@@ -76,7 +82,7 @@ class WikiIndex:
         return WikiIndex(docs)
 
     def search(self, query: str, *, top_k: int = 1) -> list[tuple[WikiDoc, int]]:
-        q = _normalize(query)
+        q = _normalize_query(query)
         if not q:
             return []
         limit = max(1, top_k)
