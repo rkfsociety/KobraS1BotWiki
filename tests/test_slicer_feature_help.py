@@ -4,6 +4,7 @@ from __future__ import annotations
 from app.bot.text_heuristics import (
     _message_has_help_intent,
     _topic_is_slicer_feature_help_intent,
+    _topic_is_slicer_choice_opinion_intent,
     _topic_needs_printer_model,
 )
 from app.bot.wiki_ranking import _response_wiki_url_acceptable
@@ -48,3 +49,15 @@ def test_design_reply_present():
     expl = explain_slicer_mouse_ear_removal(_QUESTION)
     assert expl
     assert "mouse ear" in expl.lower() or "ушко" in expl.lower()
+
+
+def test_slicer_choice_intent_reuses_cached_classification():
+    text = "А зачем для кобры орка? Стандартный слайсер огонь"
+    _topic_is_slicer_choice_opinion_intent.cache_clear()
+    before = _topic_is_slicer_choice_opinion_intent.cache_info()
+    assert _topic_is_slicer_choice_opinion_intent(text)
+    middle = _topic_is_slicer_choice_opinion_intent.cache_info()
+    assert _topic_is_slicer_choice_opinion_intent(text)
+    after = _topic_is_slicer_choice_opinion_intent.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1

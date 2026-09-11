@@ -394,6 +394,7 @@ def _topic_is_filament_feed_intent(text: str | None) -> bool:
     return (has_filament and has_problem) or has_feed_motor
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_slicer_choice_opinion_intent(text: str | None) -> bool:
     """Мнение про Orca vs слайсер для Kobra — не quick start вики."""
     from app.bot.heuristics._banter import _is_slicer_app_disambiguation
