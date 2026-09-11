@@ -85,7 +85,11 @@ def save_recent_replies(bot_data: dict[str, Any]) -> None:
         try:
             p = _replies_path()
             p.parent.mkdir(parents=True, exist_ok=True)
-            buf = list(bot_data.get(_RECENT_REPLIES_KEY) or [])
+            buf = bot_data.get(_RECENT_REPLIES_KEY)
+            if not isinstance(buf, list):
+                buf = []
+                bot_data[_RECENT_REPLIES_KEY] = buf
+            buf[:] = [item for item in buf if isinstance(item, dict)]
             temporary_name: str | None = None
             try:
                 with tempfile.NamedTemporaryFile(
@@ -114,7 +118,11 @@ def add_to_recent_replies(
     """Добавляет запись о свежем ответе бота в буфер bot_data[recent_replies] и сохраняет на диск."""
     if not question.strip():
         return
-    buf: list[dict[str, Any]] = bot_data.setdefault(_RECENT_REPLIES_KEY, [])
+    buf = bot_data.get(_RECENT_REPLIES_KEY)
+    if not isinstance(buf, list):
+        buf = []
+        bot_data[_RECENT_REPLIES_KEY] = buf
+    buf[:] = [item for item in buf if isinstance(item, dict)]
     buf.insert(0, {
         "ts": time.time(),
         "question": question[:500],

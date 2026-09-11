@@ -6,7 +6,7 @@ import logging
 
 from app.bot.decision_log import incoming_text_for_log, telegram_message_link
 from app.bot.telegram_log_mirror import LOG_MIRROR_TEXT_MAX, format_log_for_telegram
-from app.bot.reply_logging import load_recent_replies
+from app.bot.reply_logging import add_to_recent_replies, load_recent_replies
 from app.web_panel import _recent_replies_section
 
 
@@ -61,6 +61,25 @@ def test_recent_replies_panel_tolerates_malformed_timestamp():
     html = _recent_replies_section(_State(), "csrf")
 
     assert "q" in html
+
+
+def test_add_recent_reply_recovers_from_corrupted_runtime_buffer(monkeypatch):
+    import app.bot.reply_logging as reply_logging
+
+    monkeypatch.setattr(reply_logging, "save_recent_replies", lambda bot_data: None)
+    bot_data = {"recent_replies": "broken"}
+
+    add_to_recent_replies(
+        bot_data,
+        question="как смазать",
+        answer="Откройте инструкцию",
+        url="https://wiki.example/lubrication",
+        source="wiki",
+        chat_id=-1001,
+    )
+
+    assert len(bot_data["recent_replies"]) == 1
+    assert bot_data["recent_replies"][0]["question"] == "как смазать"
 
 
 def test_telegram_message_link_supergroup():
