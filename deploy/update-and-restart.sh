@@ -28,6 +28,15 @@ if [[ -n "$tracked_changes" ]]; then
     exit 1
 fi
 git pull --ff-only
+local_commit="$(git rev-parse HEAD)"
+remote_commit="$(git rev-parse refs/remotes/origin/master)"
+if [[ "$local_commit" != "$remote_commit" ]]; then
+    echo "[ERROR] После git pull HEAD не совпадает с origin/master:" >&2
+    echo "        HEAD=$local_commit" >&2
+    echo "        origin/master=$remote_commit" >&2
+    exit 1
+fi
+echo "[OK] Код обновлён до $local_commit"
 
 sudo systemctl restart "$SERVICE"
 
