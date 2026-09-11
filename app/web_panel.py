@@ -26,6 +26,7 @@ import tempfile
 import threading
 import time
 import urllib.request
+from heapq import nlargest, nsmallest
 
 try:
     import psutil as _psutil
@@ -215,8 +216,11 @@ class _PanelState:
             }
             if len(self.sessions) > _MAX_PANEL_SESSIONS:
                 self.sessions = dict(
-                    sorted(self.sessions.items(), key=lambda item: _safe_float(item[1].get("exp")))
-                    [-_MAX_PANEL_SESSIONS:]
+                    nlargest(
+                        _MAX_PANEL_SESSIONS,
+                        self.sessions.items(),
+                        key=lambda item: _safe_float(item[1].get("exp")),
+                    )
                 )
         except Exception:
             pass
@@ -239,9 +243,11 @@ class _PanelState:
             self._gc_locked()
             if len(self.sessions) > _MAX_PANEL_SESSIONS:
                 overflow = len(self.sessions) - _MAX_PANEL_SESSIONS
-                for old_token, _session in sorted(
-                    self.sessions.items(), key=lambda item: _safe_float(item[1].get("exp"))
-                )[:overflow]:
+                for old_token, _session in nsmallest(
+                    overflow,
+                    self.sessions.items(),
+                    key=lambda item: _safe_float(item[1].get("exp")),
+                ):
                     self.sessions.pop(old_token, None)
             self._save_sessions_locked()
         return token, csrf
@@ -357,10 +363,11 @@ class _PanelState:
             self.login_fails = fresh_fails
             self.login_fails.setdefault(ip, []).append(now)
             if len(self.login_fails) > _MAX_LOGIN_FAIL_IPS:
-                oldest = sorted(
+                oldest = nsmallest(
+                    len(self.login_fails) - _MAX_LOGIN_FAIL_IPS,
                     self.login_fails,
                     key=lambda key: self.login_fails[key][-1],
-                )[: len(self.login_fails) - _MAX_LOGIN_FAIL_IPS]
+                )
                 for key in oldest:
                     self.login_fails.pop(key, None)
 
