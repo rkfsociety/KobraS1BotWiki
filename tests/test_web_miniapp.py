@@ -163,6 +163,20 @@ def test_miniapp_session_rejects_malformed_exp_without_error():
     assert "bad" not in state.miniapp_sessions
 
 
+def test_miniapp_session_rejects_malformed_user_or_role():
+    state = types.SimpleNamespace(
+        lock=threading.Lock(),
+        miniapp_sessions={
+            "bad-user": {"exp": 2000, "user": {"id": "42"}, "role": "user"},
+            "bad-role": {"exp": 2000, "user": {"id": 42}, "role": "owner"},
+        },
+    )
+
+    assert _get_session(state, "Bearer bad-user") is None
+    assert _get_session(state, "Bearer bad-role") is None
+    assert state.miniapp_sessions == {}
+
+
 def test_miniapp_shell_has_mobile_admin_dashboard_sections():
     body = render_miniapp().decode()
 

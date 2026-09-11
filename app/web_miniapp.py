@@ -516,6 +516,17 @@ def _get_session(state: Any, authorization: str) -> dict[str, Any] | None:
         if _session_exp(session) <= time.time():
             _session_store(state).pop(token, None)
             return None
+        user = session.get("user")
+        user_id = user.get("id") if isinstance(user, dict) else None
+        if (
+            not isinstance(user, dict)
+            or not isinstance(user_id, int)
+            or isinstance(user_id, bool)
+            or user_id <= 0
+            or session.get("role") not in {"admin", "user"}
+        ):
+            _session_store(state).pop(token, None)
+            return None
         return dict(session)
 
 
