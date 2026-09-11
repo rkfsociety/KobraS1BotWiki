@@ -15,6 +15,7 @@ import re
 import shutil
 import subprocess
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +26,11 @@ from app.bot.stores import _norm_text, _save_json_atomic
 # существующих ответов при следующем /qaadd до плановой чистки дублей.
 _MAX_ENTRIES = 300
 _MIN_SUBSTR_LEN = 6
+_MATCH_CACHE_SIZE = 8
+
+# Список FAQ живёт в bot_data весь срок процесса; кэшируем только подготовленные
+# ключи, чтобы не нормализовать тысячи строк на каждом входящем сообщении.
+_MATCH_CACHE: OrderedDict[int, tuple[list[dict[str, Any]], int, list[tuple[tuple[str, ...], str, str]]]] = OrderedDict()
 
 # Предложение → автоизвлечение коротких ключей: порог в словах
 _SENTENCE_WORD_THRESHOLD = 5
@@ -130,6 +136,7 @@ def load_manual_qa_store() -> list[dict[str, Any]]:
 
 
 def save_manual_qa_store(entries: list[dict[str, Any]]) -> None:
+    _MATCH_CACHE.pop(id(entries), None)
     p = _manual_qa_path()
     _save_json_atomic(p, entries[:_MAX_ENTRIES], indent=2)
 
@@ -271,23 +278,37 @@ def find_manual_qa_answer(entries: list[dict[str, Any]], user_text: str) -> tupl
     tn = _norm_text(user_text)
     if not tn:
         return None
-    for e in entries:
-        if not isinstance(e, dict):
-            continue
-        ks = e.get("keys")
-        if not isinstance(ks, list):
-            continue
-        ans = e.get("answer")
-        if not isinstance(ans, str) or not ans.strip():
-            continue
-        ttl = e.get("title") if isinstance(e.get("title"), str) else ""
-        ttl = ttl.strip() or (ks[0] if ks and isinstance(ks[0], str) else "manual")
-        for k in ks:
-            if not isinstance(k, str):
+    cache_key = id(entries)
+    cached = _MATCH_CACHE.get(cache_key)
+    if cached is None or cached[0] is not entries or cached[1] != len(entries):
+        prepared: list[tuple[tuple[str, ...], str, str]] = []
+        for e in entries:
+            if not isinstance(e, dict):
                 continue
-            kn = _norm_text(k)
-            if not kn:
+            ks = e.get("keys")
+            if not isinstance(ks, list):
                 continue
+            ans = e.get("answer")
+            if not isinstance(ans, str) or not ans.strip():
+                continue
+            normalized = tuple(
+                kn for k in ks if isinstance(k, str) and (kn := _norm_text(k))
+            )
+            if not normalized:
+                continue
+            ttl = e.get("title") if isinstance(e.get("title"), str) else ""
+            ttl = ttl.strip() or (ks[0] if ks and isinstance(ks[0], str) else "manual")
+            prepared.append((normalized, ans.strip(), ttl))
+        cached = (entries, len(entries), prepared)
+        _MATCH_CACHE[cache_key] = cached
+        _MATCH_CACHE.move_to_end(cache_key)
+        while len(_MATCH_CACHE) > _MATCH_CACHE_SIZE:
+            _MATCH_CACHE.popitem(last=False)
+    else:
+        _MATCH_CACHE.move_to_end(cache_key)
+
+    for normalized, answer, title in cached[2]:
+        for kn in normalized:
             if tn == kn or (len(kn) >= _MIN_SUBSTR_LEN and kn in tn):
-                return ans.strip(), ttl
+                return answer, title
     return None

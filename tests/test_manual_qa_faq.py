@@ -162,6 +162,21 @@ def test_manual_qa_store_save_is_atomic(tmp_path, monkeypatch):
     assert not list(tmp_path.glob("*.tmp"))
 
 
+def test_manual_qa_match_cache_is_invalidated_on_save(tmp_path, monkeypatch):
+    import app.bot.manual_qa as manual_qa
+
+    path = tmp_path / "manual_qa.json"
+    monkeypatch.setattr(manual_qa, "_manual_qa_path", lambda: path)
+    entries = [{"title": "старый", "keys": ["старый ключ"], "answer": "ответ"}]
+
+    assert manual_qa.find_manual_qa_answer(entries, "старый ключ") is not None
+    entries[0]["keys"] = ["новый ключ"]
+    manual_qa.save_manual_qa_store(entries)
+
+    assert manual_qa.find_manual_qa_answer(entries, "старый ключ") is None
+    assert manual_qa.find_manual_qa_answer(entries, "новый ключ") == ("ответ", "старый")
+
+
 def test_adding_entry_does_not_drop_existing_tail_entries(tmp_path, monkeypatch):
     import app.bot.manual_qa as mqa
 
