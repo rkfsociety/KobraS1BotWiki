@@ -80,6 +80,25 @@ def _restore_clarify_pending(store: object) -> dict[tuple[int, int], dict]:
     return pending
 
 
+def _ensure_lock_available(lock_path: Path) -> None:
+    """Проверяет lock-файл, не позволяя второму процессу поглотить ошибку запуска."""
+    if not lock_path.exists():
+        return
+    try:
+        old_pid = int(lock_path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError, UnicodeError):
+        return
+    try:
+        os.kill(old_pid, 0)
+    except ProcessLookupError:
+        return
+    except PermissionError as exc:
+        raise RuntimeError(f"Не удалось проверить процесс из bot.lock (pid={old_pid}).") from exc
+    except OSError:
+        return
+    raise RuntimeError(f"Похоже, бот уже запущен (pid={old_pid}). Остановите старый процесс и запустите снова.")
+
+
 def _register_handlers(app: Application) -> None:
     """Регистрирует Telegram-обработчики в порядке, используемом ботом."""
     app.add_handler(CommandHandler("start", cmd_start))
@@ -150,18 +169,7 @@ def main() -> None:
     # Храним рядом с кэшем, чтобы путь был "рядом с ботом", а не где-то в системных папках.
     lock_path = Path(settings.cache_path).resolve().parent / "bot.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    if lock_path.exists():
-        try:
-            old_pid = int(lock_path.read_text(encoding="utf-8").strip())
-            try:
-                os.kill(old_pid, 0)
-                raise RuntimeError(
-                    f"Похоже, бот уже запущен (pid={old_pid}). Остановите старый процесс и запустите снова."
-                )
-            except OSError:
-                pass
-        except Exception:
-            pass
+    _ensure_lock_available(lock_path)
     lock_path.write_text(str(os.getpid()), encoding="utf-8")
 
     wiki_index = WebWikiIndex.empty()

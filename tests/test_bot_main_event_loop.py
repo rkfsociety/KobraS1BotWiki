@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
 
-from app.bot.lifecycle import _restore_clarify_pending
+import pytest
+
+from app.bot.lifecycle import _ensure_lock_available, _restore_clarify_pending
 
 
 def test_entrypoint_installs_event_loop_without_deprecation_warning():
@@ -35,3 +38,25 @@ def test_restore_clarify_pending_skips_malformed_records():
     })
 
     assert restored == {(-100, 42): {"original": "вопрос"}}
+
+
+def test_lock_check_rejects_running_process(monkeypatch, tmp_path: Path):
+    lock_path = tmp_path / "bot.lock"
+    lock_path.write_text("123", encoding="utf-8")
+    monkeypatch.setattr("app.bot.lifecycle.os.kill", lambda pid, sig: None)
+
+    with pytest.raises(RuntimeError, match="уже запущен"):
+        _ensure_lock_available(lock_path)
+
+
+def test_lock_check_allows_stale_or_malformed_lock(monkeypatch, tmp_path: Path):
+    lock_path = tmp_path / "bot.lock"
+    lock_path.write_text("not-a-pid", encoding="utf-8")
+    _ensure_lock_available(lock_path)
+
+    lock_path.write_text("123", encoding="utf-8")
+    monkeypatch.setattr(
+        "app.bot.lifecycle.os.kill",
+        lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError),
+    )
+    _ensure_lock_available(lock_path)
