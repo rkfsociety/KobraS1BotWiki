@@ -1946,6 +1946,7 @@ def _is_multicolor_tower_rhetoric(text: str) -> bool:
     )
 
 
+@lru_cache(maxsize=4096)
 def _is_colloquial_printer_fragment(text: str) -> bool:
     """Обрывки «как кобра х», «как на кобре» — сравнение в треде, не запрос к вики."""
     if not text or not text.strip() or "?" in text:

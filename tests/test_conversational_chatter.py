@@ -22,6 +22,7 @@ from app.bot.heuristics import _is_slicer_app_disambiguation
 from app.bot.heuristics import _is_other_printer_maintenance_story
 from app.bot.heuristics import _is_print_quality_meta_curiosity
 from app.bot.heuristics import _is_printing_status_announcement
+from app.bot.heuristics import _is_colloquial_printer_fragment
 from app.web_wiki_index import _looks_like_question
 
 _BED_COMPARE_MSG = "Разберемся, тут кстати стол регулируется не сверху как на кобре"
@@ -361,6 +362,17 @@ def test_colloquial_kobra_fragment_is_chatter():
     assert _is_conversational_chatter(_KOBRA_X_FRAGMENT)
     assert not _looks_like_question(_KOBRA_X_FRAGMENT)
     assert not _message_has_help_intent(_KOBRA_X_FRAGMENT)
+
+
+def test_colloquial_fragment_reuses_cached_classification():
+    _is_colloquial_printer_fragment.cache_clear()
+    before = _is_colloquial_printer_fragment.cache_info()
+    assert _is_colloquial_printer_fragment(_KOBRA_X_FRAGMENT)
+    middle = _is_colloquial_printer_fragment.cache_info()
+    assert _is_colloquial_printer_fragment(_KOBRA_X_FRAGMENT)
+    after = _is_colloquial_printer_fragment.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
 
 
 _CHITU_CHAT_TIP = (
