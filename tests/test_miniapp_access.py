@@ -69,3 +69,22 @@ def test_participant_id_invalid_is_not_retried_or_logged_as_warning(caplog):
 
     assert attempts == 1
     assert not caplog.records
+
+
+def test_corrupted_application_state_denies_access_without_exception():
+    application = SimpleNamespace(bot=SimpleNamespace(), bot_data=["broken"])
+
+    assert asyncio.run(is_group_member(application, 42)) is False
+    assert asyncio.run(is_group_admin(application, 42)) is False
+
+
+def test_member_without_status_is_denied():
+    async def get_chat_member(*, chat_id: int, user_id: int):
+        return SimpleNamespace()
+
+    application = SimpleNamespace(
+        bot=SimpleNamespace(get_chat_member=get_chat_member),
+        bot_data={"settings": SimpleNamespace(panel_admin_chat_id=-100123)},
+    )
+
+    assert asyncio.run(is_group_member(application, 42)) is False

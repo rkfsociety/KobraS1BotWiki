@@ -13,11 +13,18 @@ log = logging.getLogger(__name__)
 
 async def _get_group_member(application: Any, user_id: int) -> Any | None:
     """Возвращает объект участника из настроенной группы или ``None`` при ошибке."""
-    bot_data = getattr(application, "bot_data", None) or {}
+    raw_bot_data = getattr(application, "bot_data", None)
+    bot_data = raw_bot_data if isinstance(raw_bot_data, dict) else {}
     settings = bot_data.get("settings")
     chat_id = getattr(settings, "panel_admin_chat_id", None)
     bot = getattr(application, "bot", None)
-    if not chat_id or bot is None or not user_id:
+    if (
+        not isinstance(user_id, int)
+        or isinstance(user_id, bool)
+        or user_id <= 0
+        or not chat_id
+        or bot is None
+    ):
         return None
 
     for attempt in range(2):
@@ -60,7 +67,7 @@ async def is_group_member(application: Any, user_id: int) -> bool:
     member = await _get_group_member(application, user_id)
     if member is None:
         return False
-    status = member.status
+    status = getattr(member, "status", None)
     if status == ChatMemberStatus.RESTRICTED:
         return getattr(member, "is_member", None) is not False
     return status in {
@@ -75,7 +82,7 @@ async def is_group_admin(application: Any, user_id: int) -> bool:
     member = await _get_group_member(application, user_id)
     if member is None:
         return False
-    status = member.status
+    status = getattr(member, "status", None)
 
     return status in {
         ChatMemberStatus.OWNER,
