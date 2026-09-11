@@ -39,6 +39,18 @@ def test_sitemap_monitor_falls_back_for_non_object_state(tmp_path):
     assert monitor._state["url_count"] == 0
 
 
+def test_sitemap_monitor_normalizes_corrupted_state_fields(tmp_path):
+    path = tmp_path / "sitemap_state.json"
+    path.write_text(
+        json.dumps({"hash": 123, "url_count": -1, "timestamp": "bad", "last_check": "42"}),
+        encoding="utf-8",
+    )
+
+    monitor = SitemapMonitor("https://example.test/sitemap.xml", cache_dir=tmp_path)
+
+    assert monitor._state == {"hash": None, "url_count": 0, "timestamp": 0.0, "last_check": 42.0}
+
+
 def test_sitemap_checks_are_serialized(tmp_path, monkeypatch):
     monitor = SitemapMonitor("https://example.test/sitemap.xml", cache_dir=tmp_path)
     active = 0

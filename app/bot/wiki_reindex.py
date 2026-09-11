@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import math
 import tempfile
 import time
 from pathlib import Path
@@ -26,14 +27,30 @@ class SitemapMonitor:
 
     def _load_state(self) -> dict[str, Any]:
         """Загружает сохранённое состояние sitemap."""
+        defaults = {"hash": None, "url_count": 0, "timestamp": 0.0, "last_check": 0.0}
         if self.state_file.exists():
             try:
                 raw = json.loads(self.state_file.read_text(encoding="utf-8"))
                 if isinstance(raw, dict):
-                    return raw
+                    state = defaults.copy()
+                    sitemap_hash = raw.get("hash")
+                    if sitemap_hash is None or isinstance(sitemap_hash, str):
+                        state["hash"] = sitemap_hash
+                    url_count = raw.get("url_count")
+                    if isinstance(url_count, int) and not isinstance(url_count, bool) and url_count >= 0:
+                        state["url_count"] = url_count
+                    for key in ("timestamp", "last_check"):
+                        value = raw.get(key)
+                        try:
+                            value = float(value)
+                        except (TypeError, ValueError, OverflowError):
+                            continue
+                        if math.isfinite(value) and value >= 0:
+                            state[key] = value
+                    return state
             except Exception:
                 pass
-        return {"hash": None, "url_count": 0, "timestamp": 0, "last_check": 0}
+        return defaults
 
     def _save_state(self) -> None:
         """Сохраняет состояние sitemap на диск."""
