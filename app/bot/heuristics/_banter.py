@@ -480,6 +480,7 @@ def _is_slicer_app_disambiguation(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_filament_testing_plan_sharing(text: str) -> bool:
     """Планы по катушке/тестам — не запрос к вики."""
     if not text or not text.strip() or "?" in text:

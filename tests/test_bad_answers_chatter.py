@@ -31,6 +31,7 @@ from app.bot.heuristics import _is_print_task_planning_statement
 from app.bot.heuristics import _is_causal_continuation
 from app.bot.heuristics import _is_peer_diagnostic_interrogation
 from app.bot.heuristics import _is_chat_meta_discussion
+from app.bot.heuristics import _is_filament_testing_plan_sharing
 
 # --- сами ошибочные ответы (должны стать болтовнёй) ---
 
@@ -324,6 +325,19 @@ def test_chat_meta_discussion_reuses_cached_classification():
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
     assert not _is_chat_meta_discussion("Помогите настроить стол")
+
+
+def test_filament_testing_plan_reuses_cached_classification():
+    text = "Буду всякое тестировать"
+    _is_filament_testing_plan_sharing.cache_clear()
+    before = _is_filament_testing_plan_sharing.cache_info()
+    assert _is_filament_testing_plan_sharing(text)
+    middle = _is_filament_testing_plan_sharing.cache_info()
+    assert _is_filament_testing_plan_sharing(text)
+    after = _is_filament_testing_plan_sharing.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_filament_testing_plan_sharing("Как тестировать катушку?")
 
 
 # --- разбор recent_replies / bad_answers 2026-06 (отвеченные) ---
