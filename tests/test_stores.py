@@ -112,6 +112,28 @@ def test_fix_loader_bounds_entries_and_normalizes_values(monkeypatch, tmp_path):
     assert result["899"] == "https://example.test/899"
 
 
+def test_feedback_loader_bounds_queries_and_urls(monkeypatch, tmp_path):
+    import app.bot.stores as stores
+
+    payload = {
+        "bad": "not-a-list",
+        **{
+            str(index): [f"https://example.test/{item}" for item in range(25)]
+            for index in range(2100)
+        },
+    }
+    path = tmp_path / "feedback.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(stores, "FEEDBACK_STORE", path)
+
+    result = stores._load_feedback_store()
+
+    assert len(result) == stores._MAX_FEEDBACK_ENTRIES
+    assert "bad" not in result
+    assert "0" not in result
+    assert result["2099"] == [f"https://example.test/{item}" for item in range(5, 25)]
+
+
 def test_save_json_atomic_uses_no_fixed_temp_name(tmp_path):
     path = tmp_path / "state.json"
 

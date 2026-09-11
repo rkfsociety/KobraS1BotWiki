@@ -26,6 +26,7 @@ _ANSWER_CTX_SAVE_INTERVAL = 60.0
 _MAX_ANSWER_CTX_ENTRIES = 800
 _MAX_CLARIFY_ENTRIES = 1024
 _MAX_FIX_ENTRIES = 800
+_MAX_FEEDBACK_ENTRIES = 2000
 
 
 def _save_interval_elapsed(last_value: object, *, now: float, interval: float) -> bool:
@@ -225,6 +226,19 @@ def _record_bot_answer_context(
     _save_answer_ctx_store(store, bot_data=context.application.bot_data)
 
 
+def _bound_feedback_store(raw: object) -> dict[str, list[str]]:
+    if not isinstance(raw, dict):
+        return {}
+    valid: dict[str, list[str]] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not isinstance(value, list):
+            continue
+        valid[key] = [item for item in value if isinstance(item, str)][-20:]
+    if len(valid) <= _MAX_FEEDBACK_ENTRIES:
+        return valid
+    return dict(list(valid.items())[-_MAX_FEEDBACK_ENTRIES:])
+
+
 def _load_feedback_store() -> dict[str, list[str]]:
     """
     query_norm -> [bad_url, ...]
@@ -233,19 +247,13 @@ def _load_feedback_store() -> dict[str, list[str]]:
         if not FEEDBACK_STORE.exists():
             return {}
         raw = json.loads(FEEDBACK_STORE.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            return {}
-        out: dict[str, list[str]] = {}
-        for k, v in raw.items():
-            if isinstance(k, str) and isinstance(v, list):
-                out[k] = [str(x) for x in v if isinstance(x, str)]
-        return out
+        return _bound_feedback_store(raw)
     except Exception:
         return {}
 
 
 def _save_feedback_store(data: dict[str, list[str]]) -> None:
-    _save_json_atomic(FEEDBACK_STORE, data, indent=2)
+    _save_json_atomic(FEEDBACK_STORE, _bound_feedback_store(data), indent=2)
 
 
 def _remember_bad_answer(*, context: ContextTypes.DEFAULT_TYPE, query: str, bad_url: str | None) -> None:
@@ -263,6 +271,9 @@ def _remember_bad_answer(*, context: ContextTypes.DEFAULT_TYPE, query: str, bad_
         lst.append(bad_url)
     # ограничим на запрос
     fb[qn] = lst[-20:]
+    if len(fb) > _MAX_FEEDBACK_ENTRIES:
+        fb = _bound_feedback_store(fb)
+        context.application.bot_data["feedback_store"] = fb
     _save_feedback_store(fb)
 
 
