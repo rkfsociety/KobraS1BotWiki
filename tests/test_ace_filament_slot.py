@@ -7,6 +7,7 @@ g.apply_runtime_patches()
 
 from app.bot.layer_model_gate import needs_model_clarification_for, response_wiki_url_acceptable
 from app.bot.text_heuristics import (
+    _ace_mentioned,
     _needs_model_clarification,
     _topic_is_ace_filament_slot_intent,
     _topic_needs_printer_model,
@@ -43,3 +44,15 @@ def test_design_reply_present():
     expl = explain_ace_filament_slot_reset(_QUESTION)
     assert expl
     assert "rfid" in expl.lower() or "чип" in expl.lower()
+
+
+def test_ace_mention_reuses_bounded_cache():
+    _ace_mentioned.cache_clear()
+
+    assert _ace_mentioned(_QUESTION)
+    before = _ace_mentioned.cache_info()
+    assert _ace_mentioned(_QUESTION)
+    after = _ace_mentioned.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize

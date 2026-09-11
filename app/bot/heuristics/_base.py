@@ -28,6 +28,7 @@ def _printer_mentioned(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _ace_mentioned(text: str) -> bool:
     t = text.lower()
     return bool(
