@@ -70,4 +70,14 @@ fi
 rm -f "$LOCK_FILE"
 
 "$SCRIPT_DIR/start-bot.sh"
-echo "ensure-bot: запуск выполнен."
+for _ in 1 2 3 4 5; do
+    if bot_python_running; then
+        echo "ensure-bot: OK (процесс python -m app.bot запущен)."
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "ensure-bot: ERROR — screen запущен, но процесс python -m app.bot не найден." >&2
+screen -list 2>/dev/null || true
+exit 1
