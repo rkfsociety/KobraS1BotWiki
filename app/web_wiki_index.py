@@ -344,6 +344,7 @@ class WebWikiDoc:
 
 _SEARCH_CACHE_SIZE = 500
 _INDEX_CACHE_VERSION = 2
+_MAX_INDEX_CACHE_BYTES = 64 * 1024 * 1024
 _DEFAULT_EXTRA_WIKI_URLS = (
     "https://wiki.anycubic.com/en/fdm-3d-printer/anycubic-kobra-x",
     "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-4-combo",
@@ -1053,6 +1054,15 @@ def _atomic_write_text(path: Path, content: str) -> None:
 def _load_cache(path: Path) -> list[WebWikiDoc]:
 
     try:
+
+        cache_size = path.stat().st_size
+        if cache_size > _MAX_INDEX_CACHE_BYTES:
+            logging.warning(
+                "Кэш индекса слишком большой и будет перестроен: %s (байт: %d)",
+                path.as_posix(),
+                cache_size,
+            )
+            return []
 
         raw = json.loads(path.read_text(encoding="utf-8"))
 

@@ -163,6 +163,14 @@ def test_load_cache_skips_corrupted_entries_and_keeps_valid_documents(tmp_path):
     ]
 
 
+def test_load_cache_rejects_oversized_file_before_json_decode(tmp_path, monkeypatch):
+    path = tmp_path / "wiki.json"
+    path.write_text("{}" * 20, encoding="utf-8")
+    monkeypatch.setattr("app.web_wiki_index._MAX_INDEX_CACHE_BYTES", 10)
+
+    assert _load_cache(path) == []
+
+
 def test_search_does_not_cache_snapshot_completed_before_index_update(monkeypatch):
     index = WebWikiIndex([
         WebWikiDoc(title="same", url="https://wiki.test/old", text="same"),
