@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from app.bot.lifecycle import _ensure_lock_available, _restore_clarify_pending
+from app.bot.lifecycle import _acquire_process_lock, _ensure_lock_available, _restore_clarify_pending
 
 
 def test_entrypoint_installs_event_loop_without_deprecation_warning():
@@ -60,3 +60,18 @@ def test_lock_check_allows_stale_or_malformed_lock(monkeypatch, tmp_path: Path):
         lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError),
     )
     _ensure_lock_available(lock_path)
+
+
+def test_process_lock_rejects_second_process_and_releases_on_close(tmp_path: Path):
+    lock_path = tmp_path / "bot.lock"
+    first_fd = _acquire_process_lock(lock_path)
+    try:
+        with pytest.raises(RuntimeError, match="уже запущен"):
+            _acquire_process_lock(lock_path)
+    finally:
+        import fcntl
+
+        fcntl.flock(first_fd, fcntl.LOCK_UN)
+        import os
+
+        os.close(first_fd)

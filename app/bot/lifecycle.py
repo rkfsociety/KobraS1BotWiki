@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import logging
 import os
 import sys
@@ -99,6 +100,26 @@ def _ensure_lock_available(lock_path: Path) -> None:
     raise RuntimeError(f"Похоже, бот уже запущен (pid={old_pid}). Остановите старый процесс и запустите снова.")
 
 
+def _acquire_process_lock(lock_path: Path) -> int:
+    """Атомарно занимает lock-файл и удерживает его до завершения процесса."""
+    _ensure_lock_available(lock_path)
+    try:
+        lock_fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o644)
+    except OSError as exc:
+        raise RuntimeError(f"Не удалось открыть bot.lock: {exc}") from exc
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        os.ftruncate(lock_fd, 0)
+        os.write(lock_fd, str(os.getpid()).encode("ascii"))
+        return lock_fd
+    except BlockingIOError as exc:
+        os.close(lock_fd)
+        raise RuntimeError("Похоже, бот уже запущен (lock занят другим процессом).") from exc
+    except OSError as exc:
+        os.close(lock_fd)
+        raise RuntimeError(f"Не удалось занять bot.lock: {exc}") from exc
+
+
 def _register_handlers(app: Application) -> None:
     """Регистрирует Telegram-обработчики в порядке, используемом ботом."""
     app.add_handler(CommandHandler("start", cmd_start))
@@ -169,8 +190,7 @@ def main() -> None:
     # Храним рядом с кэшем, чтобы путь был "рядом с ботом", а не где-то в системных папках.
     lock_path = Path(settings.cache_path).resolve().parent / "bot.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    _ensure_lock_available(lock_path)
-    lock_path.write_text(str(os.getpid()), encoding="utf-8")
+    lock_fd = _acquire_process_lock(lock_path)
 
     wiki_index = WebWikiIndex.empty()
     indexer = WebWikiIndexer(
@@ -530,6 +550,7 @@ def main() -> None:
 
     if git_pull_restart_state.get("action") == "exec":
         try:
+            os.close(lock_fd)
             lock_path.unlink(missing_ok=True)
         except OSError:
             pass
