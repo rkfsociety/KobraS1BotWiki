@@ -110,6 +110,20 @@ def test_writer_recovers_from_corrupted_runtime_containers():
     assert len(get_recent_admin_actions(bd)) == 1
 
 
+def test_admin_limit_handles_corrupted_entry(monkeypatch):
+    import app.bot.admin_activity as aa
+
+    monkeypatch.setattr(aa, "_persist", lambda *_args, **_kwargs: None)
+    admins = {str(index): {"user_id": index, "counts": {"ban": index}} for index in range(aa._MAX_ADMINS)}
+    admins["corrupted"] = "broken"
+    bd = {"admin_activity": {"admins": admins}}
+
+    record_admin_action(bd, action="ban", admin_id=aa._MAX_ADMINS + 1)
+
+    assert len(bd["admin_activity"]["admins"]) == aa._MAX_ADMINS
+    assert "corrupted" not in bd["admin_activity"]["admins"]
+
+
 def test_admin_activity_persistence_is_throttled_and_flushable(tmp_path, monkeypatch):
     import app.bot.admin_activity as aa
 

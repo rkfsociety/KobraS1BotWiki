@@ -12,6 +12,7 @@ import logging
 import math
 import threading
 import time
+from heapq import nsmallest
 from typing import Any
 
 from app.bot.stores import _save_interval_elapsed, _save_json_atomic
@@ -65,6 +66,15 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return result if math.isfinite(result) else default
     except (TypeError, ValueError, OverflowError):
         return default
+
+
+def _admin_action_total(value: object) -> int:
+    if not isinstance(value, dict):
+        return 0
+    counts = value.get("counts")
+    if not isinstance(counts, dict):
+        return 0
+    return sum(max(0, _safe_int(count)) for count in counts.values())
 
 
 def _activity_from_bot_data(bot_data: dict[str, Any]) -> dict[str, Any]:
@@ -216,14 +226,8 @@ def record_admin_action(
         del recent[: len(recent) - _MAX_RECENT]
 
     if len(admins) > _MAX_ADMINS:
-        ranked = sorted(
-            admins.items(),
-            key=lambda kv: sum(
-                max(0, _safe_int(v))
-                for v in (kv[1].get("counts") or {}).values()
-            ) if isinstance(kv[1], dict) and isinstance(kv[1].get("counts") or {}, dict) else 0,
-        )
-        for drop_key, _ in ranked[: len(admins) - _MAX_ADMINS]:
+        overflow = len(admins) - _MAX_ADMINS
+        for drop_key, _ in nsmallest(overflow, admins.items(), key=lambda kv: _admin_action_total(kv[1])):
             admins.pop(drop_key, None)
 
     activity["last_updated"] = now
