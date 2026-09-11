@@ -127,6 +127,7 @@ class _FormReadError(ValueError):
 _COOKIE_NAME = "panel_session"
 _MAX_PANEL_SESSIONS = 4096
 _TG_FUTURE_AUTH_SKEW_SECONDS = 300
+_MAX_TELEGRAM_RESPONSE_BYTES = 1 * 1024 * 1024
 
 
 def _read_proc_metrics() -> tuple[float, float]:
@@ -164,7 +165,10 @@ def _telegram_api(token: str, method: str, params: dict[str, Any]) -> dict[str, 
     url = f"https://api.telegram.org/bot{token}/{method}?" + urlencode(params)
     req = urllib.request.Request(url, headers={"User-Agent": "KobraPanel"})
     with urllib.request.urlopen(req, timeout=10) as r:  # noqa: S310 (доверенный домен api.telegram.org)
-        return json.load(r)
+        raw = r.read(_MAX_TELEGRAM_RESPONSE_BYTES + 1)
+    if len(raw) > _MAX_TELEGRAM_RESPONSE_BYTES:
+        raise ValueError("ответ Telegram API превышает допустимый размер")
+    return json.loads(raw)
 
 
 def _sessions_file() -> Path:

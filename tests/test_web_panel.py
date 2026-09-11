@@ -480,6 +480,25 @@ def test_verify_telegram_auth_rejects_future_timestamp():
     assert not ok
 
 
+def test_telegram_api_rejects_oversized_response(monkeypatch):
+    import app.web_panel as panel_module
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, size=-1):
+            return b"x" * size
+
+    monkeypatch.setattr(panel_module.urllib.request, "urlopen", lambda *_args, **_kwargs: _Response())
+
+    with pytest.raises(ValueError, match="превышает допустимый размер"):
+        panel_module._telegram_api("token", "getMe", {})
+
+
 def test_tg_auth_admin_allowed(panel, monkeypatch):
     import time as _t
     from urllib.parse import urlencode
