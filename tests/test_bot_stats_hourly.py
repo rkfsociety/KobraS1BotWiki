@@ -179,3 +179,17 @@ def test_writers_recover_corrupted_runtime_stats():
     assert bd["bot_stats"]["user_messages"]["42"]["count"] == 1
     assert bd["bot_stats"]["wiki_pages"] == {"https://wiki.example/x": 1}
     assert bd["bot_stats"]["questions"] == {"как смазать": 1}
+
+
+def test_user_limit_handles_corrupted_entry_and_keeps_bounded_size(monkeypatch):
+    import app.bot.bot_stats as bot_stats
+
+    monkeypatch.setattr(bot_stats, "_persist", lambda *_args, **_kwargs: None)
+    users = {str(i): {"user_id": i, "count": i} for i in range(bot_stats._MAX_TRACKED_USERS)}
+    users["corrupted"] = "broken"
+    bd = {"bot_stats": {"user_messages": users}}
+
+    record_incoming_activity(bd, user_id=bot_stats._MAX_TRACKED_USERS + 1)
+
+    assert len(bd["bot_stats"]["user_messages"]) == bot_stats._MAX_TRACKED_USERS
+    assert "corrupted" not in bd["bot_stats"]["user_messages"]

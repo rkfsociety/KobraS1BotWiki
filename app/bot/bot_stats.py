@@ -22,7 +22,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
-from heapq import nlargest
+from heapq import nlargest, nsmallest
 
 from app.bot.stores import _save_interval_elapsed, _save_json_atomic
 
@@ -214,8 +214,13 @@ def _bump_user_message(
     entry["count"] = max(0, _safe_int(entry.get("count", 0))) + 1
 
     if len(users) > _MAX_TRACKED_USERS:
-        ranked = sorted(users.items(), key=lambda kv: int((kv[1] or {}).get("count", 0)))
-        for drop_key, _ in ranked[: len(users) - _MAX_TRACKED_USERS]:
+        remove_count = len(users) - _MAX_TRACKED_USERS
+        ranked = nsmallest(
+            remove_count,
+            users.items(),
+            key=lambda kv: _safe_int(kv[1].get("count", 0)) if isinstance(kv[1], dict) else 0,
+        )
+        for drop_key, _ in ranked:
             users.pop(drop_key, None)
 
 
