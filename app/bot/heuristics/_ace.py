@@ -125,6 +125,7 @@ def _is_ace_unit_trade_banter(text: str | None) -> bool:
     return bool(tpu_print and dry_elsewhere)
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_ace_filament_drying_intent(text: str | None) -> bool:
     """ACE Pro как сушилка / сушка филамента в станции — не замена катушки в ACE."""
     if not text:

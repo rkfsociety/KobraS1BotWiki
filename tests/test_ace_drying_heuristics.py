@@ -40,3 +40,14 @@ def test_expand_queries_returns_independent_cached_lists():
     first.clear()
 
     assert expand_queries(_QUESTION)
+
+
+def test_ace_drying_intent_reuses_cached_classification():
+    _topic_is_ace_filament_drying_intent.cache_clear()
+    before = _topic_is_ace_filament_drying_intent.cache_info()
+    assert _topic_is_ace_filament_drying_intent(_QUESTION)
+    middle = _topic_is_ace_filament_drying_intent.cache_info()
+    assert _topic_is_ace_filament_drying_intent(_QUESTION)
+    after = _topic_is_ace_filament_drying_intent.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
