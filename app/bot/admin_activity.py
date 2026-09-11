@@ -12,7 +12,7 @@ import logging
 import math
 import threading
 import time
-from heapq import nsmallest
+from heapq import nlargest, nsmallest
 from typing import Any
 
 from app.bot.stores import _save_interval_elapsed, _save_json_atomic
@@ -276,8 +276,7 @@ def get_admin_activity_summary(bot_data: dict[str, Any], *, limit: int = 15) -> 
                 "total": total,
             }
         )
-    rows.sort(key=lambda r: (r["total"], r.get("label") or ""), reverse=True)
-    return rows[:limit]
+    return nlargest(limit, rows, key=lambda r: (r["total"], r.get("label") or ""))
 
 
 def get_recent_admin_actions(bot_data: dict[str, Any], *, limit: int = 20) -> list[dict[str, Any]]:
