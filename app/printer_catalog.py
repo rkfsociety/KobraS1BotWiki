@@ -14,7 +14,7 @@ from typing import Literal
 Frame = Literal["open", "enclosed", "unknown"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PrinterProfile:
     slug: str
     display_ru: str
@@ -294,4 +294,3 @@ def explain_door_vs_design(question: str, hints: frozenset[str]) -> str | None:
         "Возможно, вы имели в виду другую модель: у "
         f"{prof.display_ru} нет типовой заводской двери камеры — в базовой комплектации такой детали нет."
     )
-

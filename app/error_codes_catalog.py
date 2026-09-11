@@ -17,7 +17,7 @@ _MAX_CACHE_BYTES = 8 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ErrorCodeInfo:
     code: str
     title: str = ""
@@ -255,7 +255,15 @@ async def ensure_error_codes_catalog(
                     "source": url,
                     "parser_version": PARSER_VERSION,
                     "count": len(codes),
-                    "codes": {k: v.__dict__ for k, v in codes.items()},
+                    "codes": {
+                        k: {
+                            "code": v.code,
+                            "title": v.title,
+                            "cause": v.cause,
+                            "fix": v.fix,
+                        }
+                        for k, v in codes.items()
+                    },
                 },
             )
             return codes
