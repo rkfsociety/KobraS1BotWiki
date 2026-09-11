@@ -4107,6 +4107,7 @@ def _is_all_data_jul29_thread_noise(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_experience_or_assertion_chat(text: str) -> bool:
     """Experience sharing, soft assertions, advice — not a question.
 

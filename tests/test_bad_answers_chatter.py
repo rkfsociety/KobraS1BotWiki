@@ -26,6 +26,7 @@ from app.bot.text_heuristics import (
     _is_thread_humor_meme,
     _is_works_fine_reassurance,
 )
+from app.bot.heuristics import _is_experience_or_assertion_chat
 
 # --- сами ошибочные ответы (должны стать болтовнёй) ---
 
@@ -245,6 +246,18 @@ def test_real_help_not_missed_chatter_filters():
     )
     assert not _is_firmware_slicer_version_gossip("как обновить прошивку до 2.7.2.7 на kobra s1?")
     assert not _is_thread_humor_meme("почему petg не липнет к столу на kobra s1?")
+
+
+def test_experience_assertion_reuses_cached_classification():
+    text = "Я печатаю PETG и проблем нет"
+    _is_experience_or_assertion_chat.cache_clear()
+    before = _is_experience_or_assertion_chat.cache_info()
+    assert _is_experience_or_assertion_chat(text)
+    middle = _is_experience_or_assertion_chat.cache_info()
+    assert _is_experience_or_assertion_chat(text)
+    after = _is_experience_or_assertion_chat.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
 
 
 # --- разбор recent_replies / bad_answers 2026-06 (отвеченные) ---
