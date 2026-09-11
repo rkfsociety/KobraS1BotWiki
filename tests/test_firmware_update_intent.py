@@ -49,6 +49,17 @@ def test_firmware_guide_url_acceptable():
     )
 
 
+def test_firmware_update_intent_reuses_cached_classification():
+    _topic_is_firmware_update_intent.cache_clear()
+    before = _topic_is_firmware_update_intent.cache_info()
+    assert _topic_is_firmware_update_intent(_FW_MSG)
+    middle = _topic_is_firmware_update_intent.cache_info()
+    assert _topic_is_firmware_update_intent(_FW_MSG)
+    after = _topic_is_firmware_update_intent.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
 def test_error_code_detection_reuses_bounded_cache():
     message = "Ошибка 10802 на Kobra S1"
     _is_error_code_query.cache_clear()

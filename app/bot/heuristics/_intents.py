@@ -71,6 +71,7 @@ def _topic_is_marketplace_commerce_intent(text: str | None) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_firmware_update_intent(text: str | None) -> bool:
     """Установка/обновление прошивки — не страницы /error-codes/."""
     if not text:
