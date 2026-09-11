@@ -82,6 +82,26 @@ def test_add_recent_reply_recovers_from_corrupted_runtime_buffer(monkeypatch):
     assert bot_data["recent_replies"][0]["question"] == "как смазать"
 
 
+def test_add_recent_reply_keeps_buffer_bounded(monkeypatch):
+    import app.bot.reply_logging as reply_logging
+
+    monkeypatch.setattr(reply_logging, "_RECENT_REPLIES_MAX", 2)
+    monkeypatch.setattr(reply_logging, "save_recent_replies", lambda bot_data: None)
+    bot_data = {"recent_replies": []}
+
+    for index in range(3):
+        add_to_recent_replies(
+            bot_data,
+            question=f"вопрос {index}",
+            answer="ответ",
+            url="",
+            source="wiki",
+            chat_id=-1001,
+        )
+
+    assert [item["question"] for item in bot_data["recent_replies"]] == ["вопрос 2", "вопрос 1"]
+
+
 def test_telegram_message_link_supergroup():
     url = telegram_message_link(-1002295062981, 42)
     assert url == "https://t.me/c/2295062981/42"

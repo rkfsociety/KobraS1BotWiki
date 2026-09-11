@@ -20,6 +20,7 @@ from app.bot.decision_log import LOG_MIRROR_TEXT_MAX, _msg_ids, incoming_text_fo
 
 # --- буфер последних ответов (для дашборда веб-панели) ---
 _RECENT_REPLIES_KEY = "recent_replies"
+_RECENT_REPLIES_MAX = 2000
 _REPLIES_SAVE_LOCK = threading.Lock()
 
 
@@ -74,6 +75,7 @@ def load_recent_replies(bot_data: dict[str, Any]) -> None:
                 if timestamp is not None:
                     existing_ts.add(timestamp)
         existing.sort(key=_reply_timestamp, reverse=True)
+        del existing[_RECENT_REPLIES_MAX:]
         logging.info("recent_replies: загружено %d записей с диска", len(existing))
     except Exception as exc:
         logging.warning("recent_replies: ошибка загрузки — %s", exc)
@@ -90,6 +92,8 @@ def save_recent_replies(bot_data: dict[str, Any]) -> None:
                 buf = []
                 bot_data[_RECENT_REPLIES_KEY] = buf
             buf[:] = [item for item in buf if isinstance(item, dict)]
+            buf.sort(key=_reply_timestamp, reverse=True)
+            del buf[_RECENT_REPLIES_MAX:]
             temporary_name: str | None = None
             try:
                 with tempfile.NamedTemporaryFile(
@@ -131,6 +135,7 @@ def add_to_recent_replies(
         "source": source,
         "chat_id": chat_id,
     })
+    del buf[_RECENT_REPLIES_MAX:]
     save_recent_replies(bot_data)
 
 _TAG_RE = re.compile(r"<[^>]+>")
