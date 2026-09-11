@@ -134,6 +134,29 @@ def test_feedback_loader_bounds_queries_and_urls(monkeypatch, tmp_path):
     assert result["2099"] == [f"https://example.test/{item}" for item in range(5, 25)]
 
 
+def test_json_store_loaders_reject_oversized_files_before_decode(monkeypatch, tmp_path):
+    import app.bot.stores as stores
+
+    paths = [
+        tmp_path / "answer.json",
+        tmp_path / "clarify.json",
+        tmp_path / "feedback.json",
+        tmp_path / "fix.json",
+    ]
+    for path in paths:
+        path.write_text("x" * 20, encoding="utf-8")
+    monkeypatch.setattr(stores, "ANSWER_CTX_STORE", paths[0])
+    monkeypatch.setattr(stores, "CLARIFY_STORE", paths[1])
+    monkeypatch.setattr(stores, "FEEDBACK_STORE", paths[2])
+    monkeypatch.setattr(stores, "FIX_STORE", paths[3])
+    monkeypatch.setattr(stores, "_MAX_STORE_BYTES", 10)
+
+    assert stores._load_answer_ctx_store() == {}
+    assert stores._load_clarify_store() == {}
+    assert stores._load_feedback_store() == {}
+    assert stores._load_fix_store() == {}
+
+
 def test_save_json_atomic_uses_no_fixed_temp_name(tmp_path):
     path = tmp_path / "state.json"
 

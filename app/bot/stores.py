@@ -27,6 +27,7 @@ _MAX_ANSWER_CTX_ENTRIES = 800
 _MAX_CLARIFY_ENTRIES = 1024
 _MAX_FIX_ENTRIES = 800
 _MAX_FEEDBACK_ENTRIES = 2000
+_MAX_STORE_BYTES = 8 * 1024 * 1024
 
 
 def _save_interval_elapsed(last_value: object, *, now: float, interval: float) -> bool:
@@ -59,6 +60,16 @@ def _save_json_atomic(path: Path, data: object, *, indent: int | None = None) ->
         finally:
             if temporary_path is not None:
                 temporary_path.unlink(missing_ok=True)
+
+
+def _load_store_json(path: Path) -> object | None:
+    """Читает JSON-store только после проверки размера файла."""
+    try:
+        if not path.exists() or path.stat().st_size > _MAX_STORE_BYTES:
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
 
 def _clarify_key(chat_id: int, user_id: int) -> str:
     return f"{chat_id}:{user_id}"
@@ -96,13 +107,7 @@ def _bound_clarify_store(raw: object) -> dict[str, dict]:
 
 
 def _load_clarify_store() -> dict[str, dict]:
-    try:
-        if not CLARIFY_STORE.exists():
-            return {}
-        raw = json.loads(CLARIFY_STORE.read_text(encoding="utf-8"))
-        return _bound_clarify_store(raw)
-    except Exception:
-        return {}
+    return _bound_clarify_store(_load_store_json(CLARIFY_STORE))
 
 
 def _save_clarify_store(data: dict[str, dict]) -> None:
@@ -134,13 +139,7 @@ def _bound_answer_ctx_store(raw: object) -> dict[str, dict]:
 
 
 def _load_answer_ctx_store() -> dict[str, dict]:
-    try:
-        if not ANSWER_CTX_STORE.exists():
-            return {}
-        raw = json.loads(ANSWER_CTX_STORE.read_text(encoding="utf-8"))
-        return _bound_answer_ctx_store(raw)
-    except Exception:
-        return {}
+    return _bound_answer_ctx_store(_load_store_json(ANSWER_CTX_STORE))
 
 
 def _get_answer_ctx_store(bot_data: dict[str, Any]) -> dict[str, dict]:
@@ -243,13 +242,7 @@ def _load_feedback_store() -> dict[str, list[str]]:
     """
     query_norm -> [bad_url, ...]
     """
-    try:
-        if not FEEDBACK_STORE.exists():
-            return {}
-        raw = json.loads(FEEDBACK_STORE.read_text(encoding="utf-8"))
-        return _bound_feedback_store(raw)
-    except Exception:
-        return {}
+    return _bound_feedback_store(_load_store_json(FEEDBACK_STORE))
 
 
 def _save_feedback_store(data: dict[str, list[str]]) -> None:
@@ -304,13 +297,7 @@ def _load_fix_store() -> dict[str, str]:
     """
     query_norm -> good_url
     """
-    try:
-        if not FIX_STORE.exists():
-            return {}
-        raw = json.loads(FIX_STORE.read_text(encoding="utf-8"))
-        return _bound_fix_store(raw)
-    except Exception:
-        return {}
+    return _bound_fix_store(_load_store_json(FIX_STORE))
 
 
 def _save_fix_store(data: dict[str, str]) -> None:
