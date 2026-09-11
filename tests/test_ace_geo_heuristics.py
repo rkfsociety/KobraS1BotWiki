@@ -94,6 +94,25 @@ def test_geo_only_skipped():
     assert _is_geo_social_only_request(text)
 
 
+def test_geo_social_filter_reuses_bounded_cache():
+
+    text = "Кто из владельцев Kobra S1 combo живёт рядом с Обнинском?"
+
+    _is_geo_social_only_request.cache_clear()
+
+    assert _is_geo_social_only_request(text)
+
+    before = _is_geo_social_only_request.cache_info()
+
+    assert _is_geo_social_only_request(text)
+
+    after = _is_geo_social_only_request.cache_info()
+
+    assert after.hits == before.hits + 1
+
+    assert after.currsize == before.currsize
+
+
 
 
 
@@ -186,5 +205,4 @@ def test_ace_connection_intent_not_blocking_page():
     assert _response_wiki_url_acceptable(_ACE_CONN_MSG, network)
 
     assert _topic_path_bonus(_ACE_CONN_MSG, binding) > _topic_path_bonus(_ACE_CONN_MSG, blocking)
-
 

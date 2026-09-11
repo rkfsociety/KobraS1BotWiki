@@ -129,6 +129,7 @@ from app.bot.heuristics._intents import (
 )
 
 
+@lru_cache(maxsize=4096)
 def _is_geo_social_only_request(text: str) -> bool:
     """
     Координация встреч/обмена с соседями — бот молчит.
