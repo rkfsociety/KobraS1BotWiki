@@ -131,7 +131,7 @@ def load_manual_qa_store() -> list[dict[str, Any]]:
 
 def save_manual_qa_store(entries: list[dict[str, Any]]) -> None:
     p = _manual_qa_path()
-    _save_json_atomic(p, entries, indent=2)
+    _save_json_atomic(p, entries[:_MAX_ENTRIES], indent=2)
 
 
 def try_git_push_manual_qa() -> tuple[bool, str]:

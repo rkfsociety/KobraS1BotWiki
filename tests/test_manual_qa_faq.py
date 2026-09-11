@@ -108,6 +108,19 @@ def test_load_manual_qa_store_bounds_legacy_file(tmp_path, monkeypatch):
     assert entries[0]["answer"] == "0"
 
 
+def test_save_manual_qa_store_bounds_direct_input(tmp_path, monkeypatch):
+    import app.bot.manual_qa as manual_qa
+
+    path = tmp_path / "manual_qa.json"
+    monkeypatch.setattr(manual_qa, "_manual_qa_path", lambda: path)
+
+    manual_qa.save_manual_qa_store(
+        [{"keys": [str(index)], "answer": str(index)} for index in range(manual_qa._MAX_ENTRIES + 10)]
+    )
+
+    assert len(manual_qa.load_manual_qa_store()) == manual_qa._MAX_ENTRIES
+
+
 def test_normalize_keys_long_sentence_expands():
     # Длинное предложение разбивается на короткие фразы
     result = _normalize_keys(["А вот как проверить износ механики? Вернее как его оценить не разобрав принтер?"])
