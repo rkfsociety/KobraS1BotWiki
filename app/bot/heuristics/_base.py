@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 
 _PRINTER_MENTION_RE = re.compile(
@@ -63,6 +64,7 @@ def _mentions_competitor_printer(text: str) -> bool:
     )
 
 
+@lru_cache(maxsize=4096)
 def _model_slug_hints(text: str) -> frozenset[str]:
     """Подстроки пути вики (латиница), по которым отличают линейки принтеров."""
     out: set[str] = set()
