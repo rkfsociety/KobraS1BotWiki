@@ -2021,14 +2021,20 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
         # --- обработчики действий ---
         def _health_check(self) -> None:
             app = state.application
-            bd = app.bot_data if app else {}
+            bd = getattr(app, "bot_data", {}) if app else {}
+            if not isinstance(bd, dict):
+                bd = {}
             wix = bd.get("wiki_index")
             alive = app is not None and bd.get("settings") is not None
             status_code = 200 if alive else 503
+            try:
+                version = get_bot_version()
+            except Exception:
+                version = "unknown"
             payload = json.dumps({
                 "status": "ok" if alive else "unavailable",
-                "version": get_bot_version(),
-                "wiki_pages": wix.doc_count if wix is not None else 0,
+                "version": version,
+                "wiki_pages": _safe_int(getattr(wix, "doc_count", 0) if wix is not None else 0),
                 "bot_username": bd.get("bot_username"),
             }, ensure_ascii=False).encode("utf-8")
             self._send(payload, status=status_code, content_type="application/json; charset=utf-8")

@@ -137,6 +137,17 @@ def test_reindex_webhook_rejects_oversized_body(panel, monkeypatch):
     assert json.loads(response.read())["status"] == "error"
 
 
+def test_health_endpoint_recovers_from_corrupted_bot_data(panel):
+    app, port = panel
+    app.bot_data = []
+    connection = _conn(port)
+    connection.request("GET", "/health")
+    response = connection.getresponse()
+
+    assert response.status == 503
+    assert json.loads(response.read())["status"] == "unavailable"
+
+
 def test_login_fail_cache_is_bounded_and_prunes_expired_ips(monkeypatch):
     state = object.__new__(_PanelState)
     state.login_fails = {}
