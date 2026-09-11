@@ -270,6 +270,7 @@ def _is_material_strength_discussion(text: str) -> bool:
     return material and mechanics and curiosity
 
 
+@lru_cache(maxsize=4096)
 def _is_technical_opinion_sharing(text: str) -> bool:
     """Мнение в обсуждении (люфт, печать) — не запрос помощи у бота."""
     if not text or not text.strip():

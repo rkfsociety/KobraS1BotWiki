@@ -838,6 +838,17 @@ _PRINT_BOREDOM_MSG = "С партийными печать не интересн
 
 def test_print_boredom_opinion_from_log_is_chatter():
     assert _is_technical_opinion_sharing(_PRINT_BOREDOM_MSG)
+
+
+def test_technical_opinion_reuses_cached_classification():
+    _is_technical_opinion_sharing.cache_clear()
+    before = _is_technical_opinion_sharing.cache_info()
+    assert _is_technical_opinion_sharing(_PRINT_BOREDOM_MSG)
+    middle = _is_technical_opinion_sharing.cache_info()
+    assert _is_technical_opinion_sharing(_PRINT_BOREDOM_MSG)
+    after = _is_technical_opinion_sharing.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
     assert _is_conversational_chatter(_PRINT_BOREDOM_MSG)
     assert not _needs_model_clarification(_PRINT_BOREDOM_MSG)
 
