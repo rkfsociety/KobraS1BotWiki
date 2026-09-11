@@ -138,7 +138,8 @@ def add_to_recent_replies(
     if not isinstance(buf, list):
         buf = []
         bot_data[_RECENT_REPLIES_KEY] = buf
-    buf[:] = [item for item in buf if isinstance(item, dict)]
+    if any(not isinstance(item, dict) for item in buf):
+        buf[:] = [item for item in buf if isinstance(item, dict)]
     buf.insert(0, {
         "ts": time.time(),
         "question": question[:500],
