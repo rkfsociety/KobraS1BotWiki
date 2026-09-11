@@ -32,3 +32,19 @@ def test_translation_cache_evicts_oldest_entries(tmp_path, monkeypatch):
     translator._put_cached("new entry", "новая", source="test")
 
     assert set(translator._cache) == {"a newer", "new entry"}
+
+
+def test_translation_cache_load_is_bounded(tmp_path, monkeypatch):
+    path = tmp_path / "translations.json"
+    path.write_text(
+        "{" + ",".join(
+            f'"entry {index}": {{"ru": "перевод", "ts": {index}}}'
+            for index in range(5)
+        ) + "}",
+        encoding="utf-8",
+    )
+    translator = Translator(cache_path=path, max_cache_entries=2)
+    monkeypatch.setattr("app.translate_ru.time.time", lambda: 5.0)
+
+    assert translator._get_cached("entry 4") == "перевод"
+    assert set(translator._cache) == {"entry 3", "entry 4"}

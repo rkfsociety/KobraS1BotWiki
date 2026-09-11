@@ -8,6 +8,7 @@ import tempfile
 import time
 import urllib.parse
 from dataclasses import dataclass
+from heapq import nlargest, nsmallest
 from pathlib import Path
 
 import httpx
@@ -46,7 +47,29 @@ class Translator:
                 self._cache = {}
                 return
             raw = json.loads(self.cache_path.read_text(encoding="utf-8"))
-            self._cache = raw if isinstance(raw, dict) else {}
+            if not isinstance(raw, dict):
+                self._cache = {}
+                return
+            valid = {
+                key: value
+                for key, value in raw.items()
+                if isinstance(key, str)
+                and isinstance(value, dict)
+                and isinstance(value.get("ru"), str)
+                and value["ru"].strip()
+            }
+            max_entries = max(1, int(self.max_cache_entries))
+            self._cache = (
+                dict(
+                    nlargest(
+                        max_entries,
+                        valid.items(),
+                        key=lambda item: _cache_timestamp(item[1]),
+                    )
+                )
+                if len(valid) > max_entries
+                else valid
+            )
         except Exception:
             self._cache = {}
 
@@ -94,8 +117,12 @@ class Translator:
         max_entries = max(1, int(self.max_cache_entries))
         if len(self._cache) > max_entries:
             remove_count = len(self._cache) - max_entries
-            oldest = sorted(self._cache, key=lambda key: _cache_timestamp(self._cache[key]))
-            for k in oldest[:remove_count]:
+            oldest = nsmallest(
+                remove_count,
+                self._cache.items(),
+                key=lambda item: _cache_timestamp(item[1]),
+            )
+            for k, _ in oldest:
                 self._cache.pop(k, None)
         self._save()
 
