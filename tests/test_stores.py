@@ -74,6 +74,25 @@ def test_answer_context_loader_discards_malformed_and_old_entries(monkeypatch, t
     assert "899" in result
 
 
+def test_clarify_loader_discards_malformed_and_old_entries(monkeypatch, tmp_path):
+    import app.bot.stores as stores
+
+    payload = {
+        "bad": "not-a-record",
+        **{str(index): {"ts": index, "original": "q"} for index in range(1100)},
+    }
+    path = tmp_path / "clarify-pending.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(stores, "CLARIFY_STORE", path)
+
+    result = stores._load_clarify_store()
+
+    assert len(result) == stores._MAX_CLARIFY_ENTRIES
+    assert "bad" not in result
+    assert "0" not in result
+    assert "1099" in result
+
+
 def test_save_json_atomic_uses_no_fixed_temp_name(tmp_path):
     path = tmp_path / "state.json"
 

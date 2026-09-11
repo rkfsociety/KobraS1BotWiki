@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import math
+from heapq import nsmallest
 
 import logging
 
@@ -77,6 +78,8 @@ from app.config import Settings
 
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
+_MAX_PENDING_CLARIFICATIONS = 1024
+
 
 def _safe_timestamp(value: object, default: float = 0.0) -> float:
     try:
@@ -91,6 +94,19 @@ def _safe_message_id(value: object) -> int | None:
         return int(value)
     except (TypeError, ValueError, OverflowError):
         return None
+
+
+def _prune_pending_clarifications(pending: dict[tuple[int, int], dict]) -> None:
+    if len(pending) <= _MAX_PENDING_CLARIFICATIONS:
+        return
+    excess = len(pending) - _MAX_PENDING_CLARIFICATIONS
+    oldest = nsmallest(
+        excess,
+        pending.items(),
+        key=lambda item: _safe_timestamp(item[1].get("ts") if isinstance(item[1], dict) else 0.0),
+    )
+    for key, _ in oldest:
+        pending.pop(key, None)
 
 
 def _runtime_dict(bot_data: dict, key: str) -> dict:
@@ -206,6 +222,7 @@ async def _try_send_error_code_clarify(
     now2 = time.time()
 
     pending[ckey] = {"original": text, "ts": now2, "prompt_message_id": sent.message_id}
+    _prune_pending_clarifications(pending)
 
     store = _load_clarify_store()
 
@@ -826,6 +843,7 @@ async def _try_send_printer_clarify(
     )
 
     pending[ckey] = {"original": text, "ts": now2, "prompt_message_id": sent.message_id}
+    _prune_pending_clarifications(pending)
 
     store = _load_clarify_store()
 

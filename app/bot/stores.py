@@ -24,6 +24,7 @@ from app.bot.constants import (
 _STORE_SAVE_LOCK = threading.Lock()
 _ANSWER_CTX_SAVE_INTERVAL = 60.0
 _MAX_ANSWER_CTX_ENTRIES = 800
+_MAX_CLARIFY_ENTRIES = 1024
 
 
 def _save_interval_elapsed(last_value: object, *, now: float, interval: float) -> bool:
@@ -61,18 +62,49 @@ def _clarify_key(chat_id: int, user_id: int) -> str:
     return f"{chat_id}:{user_id}"
 
 
+def _clarify_timestamp(entry: object) -> float:
+    if not isinstance(entry, dict):
+        return 0.0
+    try:
+        value = float(entry.get("ts", 0.0) or 0.0)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return value if math.isfinite(value) else 0.0
+
+
+def _bound_clarify_store(raw: object) -> dict[str, dict]:
+    if not isinstance(raw, dict):
+        return {}
+    valid = {
+        key: value
+        for key, value in raw.items()
+        if isinstance(key, str) and isinstance(value, dict)
+    }
+    if len(valid) <= _MAX_CLARIFY_ENTRIES and len(valid) == len(raw):
+        return raw
+    if len(valid) <= _MAX_CLARIFY_ENTRIES:
+        return valid
+    return dict(
+        nlargest(
+            _MAX_CLARIFY_ENTRIES,
+            valid.items(),
+            key=lambda item: _clarify_timestamp(item[1]),
+        )
+    )
+
+
 def _load_clarify_store() -> dict[str, dict]:
     try:
         if not CLARIFY_STORE.exists():
             return {}
         raw = json.loads(CLARIFY_STORE.read_text(encoding="utf-8"))
-        return raw if isinstance(raw, dict) else {}
+        return _bound_clarify_store(raw)
     except Exception:
         return {}
 
 
 def _save_clarify_store(data: dict[str, dict]) -> None:
-    _save_json_atomic(CLARIFY_STORE, data)
+    _save_json_atomic(CLARIFY_STORE, _bound_clarify_store(data))
 
 @lru_cache(maxsize=4096)
 def _norm_text(s: str) -> str:

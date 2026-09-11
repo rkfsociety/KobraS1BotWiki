@@ -33,3 +33,16 @@ def test_runtime_dict_recovers_corrupted_clarify_container():
 
     assert result == {}
     assert bot_data["clarify_pending"] is result
+
+
+def test_pending_pruning_keeps_newest_entries(monkeypatch):
+    pending = {
+        (0, 0): {"ts": 1},
+        (1, 1): {"ts": 2},
+        (2, 2): {"ts": 3},
+    }
+    monkeypatch.setattr(clarify, "_MAX_PENDING_CLARIFICATIONS", 2)
+
+    clarify._prune_pending_clarifications(pending)
+
+    assert set(pending) == {(1, 1), (2, 2)}
