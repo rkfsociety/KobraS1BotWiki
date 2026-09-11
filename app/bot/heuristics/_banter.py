@@ -1701,6 +1701,7 @@ def _is_design_feature_car_sarcasm(text: str) -> bool:
     return sarcasm_frame and analogy
 
 
+@lru_cache(maxsize=4096)
 def _is_pure_numeric_or_symbol_message(text: str) -> bool:
     """Сообщение без реальных слов — только цифры и символы (35?, 40%?).
 

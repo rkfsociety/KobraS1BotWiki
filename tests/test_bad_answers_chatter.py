@@ -34,6 +34,7 @@ from app.bot.heuristics import _is_chat_meta_discussion
 from app.bot.heuristics import _is_filament_testing_plan_sharing
 from app.bot.heuristics import _is_filament_feed_test_probe
 from app.bot.heuristics import _is_offbeat_social_banter
+from app.bot.heuristics import _is_pure_numeric_or_symbol_message
 
 # --- сами ошибочные ответы (должны стать болтовнёй) ---
 
@@ -366,6 +367,19 @@ def test_offbeat_social_banter_reuses_cached_classification():
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
     assert not _is_offbeat_social_banter("Как настроить печать?")
+
+
+def test_pure_numeric_message_reuses_cached_classification():
+    text = "40%?"
+    _is_pure_numeric_or_symbol_message.cache_clear()
+    before = _is_pure_numeric_or_symbol_message.cache_info()
+    assert _is_pure_numeric_or_symbol_message(text)
+    middle = _is_pure_numeric_or_symbol_message.cache_info()
+    assert _is_pure_numeric_or_symbol_message(text)
+    after = _is_pure_numeric_or_symbol_message.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+    assert not _is_pure_numeric_or_symbol_message("пластик")
 
 
 # --- разбор recent_replies / bad_answers 2026-06 (отвеченные) ---
