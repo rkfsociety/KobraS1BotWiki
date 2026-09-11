@@ -145,6 +145,7 @@ def _is_geo_social_only_request(text: str) -> bool:
     return True
 
 
+@lru_cache(maxsize=4096)
 def _needs_model_clarification(text: str) -> bool:
     # Для кодов ошибок модель не спрашиваем — либо найдём страницу по коду, либо промолчим.
     if _is_error_code_query(text):

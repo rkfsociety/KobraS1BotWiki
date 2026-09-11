@@ -44,3 +44,16 @@ def test_model_intent_reuses_bounded_cache():
 
     assert after.hits == before.hits + 1
     assert after.currsize == before.currsize
+
+
+def test_clarification_filter_reuses_bounded_cache():
+    text = "как настроить стол, кубики на нём не печатаются?"
+    _needs_model_clarification.cache_clear()
+
+    assert _needs_model_clarification(text)
+    before = _needs_model_clarification.cache_info()
+    assert _needs_model_clarification(text)
+    after = _needs_model_clarification.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize
