@@ -1,6 +1,8 @@
 """Базовый набор FAQ в data/manual_qa.json: типичные вопросы находят ответ."""
 from __future__ import annotations
 
+import json
+
 from app.bot.manual_qa import (
     _extract_phrases,
     _normalize_keys,
@@ -88,6 +90,22 @@ def test_normalize_keys_short_kept_as_is():
     # Короткие ключи (≤ 5 слов) не трогаются
     result = _normalize_keys(["износ механики", "проверить люфт"])
     assert result == ["износ механики", "проверить люфт"]
+
+
+def test_load_manual_qa_store_bounds_legacy_file(tmp_path, monkeypatch):
+    import app.bot.manual_qa as manual_qa
+
+    path = tmp_path / "manual_qa.json"
+    path.write_text(
+        json.dumps([{"keys": [str(index)], "answer": str(index)} for index in range(manual_qa._MAX_ENTRIES + 10)]),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(manual_qa, "_manual_qa_path", lambda: path)
+
+    entries = manual_qa.load_manual_qa_store()
+
+    assert len(entries) == manual_qa._MAX_ENTRIES
+    assert entries[0]["answer"] == "0"
 
 
 def test_normalize_keys_long_sentence_expands():

@@ -121,9 +121,9 @@ def load_manual_qa_store() -> list[dict[str, Any]]:
             return _default_entries()
         raw = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(raw, list):
-            return [x for x in raw if isinstance(x, dict)]
+            return [x for x in raw if isinstance(x, dict)][:_MAX_ENTRIES]
         if isinstance(raw, dict) and isinstance(raw.get("entries"), list):
-            return [x for x in raw["entries"] if isinstance(x, dict)]
+            return [x for x in raw["entries"] if isinstance(x, dict)][:_MAX_ENTRIES]
     except Exception:
         pass
     return _default_entries()
