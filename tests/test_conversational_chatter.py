@@ -21,6 +21,7 @@ from app.bot.text_heuristics import (
 from app.bot.heuristics import _is_slicer_app_disambiguation
 from app.bot.heuristics import _is_other_printer_maintenance_story
 from app.bot.heuristics import _is_print_quality_meta_curiosity
+from app.bot.heuristics import _is_printing_status_announcement
 from app.web_wiki_index import _looks_like_question
 
 _BED_COMPARE_MSG = "Разберемся, тут кстати стол регулируется не сверху как на кобре"
@@ -472,6 +473,18 @@ def test_slicer_app_disambiguation_reuses_cached_classification():
     middle = _is_slicer_app_disambiguation.cache_info()
     assert _is_slicer_app_disambiguation(_ORCA_OPINION)
     after = _is_slicer_app_disambiguation.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
+
+
+def test_printing_status_reuses_cached_classification():
+    text = "Запускаю первый слой, посмотрим что получится"
+    _is_printing_status_announcement.cache_clear()
+    before = _is_printing_status_announcement.cache_info()
+    assert _is_printing_status_announcement(text)
+    middle = _is_printing_status_announcement.cache_info()
+    assert _is_printing_status_announcement(text)
+    after = _is_printing_status_announcement.cache_info()
     assert middle.misses == before.misses + 1
     assert after.hits == middle.hits + 1
 

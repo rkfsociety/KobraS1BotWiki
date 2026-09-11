@@ -645,6 +645,7 @@ def _is_conversational_skepticism(text: str) -> bool:
     return False
 
 
+@lru_cache(maxsize=4096)
 def _is_printing_status_announcement(text: str) -> bool:
     """«Запускаю первый слой» — статус в чате, не вопрос к вики."""
     if not text or not text.strip():
