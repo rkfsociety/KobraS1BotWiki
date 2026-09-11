@@ -48,3 +48,15 @@ def test_filament_resin_url_acceptable():
 
 def test_kobra_overview_rejected_for_bridge_petg():
     assert not _response_wiki_url_acceptable(_BRIDGE_MSG, _KOBRA2_OVERVIEW)
+
+
+def test_slicing_intent_reuses_bounded_cache():
+    _topic_is_filament_slicing_settings_intent.cache_clear()
+
+    assert _topic_is_filament_slicing_settings_intent(_BRIDGE_MSG)
+    before = _topic_is_filament_slicing_settings_intent.cache_info()
+    assert _topic_is_filament_slicing_settings_intent(_BRIDGE_MSG)
+    after = _topic_is_filament_slicing_settings_intent.cache_info()
+
+    assert after.hits == before.hits + 1
+    assert after.currsize == before.currsize

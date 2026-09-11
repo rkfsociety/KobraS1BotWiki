@@ -179,6 +179,7 @@ def _topic_is_filament_material_choice_intent(text: str | None) -> bool:
     return wants_choice or stock_nozzle_ctx
 
 
+@lru_cache(maxsize=4096)
 def _topic_is_filament_slicing_settings_intent(text: str | None) -> bool:
     """Параметры нарезки/печати под материал (PETG, TPU) — не уточнение модели принтера."""
     if not text:
