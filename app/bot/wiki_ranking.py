@@ -5,6 +5,7 @@ from __future__ import annotations
 
 
 import re
+from functools import lru_cache
 
 
 
@@ -71,6 +72,12 @@ from app.bot.text_heuristics import (
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
 
+@lru_cache(maxsize=4096)
+def _lower_url(url: str) -> str:
+    """Кэширует неизменяемый URL-признак для многочисленных ranking-проверок."""
+    return (url or "").lower()
+
+
 
 def _url_model_bonus(url: str, hints: frozenset[str]) -> int:
 
@@ -78,7 +85,7 @@ def _url_model_bonus(url: str, hints: frozenset[str]) -> int:
 
         return 0
 
-    u = url.lower()
+    u = _lower_url(url)
 
     hits = sum(1 for h in hints if h in u)
 
@@ -98,7 +105,7 @@ def _topic_path_bonus(topic: str | None, url: str) -> int:
 
     tl = topic.lower()
 
-    u = url.lower()
+    u = _lower_url(url)
 
     b = 0
 
@@ -400,7 +407,7 @@ def _topic_is_door_intent(topic: str | None) -> bool:
 
 def _slicer_vertical_hole_guide_url_plausible(url: str) -> bool:
     """Не отдавать quick start / установку слайсера на вопрос про отверстия в стенках."""
-    u = url.lower().replace("_", "-")
+    u = _lower_url(url).replace("_", "-")
     bad = (
         "quick-start",
         "quick-start-guide",
@@ -420,7 +427,7 @@ def _slicer_vertical_hole_guide_url_plausible(url: str) -> bool:
 
 def _multicolor_firmware_guide_url_plausible(url: str) -> bool:
     """Прошивка/лог обновлений и многоцвет — FDM Combo или слайсер, не resin."""
-    u = url.lower().replace("_", "-")
+    u = _lower_url(url).replace("_", "-")
     if "resin-3d-printer" in u:
         return False
     if "software-and-app" in u and "multi-color" in u:
@@ -436,7 +443,7 @@ def _multicolor_firmware_guide_url_plausible(url: str) -> bool:
 
 def _printer_firmware_guide_url_plausible(url: str) -> bool:
     """Гайды по обновлению прошивки принтера, не /error-codes/."""
-    u = url.lower().replace("_", "-")
+    u = _lower_url(url).replace("_", "-")
     if "/error-codes" in u:
         return False
     if "firmware-update" in u or "firmware-update-guide" in u:
@@ -456,7 +463,7 @@ def _printer_firmware_guide_url_plausible(url: str) -> bool:
 
 def _filament_material_guide_url_plausible(url: str) -> bool:
     """Страницы про выбор/печать материала, не замена сопла."""
-    u = url.lower().replace("_", "-")
+    u = _lower_url(url).replace("_", "-")
     if "print-tpu" in u or "filament-guide" in u:
         return True
     if re.search(r"/filament-and-resin/?$", u):
@@ -532,7 +539,7 @@ def _nozzle_guide_url_plausible(url: str, *, allow_silicone: bool) -> bool:
 
     """
 
-    u = url.lower().replace("_", "-")
+    u = _lower_url(url).replace("_", "-")
 
     if "nozzle" not in u:
 
@@ -564,7 +571,7 @@ def _nozzle_guide_url_plausible(url: str, *, allow_silicone: bool) -> bool:
 
 def _filament_feed_guide_url_plausible(url: str) -> bool:
 
-    u = url.lower().replace("_", "-")
+    u = _lower_url(url).replace("_", "-")
 
     if re.search(r"1151[18]", u):
 
@@ -629,13 +636,13 @@ def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
     if _topic_is_firmware_update_intent(topic):
         if _printer_firmware_guide_url_plausible(url):
             return 0
-        if "/error-codes/" in url.lower():
+        if "/error-codes/" in _lower_url(url):
             return 90
         return 42
 
     if _topic_is_filament_material_choice_intent(topic) or _topic_is_filament_slicing_settings_intent(topic):
 
-        u = url.lower().replace("_", "-")
+        u = _lower_url(url).replace("_", "-")
 
         if _filament_material_guide_url_plausible(url):
 
@@ -657,7 +664,7 @@ def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
         or _topic_is_slicer_choice_opinion_intent(topic)
     ):
 
-        u = url.lower().replace("_", "-")
+        u = _lower_url(url).replace("_", "-")
 
         if _slicer_vertical_hole_guide_url_plausible(url):
 
@@ -675,7 +682,7 @@ def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
 
     if _topic_is_filament_feed_intent(topic):
 
-        u = url.lower().replace("_", "-")
+        u = _lower_url(url).replace("_", "-")
 
         if _filament_feed_guide_url_plausible(url):
 
@@ -733,7 +740,7 @@ def _wrong_part_for_topic_penalty(topic: str | None, url: str) -> int:
 
         return 0
 
-    u = url.lower().replace("_", "-")
+    u = _lower_url(url).replace("_", "-")
 
     if "glass-door" in u or ("glass" in u and "door" in u):
 
@@ -795,7 +802,7 @@ def _guide_url_matches_model_hints(url: str, hints: frozenset[str]) -> bool:
 
     # поэтому жёсткое совпадение slug ломает выдачу. Разрешаем /error-codes/ всегда.
 
-    if "/error-codes/" in url.lower():
+    if "/error-codes/" in _lower_url(url):
 
         return True
 
@@ -803,7 +810,7 @@ def _guide_url_matches_model_hints(url: str, hints: frozenset[str]) -> bool:
 
         return True
 
-    u = url.lower()
+    u = _lower_url(url)
 
     return any(h in u for h in hints)
 
@@ -835,7 +842,7 @@ def _ace_blocking_relevant_to_question(text: str) -> bool:
 
 def _ace_connection_guide_url_plausible(url: str, *, question: str | None = None) -> bool:
 
-    u = url.lower().replace("_", "-")
+    u = _lower_url(url).replace("_", "-")
 
     if "printer-binding" in u or "/binding" in u:
 
@@ -870,7 +877,7 @@ def _ace_connection_guide_url_plausible(url: str, *, question: str | None = None
 
 def _ace_filament_slot_guide_url_plausible(url: str) -> bool:
     """Слот/чип ACE: замена/сброс материала, не прошивка принтера."""
-    u = url.lower().replace("_", "-")
+    u = _lower_url(url).replace("_", "-")
     if "ace-pro-filament-replacement" in u:
         return True
     if "ace-pro" in u and "filament" in u and "replacement" in u:
@@ -882,7 +889,7 @@ def _ace_filament_slot_guide_url_plausible(url: str) -> bool:
 
 def _ace_drying_guide_url_plausible(url: str) -> bool:
     """Сушка в ACE: заметки/FAQ, не replacement-guide по катушке."""
-    u = url.lower().replace("_", "-")
+    u = _lower_url(url).replace("_", "-")
     if "ace-pro-notes" in u:
         return True
     if "ace-pro" in u and u.rstrip("/").endswith("/faq"):
@@ -892,7 +899,7 @@ def _ace_drying_guide_url_plausible(url: str) -> bool:
 
 def _door_guide_url_plausible(url: str) -> bool:
 
-    u = url.lower().replace("_", "-")
+    u = _lower_url(url).replace("_", "-")
 
     if "glass-door" in u:
 
@@ -914,7 +921,7 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
     # Этот бот работает в группе Anycubic FDM. Страницы Photon/LCD/MSLA здесь
     # всегда ложноположительны, даже если нечёткий поиск дал высокий score.
-    if "/resin-3d-printer/" in url.lower():
+    if "/resin-3d-printer/" in _lower_url(url):
         return False
 
     # Для запросов по коду ошибки отдаём только точные страницы /error-codes/<code>-code...
@@ -923,7 +930,7 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
     if code and _is_error_code_query(question):
 
-        u = url.lower()
+        u = _lower_url(url)
 
         if "/error-codes/" not in u:
 
@@ -941,7 +948,7 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
         # иначе фразы типа "ошибка природы, помогите" тянут туда.
 
-        if "/error-codes" in url.lower():
+        if "/error-codes" in _lower_url(url):
 
             return False
 
@@ -978,7 +985,7 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
     if _topic_is_ace_not_detected_intent(question) or _topic_is_ace_connection_intent(question):
 
-        u = url.lower()
+        u = _lower_url(url)
 
         if "motherboard" in u and ("replacement" in u or "replace" in u):
 
@@ -1012,11 +1019,11 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
 
         return False
 
-    if _is_ace_unit_trade_banter(question) and "ace-pro-notes" in url.lower():
+    if _is_ace_unit_trade_banter(question) and "ace-pro-notes" in _lower_url(url):
         return False
 
     if _is_other_printer_maintenance_story(question) and not _model_slug_hints(question):
-        u = url.lower().replace("_", "-")
+        u = _lower_url(url).replace("_", "-")
         if "extra-material" in u or (
             "filament" in u and "fdm-3d-printer" in u and "/common/" in u
         ):
@@ -1030,29 +1037,29 @@ def _response_wiki_url_acceptable(question: str, url: str) -> bool:
         return False
 
     if _topic_is_resonance_pa_tuning_intent(question) and not _model_slug_hints(question):
-        u = url.lower()
+        u = _lower_url(url)
         if "fdm-3d-printer" in u and "/common/" not in u.replace("_", "-"):
             return False
 
     if _topic_is_filament_bed_removal_intent(question) and not _model_slug_hints(question):
-        u = url.lower().replace("_", "-")
+        u = _lower_url(url).replace("_", "-")
         if "fdm-3d-printer" in u and "filament-and-resin" not in u:
             return False
 
     if _is_third_party_filament_brand_chat(question):
-        u_hub = url.lower().split("?")[0].rstrip("/")
+        u_hub = _lower_url(url).split("?")[0].rstrip("/")
         if u_hub.endswith("/filament-and-resin"):
             return False
 
-    if _is_filament_tolerance_banter(question) and "filament-guide" in url.lower():
+    if _is_filament_tolerance_banter(question) and "filament-guide" in _lower_url(url):
         return False
 
     if _is_multicolor_flow_calibration_chat(question):
-        u = url.lower().replace("_", "-")
+        u = _lower_url(url).replace("_", "-")
         if "print-tpu" in u or "filament-guide" in u or "filament-and-resin" in u:
             return False
 
-    if _is_combo_ace_marketplace_chat(question) and "filament-replacement" in url.lower():
+    if _is_combo_ace_marketplace_chat(question) and "filament-replacement" in _lower_url(url):
         return False
 
     if (
@@ -1071,7 +1078,7 @@ def _url_model_penalty(url: str, hints: frozenset[str], topic: str | None = None
 
     """Если модель в запросе ясна, но URL явно про другую линейку — сильный штраф."""
 
-    u = url.lower()
+    u = _lower_url(url)
 
     if not hints:
 
@@ -1298,4 +1305,3 @@ def _search_best_with_model_bias_excluding(
         return best_doc2, capped
 
     return doc, score
-
