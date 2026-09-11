@@ -20,6 +20,7 @@ from app.bot.text_heuristics import (
 )
 from app.bot.heuristics import _is_slicer_app_disambiguation
 from app.bot.heuristics import _is_other_printer_maintenance_story
+from app.bot.heuristics import _is_print_quality_meta_curiosity
 from app.web_wiki_index import _looks_like_question
 
 _BED_COMPARE_MSG = "Разберемся, тут кстати стол регулируется не сверху как на кобре"
@@ -339,6 +340,17 @@ def test_print_quality_video_curiosity_is_chatter():
     assert _is_conversational_chatter(_PRINT_QUALITY_CURIOSITY)
     assert not _looks_like_question(_PRINT_QUALITY_CURIOSITY)
     assert not _message_has_help_intent(_PRINT_QUALITY_CURIOSITY)
+
+
+def test_print_quality_curiosity_reuses_cached_classification():
+    _is_print_quality_meta_curiosity.cache_clear()
+    before = _is_print_quality_meta_curiosity.cache_info()
+    assert _is_print_quality_meta_curiosity(_PRINT_QUALITY_CURIOSITY)
+    middle = _is_print_quality_meta_curiosity.cache_info()
+    assert _is_print_quality_meta_curiosity(_PRINT_QUALITY_CURIOSITY)
+    after = _is_print_quality_meta_curiosity.cache_info()
+    assert middle.misses == before.misses + 1
+    assert after.hits == middle.hits + 1
 
 
 _KOBRA_X_FRAGMENT = "Как кобра х"

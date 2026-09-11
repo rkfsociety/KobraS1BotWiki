@@ -174,6 +174,7 @@ def _is_chat_past_incident_recollection(text: str) -> bool:
     return (chat_ref and recollection) or solo_recollection
 
 
+@lru_cache(maxsize=4096)
 def _is_print_quality_meta_curiosity(text: str) -> bool:
     """«Как они так печатают / на видео кажется» — любопытство в чате, не запрос к вики."""
     if not text or not text.strip():
