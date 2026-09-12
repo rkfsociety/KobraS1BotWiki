@@ -21,7 +21,7 @@ python -m app.bot
 - [Архитектура](docs/architecture.md)
 - [Эксплуатация](docs/ops.md)
 
-Локальная память агента (SSH, деплой): `.cursor/memories.md` — не в git, создаётся на машине разработчика.
+Локальная память агента (SSH, деплой): `/home/dshome/.codex/project_memories/KobraS1BotWiki.md` — не в git.
 
 Разбор `data/missed_questions.json`: пополнение `manual_qa.json`, эвристики в `app/bot/heuristics/_banter.py`, затем очистка файла.
 
