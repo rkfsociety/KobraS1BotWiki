@@ -1,1 +1,34 @@
-[]
+[
+  {
+    "text": "Стоит перечитывать 400 сообщений?",
+    "score": 16,
+    "best_url": "https://wiki.anycubic.com/en/resin-3d-printer/Common/common-tools",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1789215162.1503117
+  },
+  {
+    "text": "Зачем лезешь если еще не проверил 😁",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1789215141.6616058
+  },
+  {
+    "text": "Там в стоке 7 можешь так и оставить",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1789215135.4412816
+  },
+  {
+    "text": "сколько точек ставить для снятия карты",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1789215106.8635046
+  }
+]
