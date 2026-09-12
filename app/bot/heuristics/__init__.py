@@ -148,6 +148,7 @@ from app.bot.heuristics._banter import (
     _is_thread_bed_surface_opinion,
     _is_bot_helper_appreciation_meta,
     _is_vague_fix_without_symptom,
+    _is_missed_sep12_thread_noise,
     _message_has_help_intent,
 )
 

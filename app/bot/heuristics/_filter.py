@@ -122,6 +122,7 @@ from app.bot.heuristics._banter import (
     _is_travel_airport_sidebar,
     _is_money_lend_spam,
     _is_vague_fix_without_symptom,
+    _is_missed_sep12_thread_noise,
 )
 from app.bot.heuristics._intents import (
     _topic_is_marketplace_commerce_intent,
@@ -243,6 +244,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_thread_bed_surface_opinion(text)
         or _is_bot_helper_appreciation_meta(text)
         or _is_vague_fix_without_symptom(text)
+        or _is_missed_sep12_thread_noise(text)
         or _is_offtopic_work_life_sidebar(text)
         or _is_offtopic_auto_sidebar(text)
         or _is_figurative_mood_remark(text)
