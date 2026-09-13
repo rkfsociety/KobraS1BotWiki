@@ -27,12 +27,31 @@ from app.bot.text_heuristics import (
     _is_works_fine_reassurance,
 )
 from app.bot.heuristics import _is_experience_or_assertion_chat
+from app.bot.heuristics import _is_sep13_unprompted_thread_reply
 from app.bot.heuristics import _is_print_task_planning_statement
 from app.bot.heuristics import _is_causal_continuation
 from app.bot.heuristics import _is_peer_diagnostic_interrogation
 from app.bot.heuristics import _is_chat_meta_discussion
 from app.bot.heuristics import _is_filament_testing_plan_sharing
 from app.bot.heuristics import _is_filament_feed_test_probe
+
+
+def test_sep13_unprompted_thread_reply_filters_only_thread_fragments():
+    for message in (
+        "Кстати профиль принтера родной, печатаю петг",
+        "У меня сопло 0.4, пластик обычный",
+        "Там втулки и ремни, вроде получается",
+    ):
+        assert _is_sep13_unprompted_thread_reply(message)
+
+
+def test_sep13_unprompted_thread_reply_keeps_diagnostics():
+    for message in (
+        "После пяти минут печати происходит смещение координат",
+        "Почему сопло царапает стол?",
+        "Пластик не печатает и выдаёт ошибку подачи",
+    ):
+        assert not _is_sep13_unprompted_thread_reply(message)
 from app.bot.heuristics import _is_offbeat_social_banter
 from app.bot.heuristics import _is_pure_numeric_or_symbol_message
 from app.bot.heuristics import _is_bare_rhetorical_context_question

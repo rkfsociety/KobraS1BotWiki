@@ -3147,6 +3147,9 @@ def _is_missed_sep13_thread_noise(text: str) -> bool:
         return False
     t = re.sub(r"\s+", " ", text.lower()).strip()
     phrases = (
+        "тяжко х как-то с тпу",
+        "сдюжет тпу такое",
+        "они и не должны быть сильно натянуты",
         "по деньгам чет", "лучше чем 2.1", "по общему перепаду стало лучше",
         "там со звуком надо смотреть", "на с1 такое не прокатило", "андрюха у нас аларм",
         "при старте печати промывка сопла", "перед печатью на температуре",
@@ -3200,6 +3203,21 @@ def _is_missed_sep13_thread_noise(text: str) -> bool:
         "сразу вот так", "стоит перечитывать", "зачем лезешь", "там в стоке 7",
     )
     return any(p in t for p in phrases)
+
+
+@lru_cache(maxsize=4096)
+def _is_sep13_unprompted_thread_reply(text: str) -> bool:
+    """Короткий ответ/наблюдение в треде без самостоятельной просьбы о помощи."""
+    if not text or not text.strip() or "?" in text:
+        return False
+    if _message_has_help_intent(text):
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(r"\b(?:не\s+печата|не\s+работа|ошибк\w*|засор\w*|заклин\w*|смещен\w*|смешен\w*|царапа\w*|отлип\w*|люфт\w*|перегрев\w*)\b", t):
+        return False
+    cue = bool(re.search(r"\b(?:кстати|смотри|смотрите|запусти|запустите|попробуй|попробуйте|давай|вроде|получается|у\s+меня|у\s+тебя|у\s+вас|я\s+просто|это|там|тут|тоже|только|ну|ага|хз)\b", t))
+    technical_context = bool(re.search(r"\b(?:принтер\w*|печата\w*|сопл\w*|хотенд\w*|пластик\w*|филамент\w*|петг\w*|тпу\w*|стол\w*|ремн\w*|слайсер\w*|профил\w*|калибр\w*|подач\w*|втул\w*|пластин\w*)\b", t))
+    return cue and technical_context
 
 def _is_parcel_arrival_banter(text: str) -> bool:
     """«Вот оно как раз и пришло» — реплика про посылку/доставку, не вопрос к вики."""
