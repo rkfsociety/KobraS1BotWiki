@@ -149,6 +149,7 @@ from app.bot.heuristics._banter import (
     _is_bot_helper_appreciation_meta,
     _is_vague_fix_without_symptom,
     _is_missed_sep12_thread_noise,
+    _is_missed_sep13_thread_noise,
     _message_has_help_intent,
 )
 
@@ -315,6 +316,8 @@ __all__ = [
     "_is_offtopic_work_life_sidebar",
     "_is_offtopic_auto_sidebar",
     "_is_vague_fix_without_symptom",
+    "_is_missed_sep12_thread_noise",
+    "_is_missed_sep13_thread_noise",
     "_message_has_help_intent",
     # _intents
     "_topic_is_filament_bed_removal_intent",
