@@ -296,8 +296,32 @@ def test_general_request_does_not_include_wiki_or_anycubic_prompt():
     messages = _build_general_messages("Скиньте инструкцию по смазке A1 Mini")
 
     assert "Anycubic" not in messages[0]["content"]
+    assert "Bambu Lab A1 mini" in messages[0]["content"]
     assert "CONTEXT" not in messages[0]["content"]
     assert messages[1]["content"] == "Скиньте инструкцию по смазке A1 Mini"
+
+
+def test_general_answer_does_not_keep_unasked_anycubic_brand():
+    from app.bot.handlers._cmd_ii import _sanitize_general_answer
+
+    result = _sanitize_general_answer(
+        "Скиньте инструкцию по смазке A1 Mini",
+        "GENERAL_ANSWER Это инструкция Anycubic A1 Mini.",
+    )
+
+    assert "Anycubic" not in result
+    assert "производителя A1 Mini" in result
+
+
+def test_general_answer_keeps_brand_when_user_asked_about_it():
+    from app.bot.handlers._cmd_ii import _sanitize_general_answer
+
+    result = _sanitize_general_answer(
+        "Сравните Bambu A1 Mini и Anycubic Kobra.",
+        "GENERAL_ANSWER Anycubic Kobra отличается конструкцией.",
+    )
+
+    assert "Anycubic Kobra" in result
 
 
 def test_cmd_ii_retries_without_wiki_context_after_no_answer(monkeypatch):

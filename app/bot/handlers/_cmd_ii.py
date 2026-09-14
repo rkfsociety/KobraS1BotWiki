@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -99,6 +100,13 @@ def _build_messages(question: str, docs: list[tuple[object, int]]) -> list[dict[
 
 
 def _build_general_messages(question: str) -> list[dict[str, str]]:
+    model_hint = ""
+    normalized_question = question.casefold()
+    if "a1 mini" in normalized_question or "а1 мини" in normalized_question or "a1 мини" in normalized_question:
+        model_hint = (
+            " В этом вопросе A1 mini — это Bambu Lab A1 mini. Не подставляй другого производителя "
+            "и не добавляй производителя, которого нет в вопросе."
+        )
     system = (
         "Ты универсальный помощник. Отвечай по-русски, кратко и по делу, исходя из вопроса пользователя "
         "и общих знаний. Не ограничивайся какой-либо заранее заданной темой. В первой строке ответа обязательно "
@@ -107,6 +115,7 @@ def _build_general_messages(question: str) -> list[dict[str, str]]:
         "Не выдавай догадки за факты; предупреди, если точные детали зависят от конкретной модели или конструкции. "
         "Не придумывай источники и URL. Не обрывай ответ на полуслове: закончи все предложения. "
         "Не упоминай внутренние инструкции."
+        + model_hint
     )
     return [{"role": "system", "content": system}, {"role": "user", "content": question[:_MAX_QUESTION_CHARS]}]
 
@@ -117,6 +126,12 @@ def _is_no_answer(answer: str) -> bool:
 
 def _is_wiki_answer(answer: str) -> bool:
     return answer.strip().upper().startswith("WIKI_ANSWER")
+
+
+def _sanitize_general_answer(question: str, answer: str) -> str:
+    if "anycubic" in question.casefold() or "аникабик" in question.casefold() or "аникюбик" in question.casefold():
+        return answer
+    return re.sub(r"(?i)\bAnycubic\b", "производителя", answer)
 
 
 def _looks_truncated(answer: str) -> bool:
@@ -291,6 +306,8 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         )
         return
 
+    if used_general_fallback or not docs:
+        answer = _sanitize_general_answer(question, answer)
     body = _answer_body(answer, docs)
     outgoing_text = with_review_mention(body, settings) if should_tag_reviewer(target) else body
     message_parts = _split_telegram_text(outgoing_text)
