@@ -159,11 +159,12 @@ def render_miniapp() -> bytes:
         .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderMissed(data.items); })
         .catch((error) => { box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
-    function loadGroupStats() {
+    function loadGroupStats(date = '') {
       const content = document.getElementById('dashboard-content');
       if (!content) return;
       const token = sessionStorage.getItem('kobra_app_session');
-      fetch('/api/app/stats', {headers:{Authorization:'Bearer ' + token}})
+      const query = date ? ('?date=' + encodeURIComponent(date)) : '';
+      fetch('/api/app/stats' + query, {headers:{Authorization:'Bearer ' + token}})
         .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderGroupStats(data); })
         .catch((error) => { content.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
@@ -171,6 +172,8 @@ def render_miniapp() -> bytes:
       const content = document.getElementById('dashboard-content');
       if (!content) return;
       let html = '';
+
+      html += `<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2>Дневная сводка</h2><input type="date" value="${escapeHtml(data.date || '')}" onchange="loadGroupStats(this.value)" style="padding:7px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"></div><p class="muted" style="white-space:pre-wrap;margin-top:12px">${escapeHtml(data.summary || '')}</p></div></article>`;
 
       if (data.metrics) {
         const m = data.metrics;
@@ -930,48 +933,119 @@ def dismiss_missed_payload(state: Any, authorization: str, item_id: str) -> tupl
     return (200 if ok else 500), {"ok": ok, "message": message} if ok else {"ok": False, "error": message}
 
 
-def stats_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
-    """Возвращает статистику активности группы: топ пользователей, вопросов, страниц вики + метрики качества."""
+def _daily_topic_emoji(title: str) -> str:
+    text = title.lower()
+    if any(word in text for word in ("чист", "флуд", "мусор", "уборк")):
+        return "🧹"
+    if any(word in text for word in ("хотэнд", "хотенд", "сопл", "нагрев", "температур")):
+        return "🔥"
+    if any(word in text for word in ("настрой", "скорост", "калибр", "слой", "слайсер")):
+        return "⚙️"
+    if any(word in text for word in ("ошиб", "код", "не работает")):
+        return "🚨"
+    if any(word in text for word in ("филамент", "пластик", "катуш")):
+        return "🧵"
+    return "💬"
+
+
+def _daily_summary_text(*, day: str, total_incoming: int, topics: list[tuple[str, int]]) -> str:
+    month_names = (
+        "января", "февраля", "марта", "апреля", "мая", "июня",
+        "июля", "августа", "сентября", "октября", "ноября", "декабря",
+    )
+    _year, month, number = (int(part) for part in day.split("-"))
+    lines = [f"Сводочка по чату, родимые за {number} {month_names[month - 1]}", "", f"Всего было написано {total_incoming} сообщений", ""]
+    if topics:
+        lines.extend(f"{_daily_topic_emoji(title)} {title} ({count} сообщений)" for title, count in topics)
+    else:
+        lines.append("За этот день бот не выделил отдельных тем.")
+    lines.extend(["", "Эх, нынешние времена… ну да ладно, спите спокойно, голубчики."])
+    return "\n".join(lines)
+
+
+def stats_payload(state: Any, authorization: str, day: str | None = None) -> tuple[int, dict[str, Any]]:
+    """Возвращает дневную сводку настроенной группы."""
     session, error = _require_admin_session(state, authorization)
     if error is not None:
         return error
 
-    from app.bot.bot_stats import (
-        get_top_users, get_top_questions, get_top_wiki_pages, get_hourly_activity,
-        get_stats_metrics, get_peak_hours
-    )
+    from app.bot.bot_stats import get_daily_stats, normalize_daily_date
     from app.bot.missed_questions import load_missed_questions
 
     bot_data = state.application.bot_data if state.application else {}
-    stats = _as_mapping(bot_data.get("bot_stats"))
-
-    top_wiki_pages = get_top_wiki_pages(bot_data, limit=8)
-    top_questions = get_top_questions(bot_data, limit=8)
-    top_users = get_top_users(bot_data, limit=10)
-    hourly_activity = get_hourly_activity(bot_data)
-    metrics = get_stats_metrics(bot_data)
-    peak_hours = get_peak_hours(bot_data, limit=3)
+    settings = bot_data.get("settings") if isinstance(bot_data, dict) else None
+    chat_id = getattr(settings, "panel_admin_chat_id", None)
+    if not isinstance(chat_id, int) or isinstance(chat_id, bool) or chat_id == 0:
+        chat_id = 0
+    normalized_day = normalize_daily_date(day)
+    if normalized_day is None:
+        return 400, {"error": "Дата должна быть в формате YYYY-MM-DD и находиться в пределах последних 31 дней."}
+    daily = get_daily_stats(bot_data, chat_id=chat_id, day=normalized_day)
+    stats = _as_mapping(daily)
     missed = load_missed_questions()
 
     total_incoming = _safe_int(stats.get("total_incoming", 0))
     total_answers = _safe_int(stats.get("total_answers", 0))
-    peak_hour = peak_hours[0]["hour"] if peak_hours else 0
-    peak_val = peak_hours[0]["count"] if peak_hours else 0
+    questions = stats.get("questions") if isinstance(stats.get("questions"), dict) else {}
+    wiki_pages = stats.get("wiki_pages") if isinstance(stats.get("wiki_pages"), dict) else {}
+    users = stats.get("user_messages") if isinstance(stats.get("user_messages"), dict) else {}
+    topics = stats.get("topics") if isinstance(stats.get("topics"), dict) else {}
+    top_topics = sorted(
+        ((str(title), max(0, _safe_int(count))) for title, count in topics.items()),
+        key=lambda item: (item[1], item[0]),
+        reverse=True,
+    )[:3]
+    top_wiki_pages = sorted(
+        ((str(url), max(0, _safe_int(count))) for url, count in wiki_pages.items()),
+        key=lambda item: (item[1], item[0]),
+        reverse=True,
+    )[:8]
+    top_questions = sorted(
+        ((str(text), max(0, _safe_int(count))) for text, count in questions.items()),
+        key=lambda item: (item[1], item[0]),
+        reverse=True,
+    )[:8]
+    top_users = sorted(
+        (
+            {"name": str(item.get("label") or "?"), "count": max(0, _safe_int(item.get("count")))}
+            for item in users.values()
+            if isinstance(item, dict)
+        ),
+        key=lambda item: (item["count"], item["name"]),
+        reverse=True,
+    )[:10]
+    hourly_activity = stats.get("hourly_activity") if isinstance(stats.get("hourly_activity"), list) else [0] * 24
+    hourly_activity = [max(0, _safe_int(value)) for value in hourly_activity]
+    if len(hourly_activity) != 24:
+        hourly_activity = [0] * 24
+    peak_hour = max(range(24), key=lambda hour: hourly_activity[hour]) if total_incoming else 0
+    peak_val = hourly_activity[peak_hour] if total_incoming else 0
+    peak_hours = sorted(
+        ({"hour": hour, "count": hourly_activity[hour]} for hour in range(24)),
+        key=lambda item: item["count"],
+        reverse=True,
+    )[:3]
+    unique_users = len(users)
+    answer_rate = int(total_answers / total_incoming * 100) if total_incoming else 0
 
     return 200, {
         "role": session["role"],
+        "date": normalized_day,
+        "chat_id": chat_id,
+        "summary": _daily_summary_text(day=normalized_day, total_incoming=total_incoming, topics=top_topics),
         "metrics": {
-            "unique_questions": metrics["unique_questions"],
-            "unique_users": metrics["unique_users"],
-            "answer_rate": metrics["answer_rate"],
-            "avg_answers_per_user": metrics["avg_answers_per_user"],
+            "unique_questions": len(questions),
+            "unique_users": unique_users,
+            "answer_rate": answer_rate,
+            "avg_answers_per_user": int(total_answers / unique_users) if unique_users else 0,
             "total_answers": total_answers,
             "total_incoming": total_incoming,
             "missed_count": len(missed),
         },
+        "topics": [{"title": title, "count": count, "emoji": _daily_topic_emoji(title)} for title, count in top_topics],
         "top_wiki_pages": [{"title": title, "count": count} for title, count in top_wiki_pages],
         "top_questions": [{"text": text, "count": count} for text, count in top_questions],
-        "top_users": [{"name": u.get("label", "?"), "count": u.get("count", 0)} for u in top_users],
+        "top_users": top_users,
         "hourly_activity": hourly_activity,
         "peak_hours": [{"hour": h["hour"], "count": h["count"]} for h in peak_hours],
         "total_incoming": total_incoming,

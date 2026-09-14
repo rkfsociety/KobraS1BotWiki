@@ -10,6 +10,7 @@
     "total_answers": <int>,
     "total_incoming": <int>,
     "user_messages": {"<user_id>": {"user_id": <int>, "label": "...", "count": <int>}, ...},
+    "daily_scopes": {"<date>:<chat_id>:<topic_id|all>": {"...": "..."}},
     "last_updated": <unix_ts>
   }
 """
@@ -20,6 +21,7 @@ import logging
 import math
 import threading
 import time
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 from heapq import nlargest, nsmallest
@@ -36,7 +38,9 @@ _MAX_WIKI_PAGES = 3000
 _MAX_TRACKED_USERS = 3000
 _MAX_STATS_CACHE_BYTES = 16 * 1024 * 1024
 # v2: hourly_activity = все входящие в allowed-чатах (раньше считались только ответы бота).
-_STATS_VERSION = 2
+_STATS_VERSION = 3
+_DAILY_RETENTION_DAYS = 31
+_MAX_DAILY_SCOPES = 2048
 
 
 def _stats_path() -> Path:
@@ -53,6 +57,7 @@ def _empty_stats() -> dict[str, Any]:
         "total_answers": 0,
         "total_incoming": 0,
         "user_messages": {},
+        "daily_scopes": {},
         "stats_version": _STATS_VERSION,
         "last_updated": 0.0,
     }
@@ -71,6 +76,139 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return result if math.isfinite(result) else default
     except (TypeError, ValueError, OverflowError):
         return default
+
+
+def _today_key() -> str:
+    return date.today().isoformat()
+
+
+def _normalize_date_key(value: Any) -> str | None:
+    if value in (None, ""):
+        return _today_key()
+    try:
+        parsed = date.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    today = date.today()
+    if parsed > today or parsed < today - timedelta(days=_DAILY_RETENTION_DAYS - 1):
+        return None
+    return parsed.isoformat()
+
+
+def normalize_daily_date(value: Any = None) -> str | None:
+    """Проверяет дату дневной статистики и возвращает ISO-формат."""
+    return _normalize_date_key(value)
+
+
+def _daily_scope_key(*, day: str, chat_id: int, topic_id: int | None) -> str:
+    scope = "all" if topic_id is None else str(topic_id)
+    return f"{day}:{chat_id}:{scope}"
+
+
+def _empty_daily_scope(*, day: str, chat_id: int, topic_id: int | None) -> dict[str, Any]:
+    return {
+        "date": day,
+        "chat_id": chat_id,
+        "topic_id": topic_id,
+        "total_incoming": 0,
+        "total_answers": 0,
+        "hourly_activity": [0] * 24,
+        "topic_label": "",
+        "topics": {},
+        "questions": {},
+        "wiki_pages": {},
+        "user_messages": {},
+    }
+
+
+def _daily_scope_from_stats(
+    stats: dict[str, Any], *, day: str, chat_id: int, topic_id: int | None, create: bool
+) -> dict[str, Any] | None:
+    scopes = stats.get("daily_scopes")
+    if not isinstance(scopes, dict):
+        if not create:
+            return None
+        scopes = {}
+        stats["daily_scopes"] = scopes
+    key = _daily_scope_key(day=day, chat_id=chat_id, topic_id=topic_id)
+    scope = scopes.get(key)
+    if not isinstance(scope, dict):
+        if not create:
+            return None
+        scope = _empty_daily_scope(day=day, chat_id=chat_id, topic_id=topic_id)
+        scopes[key] = scope
+    return scope
+
+
+def _sanitize_daily_scope(value: object) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    day = _normalize_date_key(value.get("date"))
+    try:
+        chat_id = int(value.get("chat_id"))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    topic_raw = value.get("topic_id")
+    try:
+        topic_id = None if topic_raw in (None, "") else int(topic_raw)
+    except (TypeError, ValueError, OverflowError):
+        topic_id = None
+    if day is None:
+        return None
+    scope = _empty_daily_scope(day=day, chat_id=chat_id, topic_id=topic_id)
+    scope["total_incoming"] = max(0, _safe_int(value.get("total_incoming")))
+    scope["total_answers"] = max(0, _safe_int(value.get("total_answers")))
+    scope["topic_label"] = str(value.get("topic_label") or "")[:200]
+    hourly = value.get("hourly_activity")
+    if isinstance(hourly, list) and len(hourly) == 24:
+        scope["hourly_activity"] = [max(0, _safe_int(item)) for item in hourly]
+    for field, limit in (("topics", _MAX_UNIQUE_QUESTIONS), ("questions", _MAX_UNIQUE_QUESTIONS), ("wiki_pages", _MAX_WIKI_PAGES)):
+        raw = value.get(field)
+        if isinstance(raw, dict):
+            scope[field] = _bound_counter(
+                {str(key): max(0, _safe_int(count)) for key, count in raw.items() if isinstance(key, str)},
+                max_entries=limit,
+            )
+    users = value.get("user_messages")
+    if isinstance(users, dict):
+        loaded: dict[str, dict[str, Any]] = {}
+        for key, item in users.items():
+            if not isinstance(item, dict):
+                continue
+            try:
+                user_id = int(item.get("user_id") or key)
+            except (TypeError, ValueError, OverflowError):
+                continue
+            loaded[str(user_id)] = {
+                "user_id": user_id,
+                "label": str(item.get("label") or user_id),
+                "count": max(0, _safe_int(item.get("count"))),
+            }
+        scope["user_messages"] = loaded
+    return scope
+
+
+def _prune_daily_scopes(stats: dict[str, Any]) -> None:
+    scopes = stats.get("daily_scopes")
+    if not isinstance(scopes, dict):
+        stats["daily_scopes"] = {}
+        return
+    today = date.today()
+    normalized: dict[str, dict[str, Any]] = {}
+    for value in scopes.values():
+        scope = _sanitize_daily_scope(value)
+        if scope is None:
+            continue
+        try:
+            scope_day = date.fromisoformat(scope["date"])
+        except (TypeError, ValueError):
+            continue
+        if scope_day < today - timedelta(days=_DAILY_RETENTION_DAYS - 1) or scope_day > today:
+            continue
+        normalized[_daily_scope_key(day=scope["date"], chat_id=scope["chat_id"], topic_id=scope["topic_id"])] = scope
+    if len(normalized) > _MAX_DAILY_SCOPES:
+        normalized = dict(sorted(normalized.items(), key=lambda item: item[1]["date"], reverse=True)[:_MAX_DAILY_SCOPES])
+    stats["daily_scopes"] = normalized
 
 
 def _bound_counter(values: dict[str, int], *, max_entries: int) -> dict[str, int]:
@@ -132,11 +270,15 @@ def load_bot_stats(bot_data: dict[str, Any]) -> None:
                 if v.get("first_name"):
                     loaded[str(uid)]["first_name"] = str(v["first_name"])
             stats["user_messages"] = loaded
+        raw_daily = raw.get("daily_scopes")
+        if isinstance(raw_daily, dict):
+            stats["daily_scopes"] = raw_daily
+            _prune_daily_scopes(stats)
         ver = _safe_int(raw.get("stats_version") or 1, default=1)
         kind = raw.get("hourly_activity_kind")
         hourly = raw.get("hourly_activity")
         # Старая схема считала ответы бота — сбрасываем гистограмму при миграции.
-        if ver >= _STATS_VERSION and kind == "incoming" and isinstance(hourly, list) and len(hourly) == 24:
+        if ver >= 2 and kind == "incoming" and isinstance(hourly, list) and len(hourly) == 24:
             stats["hourly_activity"] = [max(0, _safe_int(x)) for x in hourly]
         else:
             stats["hourly_activity"] = [0] * 24
@@ -166,6 +308,8 @@ def _persist(bot_data: dict[str, Any], *, force: bool = False) -> None:
         try:
             p = _stats_path()
             stats = bot_data.get(_STATS_KEY) or {}
+            if isinstance(stats, dict):
+                _prune_daily_scopes(stats)
             _save_json_atomic(p, stats)
             bot_data["_bot_stats_last_save"] = now
         except Exception as exc:
@@ -245,12 +389,73 @@ def _bump_user_message(
             users.pop(drop_key, None)
 
 
+def _daily_scopes_for_event(
+    stats: dict[str, Any], *, day: str, chat_id: int, topic_id: int | None
+) -> list[dict[str, Any]]:
+    scopes = [_daily_scope_from_stats(stats, day=day, chat_id=chat_id, topic_id=topic_id, create=True)]
+    if topic_id is not None:
+        scopes.append(_daily_scope_from_stats(stats, day=day, chat_id=chat_id, topic_id=None, create=True))
+    return [scope for scope in scopes if scope is not None]
+
+
+def _bump_daily_user(
+    scope: dict[str, Any], *, user_id: int, username: str | None, first_name: str | None
+) -> None:
+    users = scope.setdefault("user_messages", {})
+    if not isinstance(users, dict):
+        users = {}
+        scope["user_messages"] = users
+    key = str(user_id)
+    item = users.get(key)
+    if not isinstance(item, dict):
+        item = {"user_id": user_id, "label": _user_label(user_id=user_id, username=username, first_name=first_name), "count": 0}
+        users[key] = item
+    item["label"] = _user_label(
+        user_id=user_id,
+        username=username or item.get("username"),
+        first_name=first_name or item.get("first_name"),
+    )
+    item["count"] = max(0, _safe_int(item.get("count"))) + 1
+    if username:
+        item["username"] = username
+    if first_name:
+        item["first_name"] = first_name
+    if len(users) > _MAX_TRACKED_USERS:
+        rare = nsmallest(
+            len(users) - _MAX_TRACKED_USERS,
+            users.items(),
+            key=lambda pair: _safe_int(pair[1].get("count")) if isinstance(pair[1], dict) else 0,
+        )
+        for drop_key, _ in rare:
+            users.pop(drop_key, None)
+
+
+def _bump_daily_hour(scope: dict[str, Any], hour: int) -> None:
+    hourly = scope.get("hourly_activity")
+    if not isinstance(hourly, list) or len(hourly) != 24:
+        hourly = [0] * 24
+        scope["hourly_activity"] = hourly
+    hourly[hour] = max(0, _safe_int(hourly[hour])) + 1
+
+
+def _bump_daily_counter(scope: dict[str, Any], field: str, key: str, *, limit: int) -> None:
+    values = scope.get(field)
+    if not isinstance(values, dict):
+        values = {}
+        scope[field] = values
+    values[key] = max(0, _safe_int(values.get(key))) + 1
+    _bound_counter(values, max_entries=limit)
+
+
 def record_incoming_activity(
     bot_data: dict[str, Any],
     *,
     user_id: int | None = None,
     username: str | None = None,
     first_name: str | None = None,
+    chat_id: int | None = None,
+    topic_id: int | None = None,
+    track_daily: bool = True,
 ) -> None:
     """Учитывает каждое входящее сообщение, которое Telegram доставил боту."""
     stats = _runtime_stats(bot_data)
@@ -260,6 +465,13 @@ def record_incoming_activity(
     stats["total_incoming"] = max(0, _safe_int(stats.get("total_incoming", 0))) + 1
     if user_id is not None:
         _bump_user_message(stats, user_id=user_id, username=username, first_name=first_name)
+    if chat_id is not None and track_daily:
+        day = _today_key()
+        for scope in _daily_scopes_for_event(stats, day=day, chat_id=chat_id, topic_id=topic_id):
+            scope["total_incoming"] = max(0, _safe_int(scope.get("total_incoming"))) + 1
+            _bump_daily_hour(scope, hour)
+            if user_id is not None:
+                _bump_daily_user(scope, user_id=user_id, username=username, first_name=first_name)
     stats["hourly_activity_kind"] = "incoming"
     stats["stats_version"] = _STATS_VERSION
     stats["last_updated"] = now
@@ -272,6 +484,9 @@ def record_answer(
     url: str,
     question: str,
     source: str,
+    chat_id: int | None = None,
+    topic_id: int | None = None,
+    topic: str | None = None,
 ) -> None:
     """Записывает факт ответа бота в счётчики.
 
@@ -302,6 +517,20 @@ def record_answer(
         _bound_counter(questions, max_entries=_MAX_UNIQUE_QUESTIONS)
 
     stats["total_answers"] = max(0, _safe_int(stats.get("total_answers", 0))) + 1
+    if chat_id is not None:
+        day = _today_key()
+        for scope in _daily_scopes_for_event(stats, day=day, chat_id=chat_id, topic_id=topic_id):
+            scope["total_answers"] = max(0, _safe_int(scope.get("total_answers"))) + 1
+            topic_label = topic.strip()[:200] if topic and topic.strip() else ""
+            if topic_label and topic_id is not None and scope.get("topic_id") == topic_id:
+                scope["topic_label"] = topic_label
+                scope["topics"] = {topic_label: max(1, _safe_int(scope.get("total_incoming")))}
+            elif topic_label and topic_id is None:
+                _bump_daily_counter(scope, "topics", topic_label, limit=_MAX_UNIQUE_QUESTIONS)
+            if q_norm:
+                _bump_daily_counter(scope, "questions", q_norm, limit=_MAX_UNIQUE_QUESTIONS)
+            if source == "wiki" and url:
+                _bump_daily_counter(scope, "wiki_pages", url, limit=_MAX_WIKI_PAGES)
     stats["last_updated"] = now
 
     _persist(bot_data)
@@ -423,3 +652,58 @@ def get_daily_distribution(bot_data: dict[str, Any]) -> dict[str, int]:
         days[i] if i < len(days) else f"день_{i}": max(0, _safe_int(daily.get(str(i), 0)))
         for i in range(7)
     }
+
+
+def get_daily_stats(
+    bot_data: dict[str, Any], *, chat_id: int, topic_id: int | None = None, day: str | None = None
+) -> dict[str, Any]:
+    """Возвращает безопасную дневную сводку группы или отдельной темы."""
+    normalized_day = _normalize_date_key(day)
+    if normalized_day is None:
+        normalized_day = _today_key()
+    stats = _stats_from_bot_data(bot_data)
+    scope = _daily_scope_from_stats(
+        stats, day=normalized_day, chat_id=chat_id, topic_id=topic_id, create=False
+    )
+    if scope is None:
+        result = _empty_daily_scope(day=normalized_day, chat_id=chat_id, topic_id=topic_id)
+    else:
+        result = _sanitize_daily_scope(scope) or _empty_daily_scope(
+            day=normalized_day, chat_id=chat_id, topic_id=topic_id
+        )
+    if topic_id is None:
+        # Для сводки группы добавляем распознанные форумные темы целиком,
+        # чтобы число возле темы означало сообщения, а не ответы бота.
+        topic_counts = dict(result.get("topics") or {})
+        scopes = stats.get("daily_scopes")
+        if isinstance(scopes, dict):
+            for candidate_raw in scopes.values():
+                candidate = _sanitize_daily_scope(candidate_raw)
+                if not candidate or candidate.get("chat_id") != chat_id or candidate.get("date") != normalized_day:
+                    continue
+                candidate_topic = candidate.get("topic_id")
+                if candidate_topic is None:
+                    continue
+                label = candidate.get("topic_label")
+                if isinstance(label, str) and label.strip():
+                    topic_counts[label] = topic_counts.get(label, 0) + max(
+                        0, _safe_int(candidate.get("total_incoming"))
+                    )
+                else:
+                    for label, count in (candidate.get("topics") or {}).items():
+                        topic_counts[label] = topic_counts.get(label, 0) + max(0, _safe_int(count))
+        result["topics"] = topic_counts
+    elif result.get("topic_label"):
+        result["topics"] = {
+            str(result["topic_label"]): max(1, _safe_int(result.get("total_incoming")))
+        }
+    return result
+
+
+def get_daily_top_topics(
+    bot_data: dict[str, Any], *, chat_id: int, topic_id: int | None = None, day: str | None = None, limit: int = 3
+) -> list[tuple[str, int]]:
+    if limit <= 0:
+        return []
+    daily = get_daily_stats(bot_data, chat_id=chat_id, topic_id=topic_id, day=day)
+    return nlargest(limit, _counter_items(daily.get("topics")), key=lambda item: item[1])

@@ -43,6 +43,7 @@ from app.bot.handlers import (
     cmd_qaadd,
     cmd_qadel,
     cmd_qalist,
+    cmd_stats,
     cmd_status,
     cmd_update,
     cmd_wiki,
@@ -163,6 +164,7 @@ def _register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("wiki", cmd_wiki))
     app.add_handler(CommandHandler("ping", cmd_ping))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("stats", cmd_stats))
     app.add_handler(CommandHandler("error", cmd_error))
     app.add_handler(CommandHandler("fix", cmd_fix))
     app.add_handler(CommandHandler("qaadd", cmd_qaadd))

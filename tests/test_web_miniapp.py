@@ -17,6 +17,7 @@ from telegram.constants import ChatMemberStatus
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.missed_questions import load_missed_questions
 from app.bot.chat_store import ChatStore
+from app.bot.bot_stats import record_answer, record_incoming_activity
 from app.web_miniapp import (
     _get_session,
     create_miniapp_session,
@@ -310,6 +311,37 @@ def test_miniapp_stats_tolerates_corrupted_stats_container(monkeypatch):
 
     assert status == 200
     assert payload["metrics"]["total_answers"] == 0
+
+
+def test_miniapp_stats_returns_daily_group_summary(monkeypatch):
+    import app.web_miniapp as miniapp
+
+    bot_data = {
+        "settings": _Settings(),
+    }
+    for user_id in (1, 2, 3):
+        record_incoming_activity(bot_data, chat_id=-100123, topic_id=7, user_id=user_id)
+    record_answer(
+        bot_data,
+        url="https://wiki.example/speed",
+        question="как скорости",
+        source="wiki",
+        chat_id=-100123,
+        topic_id=7,
+        topic="Настройка скоростей",
+    )
+    state = types.SimpleNamespace(application=types.SimpleNamespace(bot_data=bot_data))
+    monkeypatch.setattr(
+        miniapp, "_require_admin_session", lambda state, authorization: ({"role": "admin"}, None)
+    )
+    monkeypatch.setattr(miniapp, "load_missed_questions", lambda: [])
+
+    status, payload = miniapp.stats_payload(state, "Bearer test")
+
+    assert status == 200
+    assert payload["metrics"]["total_incoming"] == 3
+    assert payload["topics"] == [{"title": "Настройка скоростей", "count": 3, "emoji": "⚙️"}]
+    assert "Всего было написано 3 сообщений" in payload["summary"]
 
 
 def test_admin_can_clear_processed_miniapp_answers(mini_panel):

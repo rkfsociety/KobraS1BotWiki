@@ -6,12 +6,15 @@ from app.bot.bot_stats import (
     flush_bot_stats,
     get_hourly_activity,
     get_daily_distribution,
+    get_daily_stats,
+    get_daily_top_topics,
     get_peak_hours,
     get_stats_metrics,
     get_top_questions,
     get_top_wiki_pages,
     get_top_users,
     load_bot_stats,
+    normalize_daily_date,
     record_answer,
     record_incoming_activity,
 )
@@ -38,6 +41,35 @@ def test_incoming_bumps_hourly_not_answers():
     assert sum(hourly) == 2
     assert bd["bot_stats"]["total_incoming"] == 2
     assert bd["bot_stats"]["total_answers"] == 0
+
+
+def test_daily_stats_are_separated_by_group_and_topic():
+    bd: dict = {}
+    record_incoming_activity(bd, user_id=1, first_name="Alice", chat_id=-100, topic_id=7)
+    record_incoming_activity(bd, user_id=2, first_name="Bob", chat_id=-100, topic_id=7)
+    record_incoming_activity(bd, user_id=3, first_name="Carol", chat_id=-100, topic_id=8)
+    record_answer(
+        bd,
+        url="https://wiki.example/speed",
+        question="как настроить скорости",
+        source="wiki",
+        chat_id=-100,
+        topic_id=7,
+        topic="Настройка скоростей 3D-печати в слайсере",
+    )
+
+    topic = get_daily_stats(bd, chat_id=-100, topic_id=7)
+    other_topic = get_daily_stats(bd, chat_id=-100, topic_id=8)
+    group = get_daily_stats(bd, chat_id=-100)
+
+    assert topic["total_incoming"] == 2
+    assert topic["total_answers"] == 1
+    assert other_topic["total_incoming"] == 1
+    assert other_topic["total_answers"] == 0
+    assert group["total_incoming"] == 3
+    assert group["total_answers"] == 1
+    assert get_daily_top_topics(bd, chat_id=-100) == [("Настройка скоростей 3D-печати в слайсере", 2)]
+    assert normalize_daily_date("not-a-date") is None
 
 
 def test_answer_does_not_bump_hourly():
@@ -79,7 +111,7 @@ def test_load_migrates_old_hourly_to_empty_incoming(tmp_path, monkeypatch):
     load_bot_stats(bd)
     assert get_hourly_activity(bd) == [0] * 24
     assert bd["bot_stats"]["hourly_activity_kind"] == "incoming"
-    assert bd["bot_stats"]["stats_version"] == 2
+    assert bd["bot_stats"]["stats_version"] == 3
 
 
 def test_load_stats_rejects_oversized_file_before_json_decode(tmp_path, monkeypatch):

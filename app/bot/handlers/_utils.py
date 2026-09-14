@@ -155,7 +155,7 @@ async def _try_reply_manual_qa(
     if not hit:
         return False
 
-    ans, _ttl = hit
+    ans, title = hit
 
     now = time.time()
 
@@ -221,7 +221,15 @@ async def _try_reply_manual_qa(
         chat_id=chat_id,
     )
 
-    _record_stat(context.application.bot_data, url="", question=query_text, source="manual_qa")
+    _record_stat(
+        context.application.bot_data,
+        url="",
+        question=query_text,
+        source="manual_qa",
+        chat_id=chat_id,
+        topic_id=getattr(msg, "message_thread_id", None),
+        topic=title,
+    )
 
     if uid is not None:
         _record_bot_ans(

@@ -11,8 +11,9 @@ from telegram.ext import ContextTypes
 
 from app.bot.ephemeral import schedule_delete_slash_command_and_reply
 from app.bot.git_autopull import get_bot_version, git_ping_compare_with_remote, project_repo_root
+from app.bot.bot_stats import get_daily_stats, get_daily_top_topics, normalize_daily_date
 from app.bot.i18n import _lang_from_message, _t
-from app.bot.reply_access import chat_topic_in_allowed_lists
+from app.bot.reply_access import bot_can_reply_in_context, chat_topic_in_allowed_lists
 from app.bot.reply_logging import log_bot_reply_for_message
 from app.web_wiki_index import WebWikiIndex
 
@@ -209,5 +210,103 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         user_msg=msg,
         bot_msg=reply_msg,
         wiki_base_url=settings.wiki_base_url,
+        outgoing_text=text,
+    )
+
+
+def _stats_topic_emoji(title: str) -> str:
+    text = title.lower()
+    if any(word in text for word in ("чист", "флуд", "мусор", "уборк")):
+        return "🧹"
+    if any(word in text for word in ("хотэнд", "хотенд", "сопл", "нагрев", "температур")):
+        return "🔥"
+    if any(word in text for word in ("настрой", "скорост", "калибр", "слой", "слайсер")):
+        return "⚙️"
+    if any(word in text for word in ("ошиб", "код", "не работает")):
+        return "🚨"
+    if any(word in text for word in ("филамент", "пластик", "катуш")):
+        return "🧵"
+    return "💬"
+
+
+def _stats_date_arg(context: ContextTypes.DEFAULT_TYPE) -> str | None:
+    args = getattr(context, "args", None) or []
+    raw = str(args[0]).strip() if args else ""
+    return normalize_daily_date(raw or None)
+
+
+async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Показывает дневную сводку группы или текущей темы форума."""
+    if not update.effective_message or not update.effective_chat:
+        return
+
+    msg = update.effective_message
+    chat = update.effective_chat
+    settings = context.application.bot_data.get("settings")
+    day = _stats_date_arg(context)
+    if day is None:
+        await msg.reply_text("Дата должна быть в формате YYYY-MM-DD и находиться в пределах последних 31 дней.")
+        return
+
+    if chat.type == ChatType.PRIVATE:
+        target_chat_id = getattr(settings, "panel_admin_chat_id", None)
+        if not isinstance(target_chat_id, int) or isinstance(target_chat_id, bool) or target_chat_id == 0:
+            await msg.reply_text("Статистика группы пока не настроена: задайте PANEL_ADMIN_CHAT_ID.")
+            return
+        target_topic_id = None
+        scope_label = "группе"
+    elif chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
+        if await _deny_unless_admin_command_access(update, context, command="stats"):
+            return
+        target_chat_id = chat.id
+        target_topic_id = getattr(msg, "message_thread_id", None)
+        if not chat_topic_in_allowed_lists(
+            allowed_chat_ids=getattr(settings, "allowed_chat_ids", None),
+            allowed_topic_ids=getattr(settings, "allowed_topic_ids", None),
+            chat_id=chat.id,
+            topic_id=target_topic_id,
+            chat_type=chat.type,
+        ):
+            return
+        if not await bot_can_reply_in_context(context, chat, target_topic_id):
+            return
+        scope_label = "этой теме" if target_topic_id is not None else "группе"
+    else:
+        return
+
+    bot_data = context.application.bot_data
+    daily = get_daily_stats(
+        bot_data,
+        chat_id=target_chat_id,
+        topic_id=target_topic_id,
+        day=day,
+    )
+    topics = get_daily_top_topics(
+        bot_data,
+        chat_id=target_chat_id,
+        topic_id=target_topic_id,
+        day=day,
+        limit=3,
+    )
+    month_names = (
+        "января", "февраля", "марта", "апреля", "мая", "июня",
+        "июля", "августа", "сентября", "октября", "ноября", "декабря",
+    )
+    _year, month, number = (int(part) for part in day.split("-"))
+    lines = [f"Сводочка по {scope_label}, родимые за {number} {month_names[month - 1]}", "", f"Всего было написано {daily['total_incoming']} сообщений", ""]
+    if topics:
+        lines.extend(f"{_stats_topic_emoji(title)} {title} ({count} сообщений)" for title, count in topics)
+    else:
+        lines.append("За этот день бот не выделил отдельных тем.")
+    lines.extend(["", "Эх, нынешние времена… ну да ладно, спите спокойно, голубчики."])
+    text = html.escape("\n".join(lines))
+    sent = await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    user = getattr(msg, "from_user", None)
+    log_bot_reply_for_message("cmd_stats", msg=msg, reply_text=text, sent=sent, user_id=user.id if user else None)
+    schedule_delete_slash_command_and_reply(
+        context=context,
+        user_msg=msg,
+        bot_msg=sent,
+        wiki_base_url=getattr(settings, "wiki_base_url", ""),
         outgoing_text=text,
     )

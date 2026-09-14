@@ -197,6 +197,9 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 user_id=from_user.id if from_user else None,
                 username=from_user.username if from_user else None,
                 first_name=from_user.first_name if from_user else None,
+                chat_id=chat_id,
+                topic_id=topic_id,
+                track_daily=can_reply,
             )
     except Exception:
         pass
@@ -573,7 +576,15 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         chat_id=chat_id,
     )
 
-    _record_stat(context.application.bot_data, url=url, question=text, source="wiki")
+    _record_stat(
+        context.application.bot_data,
+        url=url,
+        question=text,
+        source="wiki",
+        chat_id=chat_id,
+        topic_id=topic_id,
+        topic=best_doc.title,
+    )
 
     if _ctx_uid is not None:
         _record_bot_ans(
