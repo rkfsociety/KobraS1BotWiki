@@ -150,6 +150,7 @@ from app.bot.heuristics._banter import (
     _is_vague_fix_without_symptom,
     _is_missed_sep12_thread_noise,
     _is_missed_sep13_thread_noise,
+    _is_missed_sep14_thread_noise,
     _is_sep13_unprompted_thread_reply,
     _message_has_help_intent,
 )
@@ -319,6 +320,7 @@ __all__ = [
     "_is_vague_fix_without_symptom",
     "_is_missed_sep12_thread_noise",
     "_is_missed_sep13_thread_noise",
+    "_is_missed_sep14_thread_noise",
     "_is_sep13_unprompted_thread_reply",
     "_message_has_help_intent",
     # _intents

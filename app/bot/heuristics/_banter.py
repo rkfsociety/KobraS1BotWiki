@@ -3206,6 +3206,34 @@ def _is_missed_sep13_thread_noise(text: str) -> bool:
 
 
 @lru_cache(maxsize=4096)
+def _is_missed_sep14_thread_noise(text: str) -> bool:
+    """Точные продолжения тредов из recent_replies/missed за 14.09.2026."""
+    if not text or not text.strip():
+        return False
+    t = re.sub(r"\s+", " ", text.lower()).strip()
+    if re.search(
+        r"\b(?:помогите|подскаж\w*|что\s+делать|не\s+(?:работает|печатает)|"
+        r"ошибк\w*\s+\d{4,5})\b",
+        t,
+    ):
+        return False
+
+    if re.fullmatch(r"как\s+и\s+мне\s+пластик\s+этот\s+и\s+все[)!\.\s]*", t):
+        return True
+    if re.search(r"\bхз\s+как\s+там\s+у\s+чел\w*\b.*\b0[.,]\d+\b", t):
+        return True
+    if re.search(r"\bтебе\s+китаец\s+выслал\s+пластик\w*\b.*\bигнорит\b", t):
+        return True
+    if re.search(r"\bкак\s+же\s+научиться\s+стол\s+крутить\b", t):
+        return True
+    if re.search(r"\bвкусн\w*\s+цен\w*\b.*\b(?:петг|petg)\b.*\bскоростн\w*\b", t):
+        return True
+    if re.search(r"\bодна\s+была\s+бракован\w*\b.*\bизображени\w*\b.*\bмонитор\w*\b", t):
+        return True
+    return False
+
+
+@lru_cache(maxsize=4096)
 def _is_sep13_unprompted_thread_reply(text: str) -> bool:
     """Короткий ответ/наблюдение в треде без самостоятельной просьбы о помощи."""
     if not text or not text.strip() or "?" in text:

@@ -124,6 +124,7 @@ from app.bot.heuristics._banter import (
     _is_vague_fix_without_symptom,
     _is_missed_sep12_thread_noise,
     _is_missed_sep13_thread_noise,
+    _is_missed_sep14_thread_noise,
     _is_sep13_unprompted_thread_reply,
 )
 from app.bot.heuristics._intents import (
@@ -248,6 +249,7 @@ def _is_non_wiki_chatter_message(text: str) -> bool:
         or _is_vague_fix_without_symptom(text)
         or _is_missed_sep12_thread_noise(text)
         or _is_missed_sep13_thread_noise(text)
+        or _is_missed_sep14_thread_noise(text)
         or _is_sep13_unprompted_thread_reply(text)
         or _is_offtopic_work_life_sidebar(text)
         or _is_offtopic_auto_sidebar(text)
