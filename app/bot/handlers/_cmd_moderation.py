@@ -6,6 +6,7 @@ import re
 import time
 
 from telegram import ChatPermissions, Update
+from telegram.constants import ChatMemberStatus
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
@@ -104,6 +105,45 @@ async def _has_right(update: Update, context: ContextTypes.DEFAULT_TYPE, right: 
     return False
 
 
+async def _target_can_be_moderated(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    target,
+    command: str,
+) -> bool:
+    """Не даёт командам ban/kick/mute затронуть владельца или админа группы."""
+    chat = update.effective_chat
+    if chat is None:
+        return False
+    try:
+        member = await context.bot.get_chat_member(chat.id, target.id)
+    except Exception as exc:
+        log.warning(
+            "moderation target status check failed command=/%s chat=%s user=%s: %s",
+            command,
+            chat.id,
+            target.id,
+            exc,
+        )
+        await update.effective_message.reply_text(
+            "Не удалось проверить статус цели. Команда отменена для безопасности."
+        )
+        return False
+
+    status = getattr(member, "status", None)
+    if status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR):
+        await update.effective_message.reply_text(
+            f"Нельзя применить /{command} к владельцу или администратору группы."
+        )
+        return False
+    if status is None:
+        await update.effective_message.reply_text(
+            "Не удалось определить статус цели. Команда отменена для безопасности."
+        )
+        return False
+    return True
+
+
 async def _api_error(update: Update, command: str, exc: TelegramError) -> None:
     log.warning("moderation command failed command=/%s chat=%s: %s", command, getattr(update.effective_chat, "id", None), exc)
     await update.effective_message.reply_text("Telegram не разрешил выполнить действие. Проверьте права бота и цель команды.")
@@ -130,7 +170,9 @@ async def cmd_ban(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "ban"):
         return
     target = await _target_or_usage(update)
-    if target is None or not await _has_right(update, context, "can_restrict_members"):
+    if target is None or not await _target_can_be_moderated(update, context, target, "ban"):
+        return
+    if not await _has_right(update, context, "can_restrict_members"):
         return
     try:
         await context.bot.ban_chat_member(
@@ -169,7 +211,9 @@ async def cmd_kick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "kick"):
         return
     target = await _target_or_usage(update)
-    if target is None or not await _has_right(update, context, "can_restrict_members"):
+    if target is None or not await _target_can_be_moderated(update, context, target, "kick"):
+        return
+    if not await _has_right(update, context, "can_restrict_members"):
         return
     chat_id = update.effective_chat.id
     try:
@@ -187,7 +231,7 @@ async def cmd_mute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     target = await _target_or_usage(update)
     parsed = _parse_duration(list(context.args or []))
-    if target is None:
+    if target is None or not await _target_can_be_moderated(update, context, target, "mute"):
         return
     if parsed is None:
         await update.effective_message.reply_text("Срок мута: от 30 секунд до 30 дней. Пример: /mute 2h причина")

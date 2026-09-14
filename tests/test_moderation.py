@@ -10,6 +10,7 @@ from app.bot.handlers._cmd_moderation import (
     _parse_duration,
     cmd_ban,
     cmd_del,
+    cmd_kick,
     cmd_mute,
     cmd_pin,
     cmd_unban,
@@ -68,7 +69,7 @@ def _update(*, command: str, target_id: int = 7):
     )
 
 
-def _context(data: dict, *, restricted: bool = True):
+def _context(data: dict, *, target_status=ChatMemberStatus.MEMBER):
     async def get_chat_member(chat_id, user_id):
         if user_id in (1, 99):
             return SimpleNamespace(
@@ -77,7 +78,7 @@ def _context(data: dict, *, restricted: bool = True):
                 can_delete_messages=True,
                 can_pin_messages=True,
             )
-        return SimpleNamespace(status=ChatMemberStatus.MEMBER)
+        return SimpleNamespace(status=target_status)
 
     async def get_me():
         return SimpleNamespace(id=99)
@@ -158,6 +159,52 @@ def test_member_commands_record_successful_actions(monkeypatch):
         asyncio.run(handler(update, context))
 
     assert actions == ["ban", "unban", "restrict", "unrestrict"]
+
+
+def test_ban_kick_and_mute_refuse_group_administrators(monkeypatch):
+    monkeypatch.setattr(
+        "app.bot.handlers._cmd_moderation._record",
+        lambda *args: None,
+    )
+
+    for target_status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR):
+        for command, handler in (("ban", cmd_ban), ("kick", cmd_kick), ("mute", cmd_mute)):
+            data = {"settings": SimpleNamespace()}
+            update = _update(command=command)
+            context = _context(data, target_status=target_status)
+
+            asyncio.run(handler(update, context))
+
+            assert "ban" not in data
+            assert "restrict" not in data
+            assert update.effective_message.replies == [
+                f"Нельзя применить /{command} к владельцу или администратору группы."
+            ]
+
+
+def test_destructive_moderation_refuses_when_target_status_cannot_be_checked():
+    data = {"settings": SimpleNamespace()}
+    update = _update(command="ban")
+
+    async def get_chat_member(chat_id, user_id):
+        if user_id == 7:
+            raise RuntimeError("temporary Telegram failure")
+        return SimpleNamespace(
+            status=ChatMemberStatus.ADMINISTRATOR,
+            can_restrict_members=True,
+            can_delete_messages=True,
+            can_pin_messages=True,
+        )
+
+    context = _context(data)
+    context.bot.get_chat_member = get_chat_member
+
+    asyncio.run(cmd_ban(update, context))
+
+    assert "ban" not in data
+    assert update.effective_message.replies == [
+        "Не удалось проверить статус цели. Команда отменена для безопасности."
+    ]
 
 
 def test_message_commands_call_telegram_and_record_success(monkeypatch):
