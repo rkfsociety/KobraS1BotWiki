@@ -72,6 +72,7 @@ from app.bot.reply_logging import load_recent_replies
 from app.bot.admin_activity import flush_admin_activity, load_admin_activity
 from app.bot.moderation import flush_moderation_store, load_moderation_store
 from app.bot.bot_stats import flush_bot_stats, load_bot_stats
+from app.bot.command_menu import configure_command_menu
 from app.bot.panel_login import cmd_start
 from app.bot.reactions import on_message_reaction
 from app.bot.ops_notify import notify_ops
@@ -279,6 +280,11 @@ def main() -> None:
         me = await application.bot.get_me()
         application.bot_data["bot_username"] = me.username
         application.bot_data["bot_id"] = me.id
+        try:
+            await configure_command_menu(application.bot)
+            logging.info("Меню команд Telegram настроено")
+        except Exception as e:
+            logging.warning("Не удалось настроить меню команд Telegram: %s", e)
         # Восстанавливаем ленту последних ответов после перезапуска
         try:
             load_recent_replies(application.bot_data)
