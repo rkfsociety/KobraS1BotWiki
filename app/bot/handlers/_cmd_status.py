@@ -285,10 +285,3 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     sent = await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     user = getattr(msg, "from_user", None)
     log_bot_reply_for_message("cmd_stats", msg=msg, reply_text=text, sent=sent, user_id=user.id if user else None)
-    schedule_delete_slash_command_and_reply(
-        context=context,
-        user_msg=msg,
-        bot_msg=sent,
-        wiki_base_url=getattr(settings, "wiki_base_url", ""),
-        outgoing_text=text,
-    )

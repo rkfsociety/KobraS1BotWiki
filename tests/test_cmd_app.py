@@ -59,7 +59,11 @@ def test_start_app_payload_opens_miniapp_button():
 
 def test_cmd_stats_in_private_chat_uses_configured_group(monkeypatch):
     reply_text = AsyncMock()
-    monkeypatch.setattr("app.bot.handlers._cmd_status.schedule_delete_slash_command_and_reply", lambda **_: None)
+
+    def fail_if_scheduled(**_kwargs):
+        raise AssertionError("/stats response must remain in the chat")
+
+    monkeypatch.setattr("app.bot.handlers._cmd_status.schedule_delete_slash_command_and_reply", fail_if_scheduled)
     monkeypatch.setattr("app.bot.handlers._cmd_status.log_bot_reply_for_message", lambda *_, **__: None)
     bot_data = {
         "settings": SimpleNamespace(panel_admin_chat_id=-100123, wiki_base_url=""),
@@ -94,7 +98,11 @@ def test_cmd_stats_in_group_topic_requires_allowed_reply_context(monkeypatch):
     reply_text = AsyncMock()
     member = SimpleNamespace(status="administrator")
     bot = SimpleNamespace(get_chat_member=AsyncMock(return_value=member))
-    monkeypatch.setattr("app.bot.handlers._cmd_status.schedule_delete_slash_command_and_reply", lambda **_: None)
+
+    def fail_if_scheduled(**_kwargs):
+        raise AssertionError("/stats response must remain in the chat")
+
+    monkeypatch.setattr("app.bot.handlers._cmd_status.schedule_delete_slash_command_and_reply", fail_if_scheduled)
     monkeypatch.setattr("app.bot.handlers._cmd_status.log_bot_reply_for_message", lambda *_, **__: None)
     bot_data = {
         "bot_id": 900,
