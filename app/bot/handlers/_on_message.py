@@ -188,7 +188,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         bot_can_send=bot_can_send,
     )
 
-    # Активность чата: все входящие в allowed-чатах/топиках (не только ответы бота).
+    # Активность чата: считаем все входящие сообщения группы, даже если бот
+    # не может отвечать в этой теме. Ограничения темы относятся только к ответу.
     try:
         from_user = msg.from_user
         if from_user is None or not getattr(from_user, "is_bot", False):
@@ -199,7 +200,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 first_name=from_user.first_name if from_user else None,
                 chat_id=chat_id,
                 topic_id=topic_id,
-                track_daily=can_reply,
+                track_daily=True,
             )
     except Exception:
         pass

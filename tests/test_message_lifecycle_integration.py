@@ -90,6 +90,21 @@ def test_question_outside_allowed_context_is_collected_without_reply(monkeypatch
     assert missed[0]["text"] == "как настроить первый слой?"
 
 
+def test_message_outside_allowed_topic_is_included_in_daily_stats(monkeypatch):
+    recorded: list[dict] = []
+    monkeypatch.setattr(message_module, "_record_incoming", lambda *a, **kwargs: recorded.append(kwargs))
+    monkeypatch.setattr(message_module, "chat_topic_in_allowed_lists", lambda **kwargs: False)
+    monkeypatch.setattr(message_module, "can_bot_reply_in_context", lambda **kwargs: False)
+    monkeypatch.setattr(message_module, "add_missed_question", lambda **kwargs: None)
+
+    update = _update()
+    update.effective_message.message_thread_id = 99
+    asyncio.run(message_module.on_message(update, _context()))
+
+    assert recorded[0]["topic_id"] == 99
+    assert recorded[0]["track_daily"] is True
+
+
 def test_chatter_is_filtered_before_search_or_reply(monkeypatch):
     _patch_message_side_effects(monkeypatch)
     monkeypatch.setattr(message_module, "chat_topic_in_allowed_lists", lambda **kwargs: True)
