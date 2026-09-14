@@ -259,6 +259,7 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     messages=messages,
                     timeout_seconds=settings.literouter_timeout_seconds,
                     max_tokens=settings.literouter_max_tokens,
+                    cooldown_seconds=getattr(settings, "literouter_cooldown_seconds", 5),
                 )
                 if _looks_truncated(answer):
                     raise LiteRouterError("модель вернула незавершённый ответ")

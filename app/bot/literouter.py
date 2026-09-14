@@ -1,7 +1,9 @@
 """Минимальный OpenAI-compatible клиент для LiteRouter."""
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from typing import Any
 
 import httpx
@@ -9,6 +11,31 @@ import httpx
 
 class LiteRouterError(RuntimeError):
     """Ошибка запроса к LiteRouter без раскрытия API-ключа."""
+
+
+_COOLDOWN_LOCK: asyncio.Lock | None = None
+_COOLDOWN_LOOP = None
+_NEXT_REQUEST_AT = 0.0
+
+
+async def _wait_for_cooldown(seconds: int) -> None:
+    """Сериализует запросы к общему LiteRouter-тарифу."""
+    delay_seconds = max(0, int(seconds))
+    if delay_seconds == 0:
+        return
+
+    global _COOLDOWN_LOCK, _COOLDOWN_LOOP, _NEXT_REQUEST_AT
+    loop = asyncio.get_running_loop()
+    if _COOLDOWN_LOCK is None or _COOLDOWN_LOOP is not loop:
+        _COOLDOWN_LOCK = asyncio.Lock()
+        _COOLDOWN_LOOP = loop
+        _NEXT_REQUEST_AT = 0.0
+
+    async with _COOLDOWN_LOCK:
+        delay = max(0.0, _NEXT_REQUEST_AT - time.monotonic())
+        if delay:
+            await asyncio.sleep(delay)
+        _NEXT_REQUEST_AT = time.monotonic() + delay_seconds
 
 
 def _error_detail(response: httpx.Response, *, secret: str = "") -> str:
@@ -61,6 +88,7 @@ async def ask_literouter(
     messages: list[dict[str, str]],
     timeout_seconds: int,
     max_tokens: int | None,
+    cooldown_seconds: int = 5,
 ) -> str:
     """Отправляет один non-streaming chat completion в LiteRouter."""
     key = (api_key or "").strip()
@@ -74,6 +102,8 @@ async def ask_literouter(
     endpoint = f"{(base_url or '').strip().rstrip('/')}/chat/completions"
     if not endpoint.startswith("https://"):
         raise LiteRouterError("LITEROUTER_BASE_URL должен начинаться с https://")
+
+    await _wait_for_cooldown(cooldown_seconds)
 
     payload = {
         "model": model_name,

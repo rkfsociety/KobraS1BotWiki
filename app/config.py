@@ -146,6 +146,8 @@ class Settings:
 
     literouter_timeout_seconds: int
 
+    literouter_cooldown_seconds: int
+
     literouter_max_tokens: int | None
 
     literouter_context_docs: int
@@ -344,6 +346,7 @@ def load_settings() -> Settings:
     literouter_models = _parse_literouter_models(literouter_models_raw, literouter_model_override)
     literouter_model = literouter_models[0]
     literouter_timeout_seconds = max(1, _get_int("LITEROUTER_TIMEOUT_SECONDS", 25))
+    literouter_cooldown_seconds = max(0, _get_int("LITEROUTER_COOLDOWN_SECONDS", 5))
     configured_max_tokens = _get_int("LITEROUTER_MAX_TOKENS", 0)
     literouter_max_tokens = max(64, configured_max_tokens) if configured_max_tokens > 0 else None
     literouter_context_docs = max(1, min(5, _get_int("LITEROUTER_CONTEXT_DOCS", 3)))
@@ -642,6 +645,8 @@ def load_settings() -> Settings:
         literouter_model=literouter_model,
 
         literouter_timeout_seconds=literouter_timeout_seconds,
+
+        literouter_cooldown_seconds=literouter_cooldown_seconds,
 
         literouter_max_tokens=literouter_max_tokens,
 

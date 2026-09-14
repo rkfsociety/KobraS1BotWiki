@@ -51,6 +51,7 @@ def test_literouter_uses_openai_compatible_endpoint_and_parses_content(monkeypat
             messages=[{"role": "user", "content": "Привет"}],
             timeout_seconds=25,
             max_tokens=500,
+            cooldown_seconds=0,
         )
     )
 
@@ -99,6 +100,7 @@ def test_literouter_omits_max_tokens_when_unlimited(monkeypatch):
             messages=[{"role": "user", "content": "Привет"}],
             timeout_seconds=25,
             max_tokens=None,
+            cooldown_seconds=0,
         )
     )
 
@@ -116,6 +118,7 @@ def test_literouter_rejects_non_https_base_url_without_request():
                 messages=[],
                 timeout_seconds=5,
                 max_tokens=100,
+                cooldown_seconds=0,
             )
         )
     except Exception as exc:
@@ -132,6 +135,7 @@ def _settings():
         literouter_models=("first-model", "second-model"),
         literouter_model="deepseek-v4-flash:free",
         literouter_timeout_seconds=25,
+        literouter_cooldown_seconds=0,
         literouter_max_tokens=500,
         literouter_context_docs=3,
         ru_layer_enabled=False,
@@ -290,6 +294,7 @@ def test_cmd_ii_uses_next_model_after_provider_failure(monkeypatch):
     asyncio.run(cmd_ii(update, context))
 
     assert [call.kwargs["model"] for call in ask.await_args_list] == ["first-model", "second-model"]
+    assert all(call.kwargs["cooldown_seconds"] == 0 for call in ask.await_args_list)
 
 
 def test_general_request_does_not_include_wiki_or_anycubic_prompt():
@@ -449,6 +454,7 @@ def test_literouter_error_detail_does_not_expose_key(monkeypatch):
                 messages=[],
                 timeout_seconds=5,
                 max_tokens=100,
+                cooldown_seconds=0,
             )
         )
     except Exception as exc:
