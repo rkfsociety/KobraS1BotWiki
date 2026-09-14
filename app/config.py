@@ -487,7 +487,7 @@ def load_settings() -> Settings:
 
 
 
-    reply_review_mention = (os.getenv("REPLY_REVIEW_MENTION") or "rkfsociety").strip()
+    reply_review_mention = (os.getenv("REPLY_REVIEW_MENTION") or "").strip()
 
     raw_neg = os.getenv("NEGATIVE_REACTION_EMOJIS")
     if raw_neg is None:

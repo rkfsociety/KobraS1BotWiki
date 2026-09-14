@@ -10,12 +10,12 @@ from telegram.constants import ChatType
 from app.bot.review_mention import reply_for_user, with_review_mention
 
 
-def _settings(mention: str = "rkfsociety") -> SimpleNamespace:
+def _settings(mention: str = "") -> SimpleNamespace:
     return SimpleNamespace(reply_review_mention=mention)
 
 
 def test_with_review_mention_appends_username():
-    out = with_review_mention("Ответ", _settings())
+    out = with_review_mention("Ответ", _settings(mention="rkfsociety"))
     assert out.endswith("@rkfsociety")
 
 
@@ -25,7 +25,7 @@ def test_with_review_mention_disabled():
 
 def test_reply_for_user_tags_in_group():
     async def _run() -> None:
-        s = _settings()
+        s = _settings(mention="rkfsociety")
         msg = MagicMock()
         msg.chat = SimpleNamespace(type=ChatType.SUPERGROUP)
         msg.reply_text = AsyncMock(return_value=MagicMock())
