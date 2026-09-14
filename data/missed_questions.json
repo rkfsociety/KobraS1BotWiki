@@ -1,1 +1,74 @@
-[]
+[
+  {
+    "text": "Нужно ж было пока горячее",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1789392719.253941
+  },
+  {
+    "text": "слева этот винтик",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1789392314.5640795
+  },
+  {
+    "text": "чтоб вот этот хаб снять",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1789392181.552434
+  },
+  {
+    "text": "сбоку где-то винтик есть",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1789392171.7372284
+  },
+  {
+    "text": "Есть идеи че с этим делать?",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1789392074.3583884
+  },
+  {
+    "text": "Я просто тоже думал прозрачный надо , но как видишь прозрачный Фе",
+    "score": 11,
+    "best_url": "https://wiki.anycubic.com/en/error-codes/312-msgcode",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1789391951.3704894
+  },
+  {
+    "text": "Пла на уличную вывеску точно не пойдет",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1789391480.5977402
+  },
+  {
+    "text": "Этож полупрозрачный надо. И вобще с петга такое прокатит?",
+    "score": 11,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/kobra-max-source-code",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1789391374.4995217
+  },
+  {
+    "text": "станно как-то",
+    "score": 8,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/kobra-max-source-code",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1789391314.560588
+  }
+]
