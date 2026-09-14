@@ -5,7 +5,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 from app.bot.handlers import cmd_ii
-from app.bot.handlers._cmd_ii import _answer_body, _looks_truncated, _split_telegram_text
+from app.bot.handlers._cmd_ii import (
+    _answer_body,
+    _build_general_messages,
+    _looks_truncated,
+    _split_telegram_text,
+)
 from app.bot.literouter import LiteRouterError, ask_literouter
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
@@ -285,6 +290,64 @@ def test_cmd_ii_uses_next_model_after_provider_failure(monkeypatch):
     asyncio.run(cmd_ii(update, context))
 
     assert [call.kwargs["model"] for call in ask.await_args_list] == ["first-model", "second-model"]
+
+
+def test_general_request_does_not_include_wiki_or_anycubic_prompt():
+    messages = _build_general_messages("Скиньте инструкцию по смазке A1 Mini")
+
+    assert "Anycubic" not in messages[0]["content"]
+    assert "CONTEXT" not in messages[0]["content"]
+    assert messages[1]["content"] == "Скиньте инструкцию по смазке A1 Mini"
+
+
+def test_cmd_ii_retries_without_wiki_context_after_no_answer(monkeypatch):
+    target = SimpleNamespace(
+        text="Скиньте инструкцию по смазке A1 Mini",
+        caption=None,
+        from_user=SimpleNamespace(id=42, is_bot=False),
+        chat_id=-100123,
+        message_id=21,
+        message_thread_id=None,
+        chat=SimpleNamespace(type="supergroup"),
+    )
+    update = _update_for_ii(target=target)
+    settings = _settings()
+    index = WebWikiIndex(
+        [
+            WebWikiDoc(
+                title="Нерелевантная статья Anycubic",
+                url="https://wiki.anycubic.com/en/unrelated",
+                text="Общие сведения о принтере.",
+            )
+        ]
+    )
+    context = SimpleNamespace(
+        application=SimpleNamespace(bot_data={"settings": settings, "wiki_index": index}),
+    )
+    ask = AsyncMock(
+        side_effect=[
+            "NO_ANSWER В переданном контексте нет инструкции.",
+            "GENERAL_ANSWER Для A1 Mini используйте инструкцию производителя по смазке направляющих.",
+        ]
+    )
+
+    monkeypatch.setattr("app.bot.handlers._cmd_ii._deny_unless_admin_command_access", AsyncMock(return_value=False))
+    monkeypatch.setattr("app.bot.handlers._cmd_ii.ask_literouter", ask)
+    monkeypatch.setattr(
+        "app.bot.handlers._cmd_ii.reply_for_user",
+        AsyncMock(return_value=SimpleNamespace(message_id=99)),
+    )
+    monkeypatch.setattr("app.bot.handlers._cmd_ii._record_bot_answer_context", lambda **_kwargs: None)
+    monkeypatch.setattr("app.bot.handlers._cmd_ii.add_to_recent_replies", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("app.bot.handlers._cmd_ii._record_stat", lambda *_args, **_kwargs: None)
+
+    asyncio.run(cmd_ii(update, context))
+
+    assert ask.await_count == 2
+    assert "CONTEXT" in ask.await_args_list[0].kwargs["messages"][1]["content"]
+    assert "Anycubic" not in ask.await_args_list[1].kwargs["messages"][0]["content"]
+    reply = __import__("app.bot.handlers._cmd_ii", fromlist=["reply_for_user"]).reply_for_user
+    assert "Для A1 Mini" in reply.await_args.args[2]
 
 
 def test_answer_body_separates_source_lines():
