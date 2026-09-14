@@ -31,6 +31,7 @@ pipenv.lock
 
 # Logs
 *.log
+logs/
 
 # Coverage reports
 .coverage
