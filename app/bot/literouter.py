@@ -60,7 +60,7 @@ async def ask_literouter(
     model: str,
     messages: list[dict[str, str]],
     timeout_seconds: int,
-    max_tokens: int,
+    max_tokens: int | None,
 ) -> str:
     """Отправляет один non-streaming chat completion в LiteRouter."""
     key = (api_key or "").strip()
@@ -79,9 +79,10 @@ async def ask_literouter(
         "model": model_name,
         "messages": messages,
         "temperature": 0.2,
-        "max_tokens": max(64, int(max_tokens)),
         "stream": False,
     }
+    if max_tokens is not None and int(max_tokens) > 0:
+        payload["max_tokens"] = max(64, int(max_tokens))
     headers = {
         "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
@@ -105,9 +106,13 @@ async def ask_literouter(
 
     try:
         choices = data["choices"]
-        content = choices[0]["message"]["content"]
+        choice = choices[0]
+        content = choice["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
         raise LiteRouterError("в ответе провайдера нет текста модели") from exc
+
+    if choice.get("finish_reason") == "length":
+        raise LiteRouterError("модель достигла лимита токенов")
 
     answer = _content_to_text(content)
     if not answer:

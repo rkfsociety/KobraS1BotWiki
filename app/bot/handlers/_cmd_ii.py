@@ -10,7 +10,7 @@ from app.bot.ephemeral import schedule_delete_slash_command_and_reply
 from app.bot.i18n import _lang_from_message, _t
 from app.bot.literouter import LiteRouterError, ask_literouter
 from app.bot.reply_logging import add_to_recent_replies
-from app.bot.review_mention import reply_for_user
+from app.bot.review_mention import reply_for_user, should_tag_reviewer, with_review_mention
 from app.bot.bot_stats import record_answer as _record_stat
 from app.bot.stores import _record_bot_answer_context
 from app.bot.text_heuristics import _model_slug_hints
@@ -24,7 +24,7 @@ _MAX_QUESTION_CHARS = 4000
 _MAX_CONTEXT_DOCS = 3
 _MAX_CONTEXT_CHARS = 12000
 _MAX_DOC_CHARS = 4000
-_MAX_ANSWER_CHARS = 3500
+_TELEGRAM_TEXT_LIMIT = 4096
 _INCOMPLETE_ENDINGS = {
     "а",
     "если",
@@ -37,6 +37,7 @@ _INCOMPLETE_ENDINGS = {
     "что",
     "говорит",
 }
+_SHORT_COMPLETE_WORDS = {"да", "нет", "ок", "не", "то", "же", "ли"}
 
 
 def _message_text(message) -> str:
@@ -104,7 +105,7 @@ def _looks_truncated(answer: str) -> bool:
     if text[-1] in ".!?…:;)]}" + "'»":
         return False
     last_word = text.split()[-1].strip("()[]{}«»\"'“”.,:;!?-").lower()
-    return last_word in _INCOMPLETE_ENDINGS
+    return last_word in _INCOMPLETE_ENDINGS or (len(last_word) <= 2 and last_word not in _SHORT_COMPLETE_WORDS)
 
 
 def _answer_body(answer: str, docs: list[tuple[object, int]]) -> str:
@@ -125,9 +126,9 @@ def _answer_body(answer: str, docs: list[tuple[object, int]]) -> str:
         body = f"🤖 {body}"
 
     if marker != "WIKI_ANSWER":
-        return body[:_MAX_ANSWER_CHARS].rstrip()
+        return body.rstrip()
 
-    body = body[:_MAX_ANSWER_CHARS].rstrip()
+    body = body.rstrip()
     source_lines = ["\n\n📚 Источники из индекса вики:"]
     for doc, _score in docs:
         title = str(getattr(doc, "title", "") or "Без названия").strip()
@@ -135,6 +136,25 @@ def _answer_body(answer: str, docs: list[tuple[object, int]]) -> str:
         if url.startswith(("https://", "http://")):
             source_lines.append(f"• {title}: {url}")
     return body + ("\n".join(source_lines) if len(source_lines) > 1 else "")
+
+
+def _split_telegram_text(text: str, limit: int = _TELEGRAM_TEXT_LIMIT) -> list[str]:
+    remaining = (text or "").strip()
+    if not remaining:
+        return [""]
+
+    parts: list[str] = []
+    while len(remaining) > limit:
+        cut = remaining.rfind("\n", 0, limit + 1)
+        if cut < limit // 2:
+            cut = remaining.rfind(" ", 0, limit + 1)
+        if cut <= 0:
+            cut = limit
+        parts.append(remaining[:cut].rstrip())
+        remaining = remaining[cut:].lstrip()
+    if remaining:
+        parts.append(remaining)
+    return parts
 
 
 async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -217,11 +237,13 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
 
     body = _answer_body(answer, docs)
+    outgoing_text = with_review_mention(body, settings) if should_tag_reviewer(target) else body
+    message_parts = _split_telegram_text(outgoing_text)
     uid = command_msg.from_user.id if command_msg.from_user else None
     sent = await reply_for_user(
         target,
         settings,
-        body,
+        message_parts[0],
         disable_web_page_preview=False,
         log_kind="cmd_ii",
         log_extra={
@@ -232,6 +254,8 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         },
         log_user_id=uid,
     )
+    for part in message_parts[1:]:
+        await target.reply_text(part, disable_web_page_preview=False)
 
     _record_bot_answer_context(
         context=context,

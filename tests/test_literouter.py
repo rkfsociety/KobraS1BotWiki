@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 from app.bot.handlers import cmd_ii
-from app.bot.handlers._cmd_ii import _answer_body, _looks_truncated
+from app.bot.handlers._cmd_ii import _answer_body, _looks_truncated, _split_telegram_text
 from app.bot.literouter import LiteRouterError, ask_literouter
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
@@ -56,6 +56,49 @@ def test_literouter_uses_openai_compatible_endpoint_and_parses_content(monkeypat
     assert request_kwargs["headers"]["Authorization"] == "Bearer secret-value"
     assert request_kwargs["json"]["model"] == "deepseek-v4-flash:free"
     assert request_kwargs["json"]["stream"] is False
+    assert request_kwargs["json"]["max_tokens"] == 500
+
+
+def test_literouter_omits_max_tokens_when_unlimited(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": "Готово"}}]}
+
+        text = ""
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, _endpoint, **kwargs):
+            captured["json"] = kwargs["json"]
+            return FakeResponse()
+
+    monkeypatch.setattr("app.bot.literouter.httpx.AsyncClient", FakeClient)
+
+    result = asyncio.run(
+        ask_literouter(
+            api_key="secret-value",
+            base_url="https://api.literouter.com/v1",
+            model="model",
+            messages=[{"role": "user", "content": "Привет"}],
+            timeout_seconds=25,
+            max_tokens=None,
+        )
+    )
+
+    assert result == "Готово"
+    assert "max_tokens" not in captured["json"]
 
 
 def test_literouter_rejects_non_https_base_url_without_request():
@@ -171,6 +214,7 @@ def test_cmd_ii_replies_to_target_and_includes_verified_wiki_source(monkeypatch)
         chat_id=-100123,
         message_id=21,
         message_thread_id=None,
+        chat=SimpleNamespace(type="supergroup"),
     )
     update = _update_for_ii(target=target)
     settings = _settings()
@@ -218,6 +262,7 @@ def test_cmd_ii_uses_next_model_after_provider_failure(monkeypatch):
         chat_id=-100123,
         message_id=21,
         message_thread_id=None,
+        chat=SimpleNamespace(type="supergroup"),
     )
     update = _update_for_ii(target=target)
     settings = _settings()
@@ -272,8 +317,16 @@ def test_answer_body_hides_wiki_sources_for_general_answer():
     assert "wiki.example" not in body
 
 
+def test_split_telegram_text_keeps_each_part_within_limit():
+    parts = _split_telegram_text("слово " * 1000)
+
+    assert len(parts) > 1
+    assert all(0 < len(part) <= 4096 for part in parts)
+
+
 def test_literouter_detects_incomplete_ending():
     assert _looks_truncated("Ответ обрывается, если") is True
+    assert _looks_truncated("Ответ обрывается на фрагменте па") is True
     assert _looks_truncated("Ответ полностью закончен.") is False
 
 
