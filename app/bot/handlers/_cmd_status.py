@@ -10,6 +10,7 @@ from telegram.constants import ChatType, ParseMode
 from telegram.ext import ContextTypes
 
 from app.bot.ephemeral import schedule_delete_slash_command_and_reply
+from app.bot.daily_summary import format_daily_summary
 from app.bot.git_autopull import get_bot_version, git_ping_compare_with_remote, project_repo_root
 from app.bot.bot_stats import get_daily_stats, get_daily_top_topics, normalize_daily_date
 from app.bot.i18n import _lang_from_message, _t
@@ -214,21 +215,6 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     )
 
 
-def _stats_topic_emoji(title: str) -> str:
-    text = title.lower()
-    if any(word in text for word in ("чист", "флуд", "мусор", "уборк")):
-        return "🧹"
-    if any(word in text for word in ("хотэнд", "хотенд", "сопл", "нагрев", "температур")):
-        return "🔥"
-    if any(word in text for word in ("настрой", "скорост", "калибр", "слой", "слайсер")):
-        return "⚙️"
-    if any(word in text for word in ("ошиб", "код", "не работает")):
-        return "🚨"
-    if any(word in text for word in ("филамент", "пластик", "катуш")):
-        return "🧵"
-    return "💬"
-
-
 def _stats_date_arg(context: ContextTypes.DEFAULT_TYPE) -> str | None:
     args = getattr(context, "args", None) or []
     raw = str(args[0]).strip() if args else ""
@@ -288,18 +274,14 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         day=day,
         limit=3,
     )
-    month_names = (
-        "января", "февраля", "марта", "апреля", "мая", "июня",
-        "июля", "августа", "сентября", "октября", "ноября", "декабря",
+    summary = format_daily_summary(
+        day=day,
+        scope_label=scope_label,
+        scope_key=f"{target_chat_id}:{target_topic_id if target_topic_id is not None else 'all'}",
+        total_incoming=daily["total_incoming"],
+        topics=topics,
     )
-    _year, month, number = (int(part) for part in day.split("-"))
-    lines = [f"Сводочка по {scope_label}, родимые за {number} {month_names[month - 1]}", "", f"Всего было написано {daily['total_incoming']} сообщений", ""]
-    if topics:
-        lines.extend(f"{_stats_topic_emoji(title)} {title} ({count} сообщений)" for title, count in topics)
-    else:
-        lines.append("За этот день бот не выделил отдельных тем.")
-    lines.extend(["", "Эх, нынешние времена… ну да ладно, спите спокойно, голубчики."])
-    text = html.escape("\n".join(lines))
+    text = html.escape(summary)
     sent = await msg.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     user = getattr(msg, "from_user", None)
     log_bot_reply_for_message("cmd_stats", msg=msg, reply_text=text, sent=sent, user_id=user.id if user else None)

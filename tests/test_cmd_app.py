@@ -85,7 +85,7 @@ def test_cmd_stats_in_private_chat_uses_configured_group(monkeypatch):
     asyncio.run(cmd_stats(update, context))
 
     text = reply_text.await_args.args[0]
-    assert "Сводочка по группе" in text
+    assert "группе" in text
     assert "Всего было написано 2 сообщений" in text
     assert "⚙️ Настройка скоростей (2 сообщений)" in text
 

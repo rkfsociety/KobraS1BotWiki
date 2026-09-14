@@ -16,6 +16,7 @@ from app.bot.admin_activity import (
     get_active_moderated_users,
     get_recent_admin_actions,
 )
+from app.bot.daily_summary import format_daily_summary, topic_emoji
 from app.bot.miniapp_access import is_group_admin, is_group_member
 from app.bot.miniapp_auth import MiniAppAuthError, validate_init_data
 from app.bot.manual_qa import add_manual_qa_entry, find_manual_qa_answer, load_manual_qa_store
@@ -933,36 +934,6 @@ def dismiss_missed_payload(state: Any, authorization: str, item_id: str) -> tupl
     return (200 if ok else 500), {"ok": ok, "message": message} if ok else {"ok": False, "error": message}
 
 
-def _daily_topic_emoji(title: str) -> str:
-    text = title.lower()
-    if any(word in text for word in ("чист", "флуд", "мусор", "уборк")):
-        return "🧹"
-    if any(word in text for word in ("хотэнд", "хотенд", "сопл", "нагрев", "температур")):
-        return "🔥"
-    if any(word in text for word in ("настрой", "скорост", "калибр", "слой", "слайсер")):
-        return "⚙️"
-    if any(word in text for word in ("ошиб", "код", "не работает")):
-        return "🚨"
-    if any(word in text for word in ("филамент", "пластик", "катуш")):
-        return "🧵"
-    return "💬"
-
-
-def _daily_summary_text(*, day: str, total_incoming: int, topics: list[tuple[str, int]]) -> str:
-    month_names = (
-        "января", "февраля", "марта", "апреля", "мая", "июня",
-        "июля", "августа", "сентября", "октября", "ноября", "декабря",
-    )
-    _year, month, number = (int(part) for part in day.split("-"))
-    lines = [f"Сводочка по чату, родимые за {number} {month_names[month - 1]}", "", f"Всего было написано {total_incoming} сообщений", ""]
-    if topics:
-        lines.extend(f"{_daily_topic_emoji(title)} {title} ({count} сообщений)" for title, count in topics)
-    else:
-        lines.append("За этот день бот не выделил отдельных тем.")
-    lines.extend(["", "Эх, нынешние времена… ну да ладно, спите спокойно, голубчики."])
-    return "\n".join(lines)
-
-
 def stats_payload(state: Any, authorization: str, day: str | None = None) -> tuple[int, dict[str, Any]]:
     """Возвращает дневную сводку настроенной группы."""
     session, error = _require_admin_session(state, authorization)
@@ -1032,7 +1003,13 @@ def stats_payload(state: Any, authorization: str, day: str | None = None) -> tup
         "role": session["role"],
         "date": normalized_day,
         "chat_id": chat_id,
-        "summary": _daily_summary_text(day=normalized_day, total_incoming=total_incoming, topics=top_topics),
+        "summary": format_daily_summary(
+            day=normalized_day,
+            scope_label="чату",
+            scope_key=f"{chat_id}:all",
+            total_incoming=total_incoming,
+            topics=top_topics,
+        ),
         "metrics": {
             "unique_questions": len(questions),
             "unique_users": unique_users,
@@ -1042,7 +1019,7 @@ def stats_payload(state: Any, authorization: str, day: str | None = None) -> tup
             "total_incoming": total_incoming,
             "missed_count": len(missed),
         },
-        "topics": [{"title": title, "count": count, "emoji": _daily_topic_emoji(title)} for title, count in top_topics],
+        "topics": [{"title": title, "count": count, "emoji": topic_emoji(title)} for title, count in top_topics],
         "top_wiki_pages": [{"title": title, "count": count} for title, count in top_wiki_pages],
         "top_questions": [{"text": text, "count": count} for text, count in top_questions],
         "top_users": top_users,
