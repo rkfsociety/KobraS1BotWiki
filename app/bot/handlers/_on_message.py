@@ -107,6 +107,7 @@ async def on_any_update(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
                 allowed_topic_ids=settings.allowed_topic_ids,
                 chat_id=chat.id,
                 topic_id=m.message_thread_id,
+                chat_type=chat.type,
             ):
                 return
 
@@ -171,6 +172,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         allowed_topic_ids=settings.allowed_topic_ids,
         chat_id=chat_id,
         topic_id=topic_id,
+        chat_type=update.effective_chat.type,
     )
     bot_can_send = False
     if answer_context:

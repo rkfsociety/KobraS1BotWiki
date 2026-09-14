@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from telegram.constants import ChatType
+
 from app.bot.reply_access import (
     _cache_get,
     _cache_put,
@@ -63,6 +65,16 @@ def test_no_lists_allows_everywhere():
         allowed_topic_ids=None,
         chat_id=-1001,
         topic_id=5,
+    )
+
+
+def test_private_chat_bypasses_group_and_topic_allowlists():
+    assert chat_topic_in_allowed_lists(
+        allowed_chat_ids=frozenset({-1001}),
+        allowed_topic_ids=frozenset({42}),
+        chat_id=123456789,
+        topic_id=None,
+        chat_type=ChatType.PRIVATE,
     )
 
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import types
 
+from telegram.constants import ChatType
+
 from app.bot.handlers import _on_message as message_module
 from app.bot.lifecycle import _register_handlers
 
@@ -47,7 +49,7 @@ def _context() -> types.SimpleNamespace:
     )
 
 
-def _update(text: str = "как настроить первый слой?") -> types.SimpleNamespace:
+def _update(text: str = "как настроить первый слой?", *, chat_type: str = "group") -> types.SimpleNamespace:
     user = types.SimpleNamespace(id=7, username="roman", first_name="Роман", is_bot=False, language_code="ru")
     message = types.SimpleNamespace(
         text=text,
@@ -59,7 +61,7 @@ def _update(text: str = "как настроить первый слой?") -> t
     )
     return types.SimpleNamespace(
         effective_message=message,
-        effective_chat=types.SimpleNamespace(id=123),
+        effective_chat=types.SimpleNamespace(id=123, type=chat_type),
         effective_user=user,
         message=message,
     )
@@ -120,6 +122,27 @@ def test_manual_answer_route_is_reached_after_message_gates(monkeypatch):
     monkeypatch.setattr(message_module, "_try_reply_manual_qa", manual)
 
     asyncio.run(message_module.on_message(_update(), _context()))
+
+    assert calls == ["как настроить первый слой?"]
+
+
+def test_private_question_is_processed_even_when_group_allowlist_is_configured(monkeypatch):
+    _patch_message_side_effects(monkeypatch)
+    monkeypatch.setattr(message_module, "can_bot_reply_in_context", lambda **kwargs: True)
+    calls: list[str] = []
+
+    async def manual(*args, **kwargs):
+        calls.append(kwargs["query_text"])
+        return True
+
+    monkeypatch.setattr(message_module, "_try_reply_manual_qa", manual)
+    context = _context()
+    settings = context.application.bot_data["settings"]
+    settings.allowed_chat_ids = frozenset({-100123})
+    settings.allowed_topic_ids = frozenset({42})
+    settings.require_can_reply = True
+
+    asyncio.run(message_module.on_message(_update(chat_type=ChatType.PRIVATE), context))
 
     assert calls == ["как настроить первый слой?"]
 

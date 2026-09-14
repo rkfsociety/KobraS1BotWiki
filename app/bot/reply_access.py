@@ -29,15 +29,22 @@ def chat_topic_in_allowed_lists(
     allowed_topic_ids: frozenset[int] | None,
     chat_id: int,
     topic_id: int | None,
+    chat_type: str | None = None,
 ) -> bool:
     """
     True — чат/тема в ALLOWED_CHAT_IDS / ALLOWED_TOPIC_IDS (или списки не заданы).
+
+    Личные чаты с ботом всегда разрешены: списки ограничивают только группы,
+    супергруппы и темы форумов.
 
     Только чаты: сообщение в перечисленном chat_id (любая тема).
     Только темы: topic_id в списке (в любом чате).
     Оба списка: chat_id в ALLOWED_CHAT_IDS и тема подходит под ALLOWED_TOPIC_IDS.
     0 в ALLOWED_TOPIC_IDS — только General (topic_id is None).
     """
+    if chat_type == ChatType.PRIVATE:
+        return True
+
     if allowed_chat_ids is None and allowed_topic_ids is None:
         return True
 
@@ -270,6 +277,7 @@ async def should_process_incoming_wiki_message(
         allowed_topic_ids=settings.allowed_topic_ids,
         chat_id=chat_id,
         topic_id=topic_id,
+        chat_type=chat.type,
     ):
         return False, "not_in_allowed_lists"
 

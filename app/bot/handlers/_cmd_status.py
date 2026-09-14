@@ -160,6 +160,7 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         allowed_topic_ids=allowed_topics,
         chat_id=chat_id,
         topic_id=actual_topic_id,
+        chat_type=chat_type,
     )
 
     bot_username = context.application.bot_data.get("bot_username")
