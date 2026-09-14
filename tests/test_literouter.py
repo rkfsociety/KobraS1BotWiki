@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from app.bot.handlers import cmd_ii
+from app.bot.handlers._cmd_ii import _answer_body
 from app.bot.literouter import LiteRouterError, ask_literouter
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
@@ -187,7 +188,7 @@ def test_cmd_ii_replies_to_target_and_includes_verified_wiki_source(monkeypatch)
     )
 
     monkeypatch.setattr("app.bot.handlers._cmd_ii._deny_unless_admin_command_access", AsyncMock(return_value=False))
-    monkeypatch.setattr("app.bot.handlers._cmd_ii.ask_literouter", AsyncMock(return_value="Очистите сопло."))
+    monkeypatch.setattr("app.bot.handlers._cmd_ii.ask_literouter", AsyncMock(return_value="WIKI_ANSWER Очистите сопло."))
     monkeypatch.setattr(
         "app.bot.handlers._cmd_ii.reply_for_user",
         AsyncMock(return_value=SimpleNamespace(message_id=99)),
@@ -237,6 +238,36 @@ def test_cmd_ii_uses_next_model_after_provider_failure(monkeypatch):
     asyncio.run(cmd_ii(update, context))
 
     assert [call.kwargs["model"] for call in ask.await_args_list] == ["first-model", "second-model"]
+
+
+def test_answer_body_separates_source_lines():
+    docs = [
+        (SimpleNamespace(title="Первая статья", url="https://wiki.example/one"), 90),
+        (SimpleNamespace(title="Вторая статья", url="https://wiki.example/two"), 80),
+    ]
+
+    body = _answer_body("WIKI_ANSWER Ответ.", docs)
+
+    assert "https://wiki.example/one\n• Вторая статья" in body
+    assert "https://wiki.example/one•" not in body
+
+
+def test_answer_body_hides_sources_when_model_has_no_answer():
+    docs = [(SimpleNamespace(title="Нерелевантная статья", url="https://wiki.example/no"), 20)]
+
+    body = _answer_body("NO_ANSWER В вики нет подтверждённой информации.", docs)
+
+    assert body == "🤖 В вики нет подтверждённой информации."
+    assert "wiki.example" not in body
+
+
+def test_answer_body_hides_wiki_sources_for_general_answer():
+    docs = [(SimpleNamespace(title="Нерелевантная статья", url="https://wiki.example/no"), 20)]
+
+    body = _answer_body("GENERAL_ANSWER Для светобокса обычно нужен корпус и источник света.", docs)
+
+    assert body == "🤖 Для светобокса обычно нужен корпус и источник света."
+    assert "wiki.example" not in body
 
 
 def test_literouter_error_detail_does_not_expose_key(monkeypatch):
