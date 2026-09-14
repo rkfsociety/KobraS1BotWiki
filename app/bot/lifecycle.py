@@ -73,6 +73,7 @@ from app.bot.admin_activity import flush_admin_activity, load_admin_activity
 from app.bot.moderation import flush_moderation_store, load_moderation_store
 from app.bot.bot_stats import flush_bot_stats, load_bot_stats
 from app.bot.command_menu import configure_command_menu
+from app.bot.daily_stats import DAILY_STATS_SEND_TIME, configured_daily_stats_chat_ids, send_daily_stats
 from app.bot.panel_login import cmd_start
 from app.bot.reactions import on_message_reaction
 from app.bot.ops_notify import notify_ops
@@ -573,6 +574,18 @@ def main() -> None:
             settings.git_autopull_remote,
             settings.git_autopull_branch,
             "reset --hard (как на GitHub)" if settings.git_autopull_hard_reset else "ff-only",
+        )
+
+    daily_stats_chat_ids = configured_daily_stats_chat_ids(settings)
+    if daily_stats_chat_ids:
+        app.bot_data["daily_stats_job"] = app.job_queue.run_daily(
+            send_daily_stats,
+            time=DAILY_STATS_SEND_TIME,
+            name="daily_stats",
+        )
+        logging.info(
+            "Ежедневная статистика групп: %s чатов, отправка в General в 08:00 Europe/Kaliningrad",
+            len(daily_stats_chat_ids),
         )
 
     app.post_init = _post_init  # type: ignore[attr-defined]
