@@ -90,6 +90,7 @@ from app.web_miniapp import (
     dismiss_missed_payload,
     export_answers_to_json,
     missed_payload,
+    moderation_payload,
     question_payload,
     recent_answers_payload,
     render_miniapp,
@@ -463,6 +464,8 @@ h1.page-title { margin: 0 0 20px; font-size: clamp(1.5rem, 2vw, 1.9rem); letter-
 .action-pill--unrestrict, .action-pill--unban { background: #14331f; color: #86efac; border-color: #166534; }
 .action-pill--promote, .action-pill--demote { background: #1e1b4b; color: #c4b5fd; border-color: #4c1d95; }
 .action-pill--pin { background: #0f2744; color: #7dd3fc; border-color: #1d4ed8; }
+.action-pill--unpin { background: #172554; color: #bfdbfe; border-color: #1e40af; }
+.action-pill--delete { background: #2a1f14; color: #fdba74; border-color: #9a3412; }
 .action-pill--delete_bot_msg { background: #2a1f14; color: #fdba74; border-color: #9a3412; }
 .action-pill--default { background: #1f2937; color: #d1d5db; border-color: #374151; }
 .mod-stat { text-align: right; font-variant-numeric: tabular-nums; }
@@ -1137,7 +1140,7 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
 def _action_pill_html(action: str) -> str:
     key = (action or "").strip()
     css = key if key in {
-        "ban", "kick", "restrict", "unrestrict", "unban", "promote", "demote", "pin", "delete_bot_msg",
+        "ban", "kick", "restrict", "unrestrict", "unban", "promote", "demote", "pin", "unpin", "delete", "delete_bot_msg", "warn", "unwarn",
     } else "default"
     label = action_label(key) if key else "?"
     return f'<span class="action-pill action-pill--{css}">{html.escape(label)}</span>'
@@ -1294,7 +1297,7 @@ def _admin_activity_panels(bot_data: dict[str, Any]) -> str:
     """Панели активности модераторов (без внешней карточки) — правая колонка дашборда."""
     summary = get_admin_activity_summary(bot_data, limit=15)
     recent = get_recent_admin_actions(bot_data, limit=20)
-    stat_keys = ("ban", "kick", "restrict", "unrestrict", "unban", "promote", "demote", "pin", "delete_bot_msg")
+    stat_keys = ("ban", "kick", "restrict", "unrestrict", "unban", "promote", "demote", "pin", "unpin", "delete", "delete_bot_msg", "warn", "unwarn")
 
     if summary:
         head = "".join(f'<th class=right>{html.escape(action_label(k))}</th>' for k in stat_keys)
@@ -1370,7 +1373,7 @@ def _admin_activity_section(bot_data: dict[str, Any]) -> str:
         '<div class="section-head">'
         "<h2>Активность модераторов</h2>"
         '<p class="muted">Баны, кики, муты, закрепы и другие события, которые Telegram передаёт боту. '
-        "Удаление чужих сообщений отдельно не приходит; учитывается только удаление ответа бота по /error и /fix.</p>"
+        "Удаление чужих сообщений отдельно не приходит; команда /del записывается самим обработчиком.</p>"
         "</div>"
         f"{_admin_activity_panels(bot_data)}"
         "</div>"
@@ -1850,6 +1853,10 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 return
             if path == "/api/app/stats":
                 status, payload = stats_payload(state, self.headers.get("Authorization", ""))
+                self._send_json(payload, status=status)
+                return
+            if path == "/api/app/moderation":
+                status, payload = moderation_payload(state, self.headers.get("Authorization", ""))
                 self._send_json(payload, status=status)
                 return
             if path == "/api/app/answers":

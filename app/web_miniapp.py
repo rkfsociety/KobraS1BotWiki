@@ -11,6 +11,11 @@ import sqlite3
 import time
 from typing import Any
 
+from app.bot.admin_activity import (
+    action_label,
+    get_active_moderated_users,
+    get_recent_admin_actions,
+)
 from app.bot.miniapp_access import is_group_admin, is_group_member
 from app.bot.miniapp_auth import MiniAppAuthError, validate_init_data
 from app.bot.manual_qa import add_manual_qa_entry, find_manual_qa_answer, load_manual_qa_store
@@ -106,6 +111,7 @@ def render_miniapp() -> bytes:
           <button class="miniapp-tab ${currentTab === 'overview' ? 'active' : ''}" onclick="switchTab('overview')">Основное</button>
           <button class="miniapp-tab ${currentTab === 'stats' ? 'active' : ''}" onclick="switchTab('stats')">Статистика</button>
           <button class="miniapp-tab ${currentTab === 'answers' ? 'active' : ''}" onclick="switchTab('answers')">Ответы</button>
+          <button class="miniapp-tab ${currentTab === 'moderation' ? 'active' : ''}" onclick="switchTab('moderation')">Модерация</button>
           <button class="miniapp-tab ${currentTab === 'tools' ? 'active' : ''}" onclick="switchTab('tools')">Инструменты</button>
           <button class="miniapp-tab ${currentTab === 'queue' ? 'active' : ''}" onclick="switchTab('queue')">Очередь</button>
         </nav>
@@ -130,6 +136,8 @@ def render_miniapp() -> bytes:
         loadGroupStats();
       } else if (currentTab === 'answers') {
         loadRecentAnswers();
+      } else if (currentTab === 'moderation') {
+        loadModeration();
       } else if (currentTab === 'tools') {
         content.innerHTML = '<article class="miniapp-card miniapp-card--wide"><h2>Поиск по вики</h2><form onsubmit="searchWiki(event)" class="miniapp-actions"><input id="wiki-query" placeholder="Например: первый слой" style="flex:1;min-width:180px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"><button type="submit">Найти</button></form><div id="search-results" class="muted" style="margin-top:12px"></div></article>';
       } else if (currentTab === 'queue') {
@@ -245,6 +253,30 @@ def render_miniapp() -> bytes:
       fetch('/api/app/answers/clear', {method:'POST', headers:{Authorization:'Bearer ' + token}})
         .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка очистки'); loadRecentAnswers(); })
         .catch((error) => { const content = document.getElementById('dashboard-content'); if (content) content.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
+    function loadModeration() {
+      const content = document.getElementById('dashboard-content');
+      if (!content) return;
+      const token = sessionStorage.getItem('kobra_app_session');
+      content.innerHTML = '<article class="miniapp-card miniapp-card--wide"><span class="muted">Загрузка модерации…</span></article>';
+      fetch('/api/app/moderation', {headers:{Authorization:'Bearer ' + token}})
+        .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderModeration(data); })
+        .catch((error) => { content.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
+    }
+    function moderationDate(ts) {
+      if (!ts) return 'навсегда';
+      return new Date(Number(ts) * 1000).toLocaleString('ru-RU', {day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'});
+    }
+    function renderModeration(data) {
+      const content = document.getElementById('dashboard-content');
+      if (!content) return;
+      const active = data.active || [];
+      const events = data.events || [];
+      const bans = active.filter((item) => item.kind === 'ban').length;
+      const mutes = active.filter((item) => item.kind === 'mute').length;
+      const activeRows = active.map((item) => `<tr><td>${escapeHtml(item.target_label || item.target_id)}</td><td><span class="count-badge">${item.kind === 'ban' ? 'Бан' : 'Мут'}</span></td><td class="muted">${escapeHtml(moderationDate(item.until_date))}</td></tr>`).join('');
+      const eventRows = events.map((item) => `<tr><td class="muted" style="white-space:nowrap">${escapeHtml(moderationDate(item.ts))}</td><td>${escapeHtml(item.admin_label || item.admin_id || '?')}</td><td>${escapeHtml(item.action_label || item.action || '?')}</td><td class="muted">${escapeHtml(item.target_label || item.target_id || '—')}</td></tr>`).join('');
+      content.innerHTML = `<article class="miniapp-card miniapp-card--wide"><h2>Текущее состояние</h2><p class="muted" style="margin-top:6px">${bans} банов · ${mutes} мутов</p><div class="monitor-panel"><p class="monitor-title">Забаненные и замьюченные пользователи</p>${activeRows ? '<table class="table-compact"><thead><tr><th>Пользователь</th><th>Состояние</th><th>До</th></tr></thead><tbody>' + activeRows + '</tbody></table>' : '<p class="muted">Активных записей пока нет.</p>'}</div><p class="muted" style="margin-top:10px;font-size:11px">Список строится по событиям, которые бот получил и сохранил. Telegram не предоставляет боту общий список всех банов и мутов.</p></article><article class="miniapp-card miniapp-card--wide"><h2>Последние события</h2><div class="monitor-panel">${eventRows ? '<table class="table-compact"><thead><tr><th>Время</th><th>Админ</th><th>Действие</th><th>Цель</th></tr></thead><tbody>' + eventRows + '</tbody></table>' : '<p class="muted">Событий пока нет.</p>'}</div></article>`;
     }
     let currentSessionRole = null;
     let chatHasMore = false;
@@ -572,6 +604,34 @@ def dashboard_payload(state: Any, authorization: str) -> tuple[int, dict[str, An
             "fixes": len(bot_data.get("fix_store") or {}),
             "error_codes": len(bot_data.get("error_codes_catalog") or {}),
         },
+    }
+
+
+def moderation_payload(state: Any, authorization: str) -> tuple[int, dict[str, Any]]:
+    """Возвращает журнал модерации и известные активные баны/муты группы."""
+    session, error = _require_admin_session(state, authorization)
+    if error is not None:
+        return error
+    bot_data = state.application.bot_data if state.application else {}
+    settings = bot_data.get("settings") if isinstance(bot_data, dict) else None
+    chat_id = getattr(settings, "panel_admin_chat_id", None)
+    if not isinstance(chat_id, int) or isinstance(chat_id, bool) or chat_id == 0:
+        return 503, {"error": "Группа для модерации не настроена."}
+
+    events = []
+    for event in get_recent_admin_actions(bot_data, limit=80):
+        if event.get("chat_id") != chat_id:
+            continue
+        item = dict(event)
+        item["action_label"] = action_label(str(item.get("action") or ""))
+        events.append(item)
+
+    return 200, {
+        "role": session.get("role", "admin"),
+        "chat_id": chat_id,
+        "events": events,
+        "active": get_active_moderated_users(bot_data, chat_id=chat_id, limit=100),
+        "tracked_only": True,
     }
 
 

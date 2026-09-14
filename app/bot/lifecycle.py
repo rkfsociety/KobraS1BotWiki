@@ -10,6 +10,8 @@ import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+import psutil
+
 try:
     import fcntl
 except ImportError:  # pragma: no cover - Windows fallback
@@ -44,6 +46,18 @@ from app.bot.handlers import (
     cmd_status,
     cmd_update,
     cmd_wiki,
+    cmd_ban,
+    cmd_clearwarns,
+    cmd_del,
+    cmd_kick,
+    cmd_mute,
+    cmd_pin,
+    cmd_unban,
+    cmd_unmute,
+    cmd_unpin,
+    cmd_unwarn,
+    cmd_warn,
+    cmd_warnings,
     on_any_update,
     on_channel_command,
     on_chat_member_updated,
@@ -55,6 +69,7 @@ from app.bot.handlers import (
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.reply_logging import load_recent_replies
 from app.bot.admin_activity import flush_admin_activity, load_admin_activity
+from app.bot.moderation import flush_moderation_store, load_moderation_store
 from app.bot.bot_stats import flush_bot_stats, load_bot_stats
 from app.bot.panel_login import cmd_start
 from app.bot.reactions import on_message_reaction
@@ -85,6 +100,21 @@ def _restore_clarify_pending(store: object) -> dict[tuple[int, int], dict]:
     return pending
 
 
+def _process_is_alive(pid: int) -> bool:
+    """Проверяет PID без опасного для Windows ``os.kill(pid, 0)``."""
+    if os.name == "nt":
+        return psutil.pid_exists(pid)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        raise
+    except OSError:
+        return False
+    return True
+
+
 def _ensure_lock_available(lock_path: Path) -> None:
     """Проверяет lock-файл, не позволяя второму процессу поглотить ошибку запуска."""
     if not lock_path.exists():
@@ -94,12 +124,10 @@ def _ensure_lock_available(lock_path: Path) -> None:
     except (OSError, ValueError, UnicodeError):
         return
     try:
-        os.kill(old_pid, 0)
-    except ProcessLookupError:
-        return
+        process_is_alive = _process_is_alive(old_pid)
     except PermissionError as exc:
         raise RuntimeError(f"Не удалось проверить процесс из bot.lock (pid={old_pid}).") from exc
-    except OSError:
+    if not process_is_alive:
         return
     raise RuntimeError(f"Похоже, бот уже запущен (pid={old_pid}). Остановите старый процесс и запустите снова.")
 
@@ -141,6 +169,18 @@ def _register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("qalist", cmd_qalist))
     app.add_handler(CommandHandler("qadel", cmd_qadel))
     app.add_handler(CommandHandler("update", cmd_update))
+    app.add_handler(CommandHandler("ban", cmd_ban))
+    app.add_handler(CommandHandler("unban", cmd_unban))
+    app.add_handler(CommandHandler("kick", cmd_kick))
+    app.add_handler(CommandHandler("mute", cmd_mute))
+    app.add_handler(CommandHandler("unmute", cmd_unmute))
+    app.add_handler(CommandHandler("warn", cmd_warn))
+    app.add_handler(CommandHandler("unwarn", cmd_unwarn))
+    app.add_handler(CommandHandler("warnings", cmd_warnings))
+    app.add_handler(CommandHandler("clearwarns", cmd_clearwarns))
+    app.add_handler(CommandHandler("del", cmd_del))
+    app.add_handler(CommandHandler("pin", cmd_pin))
+    app.add_handler(CommandHandler("unpin", cmd_unpin))
     # В канале команды приходят как channel_post — CommandHandler их не видит.
     app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POSTS & filters.COMMAND, on_channel_command))
     app.add_handler(TypeHandler(Update, on_any_update), group=-1)
@@ -250,6 +290,10 @@ def main() -> None:
             load_admin_activity(application.bot_data)
         except Exception as _e:
             logging.warning("Не удалось загрузить admin_activity: %s", _e)
+        try:
+            load_moderation_store(application.bot_data)
+        except Exception as _e:
+            logging.warning("Не удалось загрузить moderation store: %s", _e)
         # Ссылка на основной event-loop — чтобы веб-панель могла запросить перезапуск.
         application.bot_data["main_loop"] = asyncio.get_running_loop()
         # Каталог ошибок (fallback, если у кода нет отдельной страницы /error-codes/<code>-code)
@@ -548,6 +592,10 @@ def main() -> None:
         flush_admin_activity(app.bot_data)
     except Exception as e:
         logging.warning("Не удалось сохранить admin_activity перед остановкой: %s", e)
+    try:
+        flush_moderation_store(app.bot_data)
+    except Exception as e:
+        logging.warning("Не удалось сохранить moderation store перед остановкой: %s", e)
     try:
         flush_answer_ctx_store(app.bot_data)
     except Exception as e:

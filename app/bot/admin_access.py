@@ -60,6 +60,51 @@ async def user_has_admin_command_access(
     return status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR)
 
 
+async def user_has_moderation_command_access(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> bool:
+    """Проверяет, может ли автор команды модерировать именно эту группу.
+
+    Для модерации намеренно не используются исключения для разработчиков и
+    доступ из личного чата: команда должна прийти от владельца или админа
+    целевой группы.
+    """
+    chat = update.effective_chat
+    user = update.effective_user
+    if not chat or not user or chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        return False
+    try:
+        member = await context.bot.get_chat_member(chat.id, user.id)
+    except Exception as exc:
+        logging.warning("moderation get_chat_member failed chat=%s user=%s: %s", chat.id, user.id, exc)
+        return False
+    status = getattr(member, "status", None)
+    return status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR)
+
+
+async def bot_has_moderation_right(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    required_right: str,
+) -> bool:
+    """Проверяет конкретное право бота в группе перед модераторским действием."""
+    if required_right not in {"can_restrict_members", "can_delete_messages", "can_pin_messages"}:
+        return False
+    try:
+        bot_user = await context.bot.get_me()
+        member = await context.bot.get_chat_member(chat_id, bot_user.id)
+    except Exception as exc:
+        logging.warning("moderation bot rights check failed chat=%s: %s", chat_id, exc)
+        return False
+    status = getattr(member, "status", None)
+    if status == ChatMemberStatus.OWNER:
+        return True
+    if status != ChatMemberStatus.ADMINISTRATOR:
+        return False
+    return bool(getattr(member, required_right, False))
+
+
 async def user_exempt_from_wiki_reply_spam_limits(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,

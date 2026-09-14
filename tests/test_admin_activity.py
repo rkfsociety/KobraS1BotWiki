@@ -1,15 +1,24 @@
 """Статистика модераторских действий админов."""
 from __future__ import annotations
 
+import asyncio
+import time
+from types import SimpleNamespace
+
+from telegram.constants import ChatMemberStatus
+
 from app.bot.admin_activity import (
+    action_label,
     flush_admin_activity,
+    get_active_moderated_users,
     get_admin_activity_summary,
     get_admin_activity_totals,
     get_recent_admin_actions,
     load_admin_activity,
     record_admin_action,
+    sync_moderation_member_state,
 )
-from app.bot.handlers._admin_activity import classify_chat_member_update
+from app.bot.handlers._admin_activity import classify_chat_member_update, on_chat_member_updated
 
 
 def test_record_and_summarize_admin_actions():
@@ -39,6 +48,11 @@ def test_record_and_summarize_admin_actions():
     recent = get_recent_admin_actions(bd)
     assert len(recent) == 2
     assert recent[0]["action"] == "kick"
+
+
+def test_action_labels_include_direct_message_moderation_commands():
+    assert action_label("delete") == "удаление сообщения"
+    assert action_label("unpin") == "открепление"
 
 
 def test_load_admin_activity_from_disk(tmp_path, monkeypatch):
@@ -210,3 +224,81 @@ def test_classify_ban_and_voluntary_leave():
         from_user=actor_mod,
     )
     assert classify_chat_member_update(upd_kick) == "kick"
+
+
+def test_active_moderation_state_tracks_ban_mute_and_release():
+    bd: dict = {}
+    sync_moderation_member_state(
+        bd,
+        chat_id=-100,
+        target_id=2,
+        target_label="@banned",
+        status=ChatMemberStatus.BANNED,
+    )
+    sync_moderation_member_state(
+        bd,
+        chat_id=-100,
+        target_id=3,
+        target_label="@muted",
+        status=ChatMemberStatus.RESTRICTED,
+        can_send_messages=False,
+        until_date=time.time() + 300,
+    )
+
+    active = get_active_moderated_users(bd, chat_id=-100)
+    assert {(row["target_id"], row["kind"]) for row in active} == {(2, "ban"), (3, "mute")}
+    assert get_active_moderated_users(bd, chat_id=-200) == []
+
+    sync_moderation_member_state(
+        bd,
+        chat_id=-100,
+        target_id=3,
+        target_label="@muted",
+        status=ChatMemberStatus.MEMBER,
+    )
+    assert [row["target_id"] for row in get_active_moderated_users(bd, chat_id=-100)] == [2]
+
+
+def test_active_moderation_state_hides_expired_temporary_action(monkeypatch):
+    import app.bot.admin_activity as aa
+
+    monkeypatch.setattr(aa.time, "time", lambda: 100.0)
+    bd: dict = {}
+    sync_moderation_member_state(
+        bd,
+        chat_id=-100,
+        target_id=2,
+        target_label="@expired",
+        status=ChatMemberStatus.BANNED,
+        until_date=99,
+    )
+
+    assert get_active_moderated_users(bd, chat_id=-100) == []
+
+
+def test_bot_member_event_updates_active_state_without_duplicate_action(monkeypatch):
+    import app.bot.admin_activity as aa
+
+    monkeypatch.setattr(aa, "_persist", lambda *_args, **_kwargs: None)
+    target = SimpleNamespace(id=2, username="target", first_name="Target")
+    update = SimpleNamespace(
+        chat_member=SimpleNamespace(
+            chat=SimpleNamespace(id=-100),
+            from_user=SimpleNamespace(id=99, is_bot=True),
+            old_chat_member=SimpleNamespace(status=ChatMemberStatus.MEMBER, user=target),
+            new_chat_member=SimpleNamespace(
+                status=ChatMemberStatus.BANNED,
+                user=target,
+                can_send_messages=False,
+                until_date=None,
+            ),
+        )
+    )
+    data = {"settings": SimpleNamespace(allowed_chat_ids=None, allowed_topic_ids=None)}
+    context = SimpleNamespace(application=SimpleNamespace(bot_data=data))
+
+    asyncio.run(on_chat_member_updated(update, context))
+
+    active = get_active_moderated_users(data, chat_id=-100)
+    assert [(row["target_id"], row["kind"]) for row in active] == [(2, "ban")]
+    assert get_admin_activity_totals(data) == {}

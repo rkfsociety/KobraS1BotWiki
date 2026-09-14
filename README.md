@@ -21,16 +21,17 @@ python -m app.bot
 - [Архитектура](docs/architecture.md)
 - [Эксплуатация](docs/ops.md)
 
-Локальная память агента (SSH, деплой): `/home/dshome/.codex/project_memories/KobraS1BotWiki.md` — не в git.
-
 Разбор `data/missed_questions.json`: пополнение `manual_qa.json`, эвристики в `app/bot/heuristics/_banter.py`, затем очистка файла.
 
 Разбор «отвеченных»: лента `.cache/recent_replies.json` (веб-панель) и помеченные плохие ответы `data/bad_answers.json` — те же шаги; скрипт `scripts/apply_replies_jun2026_qa.py` (июнь 2026).
 
 ## Дорожная карта
 
-В репозитории 70 тестовых файлов; проверки запускаются через `pytest`, Ruff,
+В репозитории 74 тестовых файла; проверки запускаются через `pytest`, Ruff,
 Bandit и `pip-audit` в CI.
+
+Windows-совместимость тестов и lock/atomic-write проверок описана в
+`.codex/windows-test-compatibility.md`.
 
 ### Качество поиска
 - [x] Сбор вопросов без ответа (`score < MIN_SCORE`) в отдельный файл для анализа и пополнения `manual_qa.json`

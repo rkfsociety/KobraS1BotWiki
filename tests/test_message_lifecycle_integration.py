@@ -199,5 +199,5 @@ def test_lifecycle_registers_commands_update_and_message_handlers_in_order():
     assert "on_any_update" in callbacks
     assert "on_message" in callbacks
     assert "on_message_reaction" in callbacks
-    assert app.handlers[15][1] == -1
+    assert app.handlers[callbacks.index("on_any_update")][1] == -1
     assert app.errors == [message_module.on_error]

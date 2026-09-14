@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -43,7 +44,7 @@ def test_restore_clarify_pending_skips_malformed_records():
 def test_lock_check_rejects_running_process(monkeypatch, tmp_path: Path):
     lock_path = tmp_path / "bot.lock"
     lock_path.write_text("123", encoding="utf-8")
-    monkeypatch.setattr("app.bot.lifecycle.os.kill", lambda pid, sig: None)
+    monkeypatch.setattr("app.bot.lifecycle._process_is_alive", lambda pid: True)
 
     with pytest.raises(RuntimeError, match="уже запущен"):
         _ensure_lock_available(lock_path)
@@ -55,10 +56,7 @@ def test_lock_check_allows_stale_or_malformed_lock(monkeypatch, tmp_path: Path):
     _ensure_lock_available(lock_path)
 
     lock_path.write_text("123", encoding="utf-8")
-    monkeypatch.setattr(
-        "app.bot.lifecycle.os.kill",
-        lambda pid, sig: (_ for _ in ()).throw(ProcessLookupError),
-    )
+    monkeypatch.setattr("app.bot.lifecycle._process_is_alive", lambda pid: False)
     _ensure_lock_available(lock_path)
 
 
@@ -69,11 +67,11 @@ def test_process_lock_rejects_second_process_and_releases_on_close(tmp_path: Pat
         with pytest.raises(RuntimeError, match="уже запущен"):
             _acquire_process_lock(lock_path)
     finally:
-        import fcntl
-
-        fcntl.flock(first_fd, fcntl.LOCK_UN)
+        import app.bot.lifecycle as lifecycle
         import os
 
+        if lifecycle.fcntl is not None:
+            lifecycle.fcntl.flock(first_fd, lifecycle.fcntl.LOCK_UN)
         os.close(first_fd)
 
 
@@ -88,3 +86,17 @@ def test_process_lock_has_non_posix_fallback(monkeypatch, tmp_path: Path):
         assert lock_path.read_text(encoding="utf-8") == str(os.getpid())
     finally:
         os.close(lock_fd)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Проверяет Windows-проверку PID")
+def test_windows_process_probe_does_not_use_os_kill(monkeypatch):
+    import app.bot.lifecycle as lifecycle
+
+    monkeypatch.setattr(lifecycle.psutil, "pid_exists", lambda pid: True)
+    monkeypatch.setattr(
+        lifecycle.os,
+        "kill",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("os.kill нельзя вызывать на Windows")),
+    )
+
+    assert lifecycle._process_is_alive(123) is True

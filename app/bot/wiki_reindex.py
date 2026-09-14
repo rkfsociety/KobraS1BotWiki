@@ -6,7 +6,9 @@ import hashlib
 import json
 import logging
 import math
+import os
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -14,6 +16,8 @@ from typing import Any
 import httpx
 
 _MAX_SITEMAP_BYTES = 16 * 1024 * 1024
+_ATOMIC_REPLACE_LOCK = threading.Lock()
+_ATOMIC_REPLACE_RETRIES = 5
 
 
 class SitemapMonitor:
@@ -207,7 +211,15 @@ def _atomic_write_text(path: Path, content: str) -> None:
             temporary_name = temporary.name
             temporary.write(content)
             temporary.flush()
-        Path(temporary_name).replace(path)
+        with _ATOMIC_REPLACE_LOCK:
+            for attempt in range(_ATOMIC_REPLACE_RETRIES):
+                try:
+                    Path(temporary_name).replace(path)
+                    break
+                except PermissionError:
+                    if os.name != "nt" or attempt == _ATOMIC_REPLACE_RETRIES - 1:
+                        raise
+                    time.sleep(0.01 * (2**attempt))
     finally:
         if temporary_name is not None:
             Path(temporary_name).unlink(missing_ok=True)

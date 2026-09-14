@@ -3,7 +3,7 @@
 Хранится в bot_data["admin_activity"] и персистится в .cache/admin_activity.json.
  Telegram Bot API присылает события изменения статуса участников и закрепления сообщений,
  поэтому считаем баны, кики, муты и другие такие действия. Удаление чужих сообщений админом
- API отдельно не присылает — отдельно учитываем только delete_bot_msg через /error или /fix.
+ API отдельно не присылает, поэтому команда /del записывается непосредственно обработчиком.
 """
 from __future__ import annotations
 
@@ -15,6 +15,8 @@ import time
 from heapq import nlargest, nsmallest
 from typing import Any
 
+from telegram.constants import ChatMemberStatus
+
 from app.bot.stores import _save_interval_elapsed, _save_json_atomic
 
 log = logging.getLogger(__name__)
@@ -24,6 +26,7 @@ _SAVE_LOCK = threading.Lock()
 _SAVE_INTERVAL = 60.0
 _MAX_RECENT = 80
 _MAX_ADMINS = 500
+_MAX_ACTIVE = 5000
 _MAX_ACTIVITY_CACHE_BYTES = 8 * 1024 * 1024
 
 _ACTION_LABELS: dict[str, str] = {
@@ -35,7 +38,11 @@ _ACTION_LABELS: dict[str, str] = {
     "promote": "повышение",
     "demote": "понижение",
     "pin": "закреп",
+    "unpin": "открепление",
+    "delete": "удаление сообщения",
     "delete_bot_msg": "удал. ответа бота",
+    "warn": "предупреждение",
+    "unwarn": "снятие предупреждения",
 }
 
 
@@ -50,6 +57,7 @@ def _empty_activity() -> dict[str, Any]:
         "admins": {},
         "totals": {},
         "recent": [],
+        "active": {},
         "last_updated": 0.0,
     }
 
@@ -76,6 +84,25 @@ def _admin_action_total(value: object) -> int:
     if not isinstance(counts, dict):
         return 0
     return sum(max(0, _safe_int(count)) for count in counts.values())
+
+
+def _active_from_bot_data(bot_data: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    activity = _activity_from_bot_data(bot_data)
+    active = activity.get("active")
+    return active if isinstance(active, dict) else {}
+
+
+def _safe_timestamp(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        value = value.timestamp() if hasattr(value, "timestamp") else value
+        parsed = float(value)
+    except (AttributeError, TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(parsed) or parsed <= 0:
+        return None
+    return int(parsed)
 
 
 def _activity_from_bot_data(bot_data: dict[str, Any]) -> dict[str, Any]:
@@ -126,6 +153,34 @@ def load_admin_activity(bot_data: dict[str, Any]) -> None:
         recent = raw.get("recent")
         if isinstance(recent, list):
             activity["recent"] = [x for x in recent if isinstance(x, dict)][-_MAX_RECENT:]
+        active = raw.get("active")
+        if isinstance(active, dict):
+            loaded_active: dict[str, dict[str, Any]] = {}
+            for key, value in active.items():
+                if not isinstance(key, str) or not isinstance(value, dict):
+                    continue
+                kind = value.get("kind")
+                chat_id = _safe_int(value.get("chat_id"), 0)
+                target_id = _safe_int(value.get("target_id"), 0)
+                if kind not in {"ban", "mute"} or not chat_id or not target_id:
+                    continue
+                loaded_active[key] = {
+                    "chat_id": chat_id,
+                    "target_id": target_id,
+                    "target_label": str(value.get("target_label") or target_id),
+                    "kind": kind,
+                    "until_date": _safe_timestamp(value.get("until_date")),
+                    "updated_at": _safe_float(value.get("updated_at"), 0.0),
+                }
+            if len(loaded_active) > _MAX_ACTIVE:
+                overflow = len(loaded_active) - _MAX_ACTIVE
+                for drop_key, _ in nsmallest(
+                    overflow,
+                    loaded_active.items(),
+                    key=lambda item: _safe_float(item[1].get("updated_at"), 0.0),
+                ):
+                    loaded_active.pop(drop_key, None)
+            activity["active"] = loaded_active
         activity["last_updated"] = _safe_float(raw.get("last_updated", 0.0))
         bot_data[_ACTIVITY_KEY] = activity
         log.info("admin_activity: загружено админов=%d событий=%d", len(activity["admins"]), len(activity["recent"]))
@@ -153,6 +208,60 @@ def _persist(bot_data: dict[str, Any], *, force: bool = False) -> None:
 def flush_admin_activity(bot_data: dict[str, Any]) -> None:
     """Принудительно сохраняет свежую статистику перед остановкой процесса."""
     _persist(bot_data, force=True)
+
+
+def sync_moderation_member_state(
+    bot_data: dict[str, Any],
+    *,
+    chat_id: int,
+    target_id: int,
+    target_label: str | None,
+    status: object,
+    can_send_messages: object = True,
+    until_date: Any = None,
+) -> None:
+    """Обновляет сохранённый список действующих банов и мутов по событию Telegram."""
+    activity = bot_data.get(_ACTIVITY_KEY)
+    if not isinstance(activity, dict):
+        activity = _empty_activity()
+        bot_data[_ACTIVITY_KEY] = activity
+    active = activity.get("active")
+    if not isinstance(active, dict):
+        active = {}
+        activity["active"] = active
+
+    status_value = getattr(status, "value", status)
+    kind = None
+    if status_value == ChatMemberStatus.BANNED:
+        kind = "ban"
+    elif status_value == ChatMemberStatus.RESTRICTED and can_send_messages is False:
+        kind = "mute"
+
+    key = f"{chat_id}:{target_id}"
+    if kind is None:
+        active.pop(key, None)
+    else:
+        active[key] = {
+            "chat_id": chat_id,
+            "target_id": target_id,
+            "target_label": target_label or str(target_id),
+            "kind": kind,
+            "until_date": _safe_timestamp(until_date),
+            "updated_at": time.time(),
+        }
+
+    if len(active) > _MAX_ACTIVE:
+        overflow = len(active) - _MAX_ACTIVE
+        for drop_key, _ in nsmallest(
+            overflow,
+            active.items(),
+            key=lambda item: _safe_float(item[1].get("updated_at"), 0.0)
+            if isinstance(item[1], dict)
+            else 0.0,
+        ):
+            active.pop(drop_key, None)
+    activity["last_updated"] = time.time()
+    _persist(bot_data)
 
 
 def _admin_label(*, user_id: int, username: str | None, first_name: str | None) -> str:
@@ -287,6 +396,40 @@ def get_recent_admin_actions(bot_data: dict[str, Any], *, limit: int = 20) -> li
     if not isinstance(recent, list):
         return []
     return [item for item in reversed(recent[-limit:]) if isinstance(item, dict)]
+
+
+def get_active_moderated_users(
+    bot_data: dict[str, Any],
+    *,
+    chat_id: int | None = None,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    """Возвращает известные баны и муты, которые ещё не истекли."""
+    if limit <= 0:
+        return []
+    now = time.time()
+    rows = []
+    for entry in _active_from_bot_data(bot_data).values():
+        if not isinstance(entry, dict) or entry.get("kind") not in {"ban", "mute"}:
+            continue
+        entry_chat_id = _safe_int(entry.get("chat_id"), 0)
+        if chat_id is not None and entry_chat_id != chat_id:
+            continue
+        until_date = _safe_timestamp(entry.get("until_date"))
+        if until_date is not None and until_date <= now:
+            continue
+        rows.append(
+            {
+                "chat_id": entry_chat_id,
+                "target_id": _safe_int(entry.get("target_id"), 0),
+                "target_label": str(entry.get("target_label") or entry.get("target_id") or "?"),
+                "kind": entry["kind"],
+                "until_date": until_date,
+                "updated_at": _safe_float(entry.get("updated_at"), 0.0),
+            }
+        )
+    rows.sort(key=lambda row: (row["kind"], -row["updated_at"], row["target_label"]))
+    return rows[:limit]
 
 
 def get_admin_activity_totals(bot_data: dict[str, Any]) -> dict[str, int]:

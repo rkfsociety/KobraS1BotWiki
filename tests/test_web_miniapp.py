@@ -22,6 +22,7 @@ from app.web_miniapp import (
     create_miniapp_session,
     dashboard_payload,
     export_answers_to_json,
+    moderation_payload,
     render_miniapp,
     stats_payload,
 )
@@ -187,6 +188,8 @@ def test_miniapp_shell_has_mobile_admin_dashboard_sections():
     assert "Ответы бота" in body
     assert "Очистить обработанные" in body
     assert "api/app/answers/clear" in body
+    assert "Модерация" in body
+    assert "api/app/moderation" in body
     assert "Сохранить ответ" in body
     assert "Отметить как оффтоп" in body
     assert "Поиск по вики" in body
@@ -238,6 +241,52 @@ def test_dashboard_tolerates_corrupted_numeric_stats(monkeypatch):
 
     assert status == 200
     assert payload["stats"]["total_answers"] == 0
+
+
+def test_moderation_payload_returns_only_configured_chat_data(monkeypatch):
+    import app.web_miniapp as miniapp
+
+    state = types.SimpleNamespace(
+        application=types.SimpleNamespace(
+            bot_data={
+                "settings": _Settings(),
+                "admin_activity": {
+                    "recent": [
+                        {"chat_id": -999, "action": "ban", "target_label": "чужой"},
+                        {"chat_id": -100123, "action": "ban", "admin_label": "@mod", "target_label": "@bad"},
+                    ],
+                    "active": {
+                        "-100123:7": {
+                            "chat_id": -100123,
+                            "target_id": 7,
+                            "target_label": "@bad",
+                            "kind": "ban",
+                            "until_date": None,
+                            "updated_at": 1,
+                        },
+                        "-999:8": {
+                            "chat_id": -999,
+                            "target_id": 8,
+                            "target_label": "чужой",
+                            "kind": "mute",
+                            "until_date": None,
+                            "updated_at": 2,
+                        },
+                    },
+                },
+            }
+        )
+    )
+    monkeypatch.setattr(
+        miniapp, "_require_admin_session", lambda state, authorization: ({"role": "admin"}, None)
+    )
+
+    status, payload = moderation_payload(state, "Bearer test")
+
+    assert status == 200
+    assert [event["target_label"] for event in payload["events"]] == ["@bad"]
+    assert [user["target_id"] for user in payload["active"]] == [7]
+    assert payload["tracked_only"] is True
 
 
 def test_session_reader_recovers_from_corrupted_session_container():

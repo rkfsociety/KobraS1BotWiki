@@ -7,7 +7,7 @@ from telegram import ChatMemberUpdated, Update
 from telegram.constants import ChatMemberStatus
 from telegram.ext import ContextTypes
 
-from app.bot.admin_activity import record_admin_action
+from app.bot.admin_activity import record_admin_action, sync_moderation_member_state
 from app.bot.reply_access import chat_topic_in_allowed_lists
 
 log = logging.getLogger(__name__)
@@ -100,6 +100,19 @@ async def on_chat_member_updated(update: Update, context: ContextTypes.DEFAULT_T
     target = cm.new_chat_member.user
     if actor is None or target is None:
         return
+
+    sync_moderation_member_state(
+        context.application.bot_data,
+        chat_id=chat.id,
+        target_id=target.id,
+        target_label=_target_label(target),
+        status=cm.new_chat_member.status,
+        can_send_messages=getattr(cm.new_chat_member, "can_send_messages", True),
+        until_date=getattr(cm.new_chat_member, "until_date", None),
+    )
+
+    # Состояние нужно обновлять и для действий самого бота. Его событие
+    # не записываем повторно: успешная команда уже записывает действие сразу.
     if actor.is_bot:
         return
 

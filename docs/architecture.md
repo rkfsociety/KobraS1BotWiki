@@ -33,6 +33,8 @@
 | `stores.py` | Кэш feedback, фиксы ссылок `/fix` |
 | `admin_access.py` | Кто считается администратором для служебных команд |
 | `help_text.py` | Текст `/help` (ru/en, для админа и участника) |
+| `handlers/_cmd_moderation.py` | Команды модерации групп: ban/kick/mute/warn и работа с сообщениями |
+| `moderation.py` | Ограниченный JSON-store предупреждений в `.cache/moderation.json` |
 | `ephemeral.py` | Автоудаление пары «команда + ответ» в группах |
 | `review_mention.py` | @ревьюер в конце ответа в группах (`REPLY_REVIEW_MENTION`) |
 | `telegram_log_mirror.py` | Зеркало в служебный чат (ответы, индексация, git) |
@@ -53,6 +55,13 @@
 | `web_panel.py` | Встроенная веб-панель администратора |
 | `error_codes_catalog.py` | Каталог кодов ошибок (scraping + кэш) |
 | `resource_limits.py` | Лимит памяти (Linux/macOS `RLIMIT_AS`) |
+
+## Локальные блокировки и atomic-write
+
+- Lock-файл бота содержит PID текущего процесса. На POSIX живость PID проверяется через `os.kill(pid, 0)`, а на Windows — через `psutil.pid_exists(pid)`; Windows не использует POSIX-семантику сигнала `0`.
+- На POSIX lock удерживается через `fcntl.flock`; на Windows используется fallback с проверкой PID и безопасным cleanup.
+- Atomic-запись сначала создаёт временный файл рядом с целевым, затем заменяет целевой файл. Для конкурентных замен внутри процесса используется блокировка и ограниченный retry на Windows при временном `PermissionError`.
+- Тесты этих веток не должны зависеть от фиксированных индексов handlers и не должны безусловно импортировать POSIX-only модули.
 
 ## Данные и кэш
 
