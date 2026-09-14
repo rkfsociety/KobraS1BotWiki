@@ -209,6 +209,9 @@ def test_miniapp_shell_has_mobile_admin_dashboard_sections():
     assert 'aria-label="Вопрос боту"' in body
     assert "Загрузить предыдущие сообщения" in body
     assert "askQuestion" not in body
+    assert 'id="stats-chat"' in body
+    assert "available_chats" in body
+    assert "loadGroupStats(document.getElementById('stats-date').value, this.value)" in body
     assert "miniapp-card" in body
     assert "env_safe" not in body
 
@@ -342,6 +345,36 @@ def test_miniapp_stats_returns_daily_group_summary(monkeypatch):
     assert payload["metrics"]["total_incoming"] == 3
     assert payload["topics"] == [{"title": "Настройка скоростей", "count": 3, "emoji": "⚙️"}]
     assert "Всего было написано 3 сообщения" in payload["summary"]
+
+
+def test_miniapp_stats_defaults_to_official_group_and_allows_configured_selection(monkeypatch):
+    import app.web_miniapp as miniapp
+
+    settings = types.SimpleNamespace(
+        panel_admin_chat_id=-100123,
+        allowed_chat_ids=frozenset({-100123, -1002295062981}),
+    )
+    bot_data = {"settings": settings}
+    record_incoming_activity(bot_data, chat_id=-100123, user_id=1)
+    record_incoming_activity(bot_data, chat_id=-1002295062981, user_id=2)
+    state = types.SimpleNamespace(application=types.SimpleNamespace(bot_data=bot_data))
+    monkeypatch.setattr(
+        miniapp, "_require_admin_session", lambda state, authorization: ({"role": "admin"}, None)
+    )
+    monkeypatch.setattr(miniapp, "load_missed_questions", lambda: [])
+
+    status, default_payload = miniapp.stats_payload(state, "Bearer test")
+    selected_status, selected_payload = miniapp.stats_payload(
+        state, "Bearer test", chat_id=-100123
+    )
+    invalid_status, _ = miniapp.stats_payload(state, "Bearer test", chat_id=-999)
+
+    assert status == selected_status == 200
+    assert default_payload["chat_id"] == -1002295062981
+    assert default_payload["metrics"]["total_incoming"] == 1
+    assert selected_payload["chat_id"] == -100123
+    assert selected_payload["metrics"]["total_incoming"] == 1
+    assert invalid_status == 403
 
 
 def test_admin_can_clear_processed_miniapp_answers(mini_panel):

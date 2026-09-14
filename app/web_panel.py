@@ -1852,10 +1852,12 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 self._send_json(payload, status=status)
                 return
             if path == "/api/app/stats":
+                raw_chat_id = (qs.get("chat_id") or [None])[0]
                 status, payload = stats_payload(
                     state,
                     self.headers.get("Authorization", ""),
                     (qs.get("date") or [None])[0],
+                    raw_chat_id,
                 )
                 self._send_json(payload, status=status)
                 return

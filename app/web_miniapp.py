@@ -1,4 +1,4 @@
-"""HTTP-слой Telegram Mini App для администраторов одной группы."""
+"""HTTP-слой Telegram Mini App для администраторов настроенных групп."""
 from __future__ import annotations
 
 import asyncio
@@ -17,6 +17,7 @@ from app.bot.admin_activity import (
     get_recent_admin_actions,
 )
 from app.bot.daily_summary import format_daily_summary, topic_emoji
+from app.bot.daily_stats import configured_daily_stats_chat_ids
 from app.bot.miniapp_access import is_group_admin, is_group_member
 from app.bot.miniapp_auth import MiniAppAuthError, validate_init_data
 from app.bot.manual_qa import add_manual_qa_entry, find_manual_qa_answer, load_manual_qa_store
@@ -26,6 +27,13 @@ from app.bot.stores import _save_json_atomic
 
 class MiniAppAccessError(PermissionError):
     """Пользователь не имеет прав администратора группы."""
+
+
+DEFAULT_STATS_CHAT_ID = -1002295062981
+_KNOWN_STATS_CHAT_TITLES = {
+    -1002295062981: "Official Anycubic Russia",
+    -1003881305021: "Админка Anycubic",
+}
 
 
 def render_miniapp() -> bytes:
@@ -160,11 +168,14 @@ def render_miniapp() -> bytes:
         .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderMissed(data.items); })
         .catch((error) => { box.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
     }
-    function loadGroupStats(date = '') {
+    function loadGroupStats(date = '', chatId = '') {
       const content = document.getElementById('dashboard-content');
       if (!content) return;
       const token = sessionStorage.getItem('kobra_app_session');
-      const query = date ? ('?date=' + encodeURIComponent(date)) : '';
+      const params = new URLSearchParams();
+      if (date) params.set('date', date);
+      if (chatId) params.set('chat_id', chatId);
+      const query = params.toString() ? ('?' + params.toString()) : '';
       fetch('/api/app/stats' + query, {headers:{Authorization:'Bearer ' + token}})
         .then(async (response) => { const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Ошибка загрузки'); renderGroupStats(data); })
         .catch((error) => { content.innerHTML = '<span class="error">' + escapeHtml(error.message) + '</span>'; });
@@ -174,7 +185,9 @@ def render_miniapp() -> bytes:
       if (!content) return;
       let html = '';
 
-      html += `<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2>Дневная сводка</h2><input type="date" value="${escapeHtml(data.date || '')}" onchange="loadGroupStats(this.value)" style="padding:7px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"></div><p class="muted" style="white-space:pre-wrap;margin-top:12px">${escapeHtml(data.summary || '')}</p></div></article>`;
+      const chatOptions = (data.available_chats || []).map((chat) => `<option value="${escapeHtml(chat.chat_id)}" ${String(chat.chat_id) === String(data.chat_id) ? 'selected' : ''}>${escapeHtml(chat.title || chat.chat_id)}</option>`).join('');
+      const chatSelector = chatOptions ? `<label class="muted" style="display:flex;flex-direction:column;gap:5px;min-width:210px">Группа<select id="stats-chat" onchange="loadGroupStats(document.getElementById('stats-date').value, this.value)" style="padding:7px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)">${chatOptions}</select></label>` : '';
+      html += `<article class="miniapp-card miniapp-card--wide"><div class="monitor-panel"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h2>Дневная сводка</h2><div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap">${chatSelector}<label class="muted" style="display:flex;flex-direction:column;gap:5px">Дата<input id="stats-date" type="date" value="${escapeHtml(data.date || '')}" onchange="loadGroupStats(this.value, document.getElementById('stats-chat')?.value || '')" style="padding:7px;border-radius:8px;border:1px solid var(--line);background:#0d1118;color:var(--text)"></label></div></div><p class="muted" style="white-space:pre-wrap;margin-top:12px">${escapeHtml(data.summary || '')}</p></div></article>`;
 
       if (data.metrics) {
         const m = data.metrics;
@@ -934,8 +947,59 @@ def dismiss_missed_payload(state: Any, authorization: str, item_id: str) -> tupl
     return (200 if ok else 500), {"ok": ok, "message": message} if ok else {"ok": False, "error": message}
 
 
-def stats_payload(state: Any, authorization: str, day: str | None = None) -> tuple[int, dict[str, Any]]:
-    """Возвращает дневную сводку настроенной группы."""
+def _run_chat_lookup(application: Any, chat_id: int) -> Any | None:
+    """Запрашивает метаданные чата в loop PTB, не блокируя его HTTP-потоком."""
+    bot = getattr(application, "bot", None)
+    get_chat = getattr(bot, "get_chat", None)
+    if not callable(get_chat):
+        return None
+
+    main_loop = (getattr(application, "bot_data", None) or {}).get("main_loop")
+    try:
+        if main_loop is not None and main_loop.is_running():
+            future = asyncio.run_coroutine_threadsafe(get_chat(chat_id), main_loop)
+            return future.result(timeout=15)
+        return asyncio.run(get_chat(chat_id))
+    except Exception:
+        return None
+
+
+def _stats_chat_options(state: Any, settings: Any) -> list[dict[str, Any]]:
+    options = []
+    for chat_id in configured_daily_stats_chat_ids(settings):
+        title = _KNOWN_STATS_CHAT_TITLES.get(chat_id, f"Группа {chat_id}")
+        application = state.application
+        if application is not None:
+            chat = _run_chat_lookup(application, chat_id)
+            actual_title = getattr(chat, "title", None)
+            if isinstance(actual_title, str) and actual_title.strip():
+                title = actual_title.strip()
+        options.append({"chat_id": chat_id, "title": title})
+    return options
+
+
+def _selected_stats_chat_id(requested_chat_id: int | str | None, available_chats: list[dict[str, Any]]) -> int | None:
+    available_chat_ids = {item["chat_id"] for item in available_chats}
+    if requested_chat_id is None or requested_chat_id == "":
+        if DEFAULT_STATS_CHAT_ID in available_chat_ids:
+            return DEFAULT_STATS_CHAT_ID
+        return available_chats[0]["chat_id"] if available_chats else None
+    try:
+        selected_chat_id = int(requested_chat_id)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if isinstance(selected_chat_id, bool) or selected_chat_id not in available_chat_ids:
+        return None
+    return selected_chat_id
+
+
+def stats_payload(
+    state: Any,
+    authorization: str,
+    day: str | None = None,
+    chat_id: int | str | None = None,
+) -> tuple[int, dict[str, Any]]:
+    """Возвращает дневную сводку выбранной настроенной группы."""
     session, error = _require_admin_session(state, authorization)
     if error is not None:
         return error
@@ -945,9 +1009,19 @@ def stats_payload(state: Any, authorization: str, day: str | None = None) -> tup
 
     bot_data = state.application.bot_data if state.application else {}
     settings = bot_data.get("settings") if isinstance(bot_data, dict) else None
-    chat_id = getattr(settings, "panel_admin_chat_id", None)
-    if not isinstance(chat_id, int) or isinstance(chat_id, bool) or chat_id == 0:
-        chat_id = 0
+    available_chats = _stats_chat_options(state, settings)
+    selected_chat_id = _selected_stats_chat_id(chat_id, available_chats)
+    if selected_chat_id is None:
+        if chat_id is None or chat_id == "":
+            chat_id = 0
+        else:
+            try:
+                int(chat_id)
+            except (TypeError, ValueError, OverflowError):
+                return 400, {"error": "Некорректный идентификатор группы."}
+            return 403, {"error": "Эта группа недоступна для статистики Mini App."}
+    else:
+        chat_id = selected_chat_id
     normalized_day = normalize_daily_date(day)
     if normalized_day is None:
         return 400, {"error": "Дата должна быть в формате YYYY-MM-DD и находиться в пределах последних 31 дней."}
@@ -1003,6 +1077,7 @@ def stats_payload(state: Any, authorization: str, day: str | None = None) -> tup
         "role": session["role"],
         "date": normalized_day,
         "chat_id": chat_id,
+        "available_chats": available_chats,
         "summary": format_daily_summary(
             day=normalized_day,
             scope_label="чату",
