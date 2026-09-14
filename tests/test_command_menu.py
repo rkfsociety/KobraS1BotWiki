@@ -26,6 +26,7 @@ def test_command_menu_publishes_localized_public_and_admin_scopes():
     assert [command.command for command in en_public] == ["start", "help"]
     assert "wiki" not in [command.command for command in ru_public]
     assert "wiki" in [command.command for command in ru_admin]
+    assert "ii" in [command.command for command in ru_admin]
     assert "mute" in [command.command for command in ru_admin]
     assert ru_admin[0].description == "Запустить бота"
     assert en_admin[0].description == "Start the bot"

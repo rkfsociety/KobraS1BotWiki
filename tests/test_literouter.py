@@ -1,0 +1,246 @@
+from __future__ import annotations
+
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+from app.bot.handlers import cmd_ii
+from app.bot.literouter import ask_literouter
+from app.web_wiki_index import WebWikiDoc, WebWikiIndex
+
+
+def test_literouter_uses_openai_compatible_endpoint_and_parses_content(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"choices": [{"message": {"content": "Готово"}}]}
+
+        text = ""
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, endpoint, **kwargs):
+            captured["endpoint"] = endpoint
+            captured["kwargs"] = kwargs
+            return FakeResponse()
+
+    monkeypatch.setattr("app.bot.literouter.httpx.AsyncClient", FakeClient)
+
+    result = asyncio.run(
+        ask_literouter(
+            api_key="secret-value",
+            base_url="https://api.literouter.com/v1/",
+            model="deepseek-v4-flash:free",
+            messages=[{"role": "user", "content": "Привет"}],
+            timeout_seconds=25,
+            max_tokens=500,
+        )
+    )
+
+    assert result == "Готово"
+    assert captured["endpoint"] == "https://api.literouter.com/v1/chat/completions"
+    assert captured["client_kwargs"] == {"timeout": 25, "follow_redirects": False}
+    request_kwargs = captured["kwargs"]
+    assert request_kwargs["headers"]["Authorization"] == "Bearer secret-value"
+    assert request_kwargs["json"]["model"] == "deepseek-v4-flash:free"
+    assert request_kwargs["json"]["stream"] is False
+
+
+def test_literouter_rejects_non_https_base_url_without_request():
+    try:
+        asyncio.run(
+            ask_literouter(
+                api_key="secret-value",
+                base_url="http://localhost/v1",
+                model="model",
+                messages=[],
+                timeout_seconds=5,
+                max_tokens=100,
+            )
+        )
+    except Exception as exc:
+        assert "https://" in str(exc)
+    else:
+        raise AssertionError("HTTP base URL must be rejected")
+
+
+def _settings():
+    return SimpleNamespace(
+        literouter_enabled=True,
+        literouter_api_key="secret-value",
+        literouter_base_url="https://api.literouter.com/v1",
+        literouter_model="deepseek-v4-flash:free",
+        literouter_timeout_seconds=25,
+        literouter_max_tokens=500,
+        literouter_context_docs=3,
+        ru_layer_enabled=False,
+        wiki_base_url="https://wiki.anycubic.com",
+        ephemeral_exempt_chat_ids=frozenset(),
+        reply_review_mention="off",
+    )
+
+
+def _update_for_ii(*, target=None):
+    command = SimpleNamespace(
+        text="/ii",
+        caption=None,
+        from_user=SimpleNamespace(id=7, language_code="ru"),
+        reply_to_message=target,
+        reply_text=AsyncMock(),
+        chat_id=-100123,
+        message_id=22,
+        chat=SimpleNamespace(type="supergroup"),
+        message_thread_id=None,
+    )
+    return SimpleNamespace(
+        effective_message=command,
+        effective_chat=SimpleNamespace(id=-100123, type="supergroup"),
+        effective_user=command.from_user,
+    )
+
+
+def test_cmd_ii_requires_admin(monkeypatch):
+    target = SimpleNamespace(text="Как прочистить сопло?", caption=None)
+    update = _update_for_ii(target=target)
+    context = SimpleNamespace(
+        application=SimpleNamespace(bot_data={"settings": _settings()}),
+    )
+
+    monkeypatch.setattr("app.bot.handlers._cmd_ii._deny_unless_admin_command_access", AsyncMock(return_value=True))
+
+    asyncio.run(cmd_ii(update, context))
+
+    update.effective_message.reply_text.assert_not_awaited()
+
+
+def test_cmd_ii_requires_reply_to_user_message(monkeypatch):
+    update = _update_for_ii()
+    context = SimpleNamespace(
+        application=SimpleNamespace(bot_data={"settings": _settings()}),
+    )
+
+    monkeypatch.setattr("app.bot.handlers._cmd_ii._deny_unless_admin_command_access", AsyncMock(return_value=False))
+    monkeypatch.setattr("app.bot.handlers._cmd_ii.schedule_delete_slash_command_and_reply", lambda **_kwargs: None)
+
+    asyncio.run(cmd_ii(update, context))
+
+    update.effective_message.reply_text.assert_awaited_once()
+    assert "/ii" in update.effective_message.reply_text.await_args.args[0]
+
+
+def test_cmd_ii_rejects_reply_to_bot_message(monkeypatch):
+    target = SimpleNamespace(
+        text="Предыдущий ответ бота",
+        caption=None,
+        from_user=SimpleNamespace(id=999, is_bot=True),
+    )
+    update = _update_for_ii(target=target)
+    context = SimpleNamespace(
+        application=SimpleNamespace(bot_data={"settings": _settings()}),
+    )
+
+    monkeypatch.setattr("app.bot.handlers._cmd_ii._deny_unless_admin_command_access", AsyncMock(return_value=False))
+    monkeypatch.setattr("app.bot.handlers._cmd_ii.schedule_delete_slash_command_and_reply", lambda **_kwargs: None)
+
+    asyncio.run(cmd_ii(update, context))
+
+    update.effective_message.reply_text.assert_awaited_once()
+    assert "/ii" in update.effective_message.reply_text.await_args.args[0]
+
+
+def test_cmd_ii_replies_to_target_and_includes_verified_wiki_source(monkeypatch):
+    target_reply = AsyncMock(return_value=SimpleNamespace(message_id=99))
+    target = SimpleNamespace(
+        text="Как прочистить сопло?",
+        caption=None,
+        from_user=SimpleNamespace(id=42, is_bot=False),
+        reply_text=target_reply,
+        chat_id=-100123,
+        message_id=21,
+        message_thread_id=None,
+    )
+    update = _update_for_ii(target=target)
+    settings = _settings()
+    index = WebWikiIndex(
+        [
+            WebWikiDoc(
+                title="Очистка сопла",
+                url="https://wiki.anycubic.com/en/nozzle-cleaning",
+                text="Снимите остатки пластика и очистите сопло.",
+            )
+        ]
+    )
+    context = SimpleNamespace(
+        application=SimpleNamespace(bot_data={"settings": settings, "wiki_index": index}),
+    )
+
+    monkeypatch.setattr("app.bot.handlers._cmd_ii._deny_unless_admin_command_access", AsyncMock(return_value=False))
+    monkeypatch.setattr("app.bot.handlers._cmd_ii.ask_literouter", AsyncMock(return_value="Очистите сопло."))
+    monkeypatch.setattr(
+        "app.bot.handlers._cmd_ii.reply_for_user",
+        AsyncMock(return_value=SimpleNamespace(message_id=99)),
+    )
+    monkeypatch.setattr("app.bot.handlers._cmd_ii._record_bot_answer_context", lambda **_kwargs: None)
+    monkeypatch.setattr("app.bot.handlers._cmd_ii.add_to_recent_replies", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("app.bot.handlers._cmd_ii._record_stat", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("app.bot.handlers._cmd_ii.schedule_delete_slash_command_and_reply", lambda **_kwargs: None)
+
+    asyncio.run(cmd_ii(update, context))
+
+    reply_for_user = __import__("app.bot.handlers._cmd_ii", fromlist=["reply_for_user"]).reply_for_user
+    reply_for_user.assert_awaited_once()
+    assert reply_for_user.await_args.args[0] is target
+    body = reply_for_user.await_args.args[2]
+    assert "Очистите сопло." in body
+    assert "https://wiki.anycubic.com/en/nozzle-cleaning" in body
+
+
+def test_literouter_error_detail_does_not_expose_key(monkeypatch):
+    class FakeResponse:
+        status_code = 401
+        text = "invalid key"
+
+        def json(self):
+            return {"error": {"message": "invalid key secret-value"}}
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def post(self, *_args, **_kwargs):
+            return FakeResponse()
+
+    monkeypatch.setattr("app.bot.literouter.httpx.AsyncClient", FakeClient)
+
+    try:
+        asyncio.run(
+            ask_literouter(
+                api_key="secret-value",
+                base_url="https://api.literouter.com/v1",
+                model="model",
+                messages=[],
+                timeout_seconds=5,
+                max_tokens=100,
+            )
+        )
+    except Exception as exc:
+        assert "secret-value" not in str(exc)
+    else:
+        raise AssertionError("HTTP failure must be raised")

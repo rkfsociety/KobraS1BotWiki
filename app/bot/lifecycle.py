@@ -47,6 +47,7 @@ from app.bot.handlers import (
     cmd_status,
     cmd_update,
     cmd_wiki,
+    cmd_ii,
     cmd_ban,
     cmd_clearwarns,
     cmd_del,
@@ -164,6 +165,7 @@ def _register_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("admincheck", cmd_admincheck))
     app.add_handler(CommandHandler("app", cmd_app))
     app.add_handler(CommandHandler("wiki", cmd_wiki))
+    app.add_handler(CommandHandler("ii", cmd_ii))
     app.add_handler(CommandHandler("ping", cmd_ping))
     app.add_handler(CommandHandler("status", cmd_status))
     app.add_handler(CommandHandler("stats", cmd_stats))

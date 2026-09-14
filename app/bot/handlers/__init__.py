@@ -5,6 +5,7 @@ from ._cmd_qa import cmd_qaadd, cmd_qadel, cmd_qalist
 from ._cmd_status import cmd_ping, cmd_stats, cmd_status
 from ._cmd_update import cmd_update
 from ._cmd_wiki import cmd_wiki
+from ._cmd_ii import cmd_ii
 from ._cmd_moderation import (
     cmd_ban,
     cmd_clearwarns,
@@ -38,6 +39,7 @@ __all__ = [
     "cmd_stats",
     "cmd_update",
     "cmd_wiki",
+    "cmd_ii",
     "cmd_ban",
     "cmd_clearwarns",
     "cmd_del",

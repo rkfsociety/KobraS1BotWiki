@@ -10,6 +10,7 @@ from ._cmd_qa import cmd_qaadd, cmd_qadel, cmd_qalist
 from ._cmd_status import cmd_ping, cmd_status
 from ._cmd_update import cmd_update
 from ._cmd_wiki import cmd_wiki
+from ._cmd_ii import cmd_ii
 
 # CommandHandler в PTB не обрабатывает channel_post — маршрутизируем вручную (см. lifecycle.py).
 _CHANNEL_COMMAND_HANDLERS: dict[str, object] = {}
@@ -25,6 +26,7 @@ def _register_channel_commands() -> None:
             "id": cmd_id,
             "admincheck": cmd_admincheck,
             "wiki": cmd_wiki,
+            "ii": cmd_ii,
             "ping": cmd_ping,
             "status": cmd_status,
             "error": cmd_error,

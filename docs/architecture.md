@@ -29,6 +29,7 @@
 | `clarify.py` | Уточнение модели и цепочки reply |
 | `layer_model_gate.py` | Отсев кандидатов вики по модели принтера |
 | `manual_qa.py` | Ручные Q&A (`/qaadd`, `data/manual_qa.json`) |
+| `literouter.py` | OpenAI-compatible клиент LiteRouter для админской команды `/ii` |
 | `user_context.py` | Контекст диалога: история сообщений, обогащение запросов анафорой |
 | `bad_answers.py` | Хранение/загрузка ошибочных ответов (`data/bad_answers.json`) |
 | `reply_logging.py` | Лог исходящих ответов; персистентная лента (`.cache/recent_replies.json`) |

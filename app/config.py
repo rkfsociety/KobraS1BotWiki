@@ -115,6 +115,21 @@ class Settings:
 
     extra_wiki_urls: tuple[str, ...]
 
+    #: LiteRouter/OpenAI-compatible ручная команда /ii.
+    literouter_enabled: bool
+
+    literouter_api_key: str
+
+    literouter_base_url: str
+
+    literouter_model: str
+
+    literouter_timeout_seconds: int
+
+    literouter_max_tokens: int
+
+    literouter_context_docs: int
+
     min_score: int
 
     top_k: int
@@ -300,6 +315,14 @@ def load_settings() -> Settings:
 
     extra_wiki_urls_raw = (os.getenv("WIKI_EXTRA_URLS") or "").strip()
     extra_wiki_urls = tuple(url.strip() for url in extra_wiki_urls_raw.split(",") if url.strip())
+
+    literouter_api_key = (os.getenv("LITEROUTER_API_KEY") or "").strip()
+    literouter_enabled = _get_bool("LITEROUTER_ENABLED", bool(literouter_api_key))
+    literouter_base_url = (os.getenv("LITEROUTER_BASE_URL") or "https://api.literouter.com/v1").strip().rstrip("/")
+    literouter_model = (os.getenv("LITEROUTER_MODEL") or "deepseek-v4-flash:free").strip()
+    literouter_timeout_seconds = max(1, _get_int("LITEROUTER_TIMEOUT_SECONDS", 25))
+    literouter_max_tokens = max(64, _get_int("LITEROUTER_MAX_TOKENS", 500))
+    literouter_context_docs = max(1, min(5, _get_int("LITEROUTER_CONTEXT_DOCS", 3)))
 
     min_score = _get_int("MIN_SCORE", 72)
 
@@ -583,6 +606,20 @@ def load_settings() -> Settings:
         wiki_max_pages=wiki_max_pages,
 
         extra_wiki_urls=extra_wiki_urls,
+
+        literouter_enabled=literouter_enabled,
+
+        literouter_api_key=literouter_api_key,
+
+        literouter_base_url=literouter_base_url,
+
+        literouter_model=literouter_model,
+
+        literouter_timeout_seconds=literouter_timeout_seconds,
+
+        literouter_max_tokens=literouter_max_tokens,
+
+        literouter_context_docs=literouter_context_docs,
 
         min_score=min_score,
 
