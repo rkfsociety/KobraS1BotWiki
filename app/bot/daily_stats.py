@@ -57,13 +57,17 @@ async def send_daily_stats(context) -> None:
             total_incoming=daily["total_incoming"],
             topics=topics,
         )
+        send_kwargs = {
+            "chat_id": chat_id,
+            "text": summary,
+            "disable_web_page_preview": True,
+        }
         try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                message_thread_id=GENERAL_TOPIC_ID,
-                text=summary,
-                disable_web_page_preview=True,
-            )
+            get_chat = getattr(context.bot, "get_chat", None)
+            chat = await get_chat(chat_id) if callable(get_chat) else None
+            if getattr(chat, "is_forum", False):
+                send_kwargs["message_thread_id"] = GENERAL_TOPIC_ID
+            await context.bot.send_message(**send_kwargs)
             log.info("Ежедневная статистика отправлена: chat_id=%s day=%s", chat_id, day)
         except Exception as exc:
             # Ошибка в одном чате не должна блокировать отправку в остальные.

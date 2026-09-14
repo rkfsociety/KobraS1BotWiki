@@ -40,6 +40,7 @@ async def test_send_daily_stats_uses_separate_group_scopes(monkeypatch):
     monkeypatch.setattr(daily_stats, "get_daily_stats", get_stats)
     monkeypatch.setattr(daily_stats, "get_daily_top_topics", get_topics)
     send_message = AsyncMock()
+    get_chat = AsyncMock(return_value=SimpleNamespace(is_forum=True))
     application = SimpleNamespace(
         bot_data={
             "settings": SimpleNamespace(
@@ -49,7 +50,10 @@ async def test_send_daily_stats_uses_separate_group_scopes(monkeypatch):
             "bot_stats": {"daily_scopes": {}},
         }
     )
-    context = SimpleNamespace(application=application, bot=SimpleNamespace(send_message=send_message))
+    context = SimpleNamespace(
+        application=application,
+        bot=SimpleNamespace(send_message=send_message, get_chat=get_chat),
+    )
 
     await daily_stats.send_daily_stats(context)
 
@@ -67,15 +71,42 @@ async def test_send_daily_stats_uses_separate_group_scopes(monkeypatch):
 @pytest.mark.asyncio
 async def test_send_daily_stats_continues_after_one_chat_error(monkeypatch):
     send_message = AsyncMock(side_effect=[RuntimeError("chat unavailable"), None])
+    get_chat = AsyncMock(return_value=SimpleNamespace(is_forum=True))
     application = SimpleNamespace(
         bot_data={
             "settings": SimpleNamespace(allowed_chat_ids=frozenset({-1001, -1002})),
             "bot_stats": {"daily_scopes": {}},
         }
     )
-    context = SimpleNamespace(application=application, bot=SimpleNamespace(send_message=send_message))
+    context = SimpleNamespace(
+        application=application,
+        bot=SimpleNamespace(send_message=send_message, get_chat=get_chat),
+    )
 
     await daily_stats.send_daily_stats(context)
 
     assert send_message.await_count == 2
     assert send_message.await_args_list[1].kwargs["chat_id"] == -1001
+
+
+@pytest.mark.asyncio
+async def test_send_daily_stats_omits_thread_for_regular_group(monkeypatch):
+    monkeypatch.setattr(daily_stats, "_previous_local_day", lambda: "2026-09-13")
+    send_message = AsyncMock()
+    application = SimpleNamespace(
+        bot_data={
+            "settings": SimpleNamespace(allowed_chat_ids=frozenset({-1001})),
+            "bot_stats": {"daily_scopes": {}},
+        }
+    )
+    context = SimpleNamespace(
+        application=application,
+        bot=SimpleNamespace(
+            get_chat=AsyncMock(return_value=SimpleNamespace(is_forum=False)),
+            send_message=send_message,
+        ),
+    )
+
+    await daily_stats.send_daily_stats(context)
+
+    assert "message_thread_id" not in send_message.await_args.kwargs
