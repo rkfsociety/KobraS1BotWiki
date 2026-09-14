@@ -1,7 +1,7 @@
 """Общий формат дневной сводки для команды /stats и Telegram Mini App."""
 from __future__ import annotations
 
-import hashlib
+import secrets
 
 
 MONTH_NAMES = (
@@ -9,7 +9,7 @@ MONTH_NAMES = (
     "июля", "августа", "сентября", "октября", "ноября", "декабря",
 )
 
-OPENING_PHRASES = (
+_OPENING_BASE_PHRASES = (
     "Сводочка по {scope}, родимые, за {date}:",
     "Дневные вести по {scope} за {date}:",
     "Ловите статистику по {scope} за {date}:",
@@ -62,7 +62,7 @@ OPENING_PHRASES = (
     "Финальная перекличка по {scope} за {date}:",
 )
 
-CLOSING_PHRASES = (
+_CLOSING_BASE_PHRASES = (
     "Эх, нынешние времена… ну да ладно, спите спокойно, голубчики.",
     "Вот такая сегодня цифровая жизнь. Всем ровного стола и добрых снов.",
     "Цифры всё помнят, а мы пока можем немного отдохнуть.",
@@ -115,6 +115,52 @@ CLOSING_PHRASES = (
     "Отчёт окончен, голубчики могут отдыхать.",
 )
 
+_OPENING_VARIANTS = (
+    "цифры уже на столе",
+    "переходим к показаниям",
+    "картина получается занятная",
+    "записываем в летопись",
+    "сверяемся с реальностью",
+    "давайте считать",
+    "вот такой вышел расклад",
+    "приступаем к разбору",
+    "статистика уже всё рассказала",
+    "открываем дневной журнал",
+)
+
+_CLOSING_VARIANTS = (
+    "Можно выдохнуть и дать технике немного тишины.",
+    "Пусть следующий заход принесёт больше удач, чем сюрпризов.",
+    "А теперь самое время сохранить нервы до завтрашнего дня.",
+    "Пусть слайсер сегодня будет милосерден к каждому профилю.",
+    "До новых цифр, новых вопросов и новых побед над настройками.",
+    "Желаю ровного пластика, спокойных логов и доброго вечера.",
+    "Пусть всё сложное останется в отчёте, а не переедет в печать.",
+    "Чат отчитался, мастерская может ненадолго перейти на тишину.",
+    "Берегите себя, принтеры и те самые настройки, которые наконец заработали.",
+    "На сегодня достаточно статистики — дальше пусть работают хорошие привычки.",
+)
+
+
+def _expand_opening_phrases() -> tuple[str, ...]:
+    return tuple(
+        f"{phrase.rstrip(':')} — {variant}:"
+        for phrase in _OPENING_BASE_PHRASES
+        for variant in _OPENING_VARIANTS
+    )
+
+
+def _expand_closing_phrases() -> tuple[str, ...]:
+    return tuple(
+        f"{phrase} {variant}"
+        for phrase in _CLOSING_BASE_PHRASES
+        for variant in _CLOSING_VARIANTS
+    )
+
+
+OPENING_PHRASES = _expand_opening_phrases()
+CLOSING_PHRASES = _expand_closing_phrases()
+
 
 def topic_emoji(title: str) -> str:
     text = title.lower()
@@ -136,16 +182,13 @@ def _format_date(day: str) -> str:
     return f"{number} {MONTH_NAMES[month - 1]}"
 
 
-def _phrase_pair(*, day: str, scope_key: str) -> tuple[str, str]:
-    digest = hashlib.sha256(f"{day}|{scope_key}".encode("utf-8")).digest()
-    return OPENING_PHRASES[digest[0] % 50], CLOSING_PHRASES[digest[1] % 50]
-
-
 def format_daily_summary(
     *, day: str, scope_label: str, scope_key: str, total_incoming: int, topics: list[tuple[str, int]]
 ) -> str:
-    """Формирует одинаковую сводку для Telegram-команды и Mini App."""
-    opening, closing = _phrase_pair(day=day, scope_key=scope_key)
+    """Формирует сводку с новым случайным началом и концовкой при каждом вызове."""
+    del scope_key
+    opening = secrets.choice(OPENING_PHRASES)
+    closing = secrets.choice(CLOSING_PHRASES)
     lines = [
         opening.format(scope=scope_label, date=_format_date(day)),
         "",

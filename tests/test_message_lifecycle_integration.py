@@ -190,9 +190,9 @@ def test_lifecycle_registers_commands_update_and_message_handlers_in_order():
     _register_handlers(app)
 
     callbacks = [getattr(handler, "callback", None).__name__ for handler, _ in app.handlers]
-    assert callbacks[:14] == [
+    assert callbacks[:15] == [
         "cmd_start", "cmd_help", "cmd_id", "cmd_admincheck", "cmd_app", "cmd_wiki",
-        "cmd_ping", "cmd_status", "cmd_error", "cmd_fix", "cmd_qaadd", "cmd_qalist",
+        "cmd_ping", "cmd_status", "cmd_stats", "cmd_error", "cmd_fix", "cmd_qaadd", "cmd_qalist",
         "cmd_qadel", "cmd_update",
     ]
     assert "on_channel_command" in callbacks
