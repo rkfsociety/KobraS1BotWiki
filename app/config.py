@@ -26,7 +26,6 @@ from app.default_ops_chat import DEFAULT_OPS_NOTIFY_CHAT_ID
 
 
 _DEFAULT_LITEROUTER_MODELS = (
-    "gemma-4-31b-it:free",
     "deepseek-v4-flash:free",
     "gpt-oss-120b:free",
     "glm-5.3-flash:free",

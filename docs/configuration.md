@@ -32,7 +32,7 @@ reply на исходное сообщение. Автоматические о�
 | `LITEROUTER_ENABLED` | `true`, если задан ключ | Включить команду `/ii`. |
 | `LITEROUTER_API_KEY` | — | API-ключ LiteRouter; только `.env`, не Git и не логи. |
 | `LITEROUTER_BASE_URL` | `https://api.literouter.com/v1` | OpenAI-compatible base URL LiteRouter. |
-| `LITEROUTER_MODELS` | `gemma-4-31b-it:free,deepseek-v4-flash:free,gpt-oss-120b:free,glm-5.3-flash:free,glm-5.2:free` | Модели по порядку: первая основная, следующие — fallback при ошибке, таймауте или пустом ответе. |
+| `LITEROUTER_MODELS` | `deepseek-v4-flash:free,gpt-oss-120b:free,glm-5.3-flash:free,glm-5.2:free` | Модели по порядку: первая основная, следующие — fallback при ошибке, таймауте или пустом ответе. |
 | `LITEROUTER_MODEL` | — | Совместимость со старой настройкой: если задана, используется только эта модель и список игнорируется. |
 | `LITEROUTER_TIMEOUT_SECONDS` | `25` | Таймаут запроса к провайдеру. |
 | `LITEROUTER_MAX_TOKENS` | `500` | Верхний предел длины ответа. |

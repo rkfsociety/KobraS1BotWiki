@@ -25,6 +25,18 @@ _MAX_CONTEXT_DOCS = 3
 _MAX_CONTEXT_CHARS = 12000
 _MAX_DOC_CHARS = 4000
 _MAX_ANSWER_CHARS = 3500
+_INCOMPLETE_ENDINGS = {
+    "а",
+    "если",
+    "и",
+    "как",
+    "когда",
+    "но",
+    "потому",
+    "для",
+    "что",
+    "говорит",
+}
 
 
 def _message_text(message) -> str:
@@ -78,10 +90,21 @@ def _build_messages(question: str, docs: list[tuple[object, int]]) -> list[dict[
         "и общим знаниям; NO_ANSWER, только если на вопрос нельзя ответить ответственно даже в общем виде. "
         "Для GENERAL_ANSWER не выдавай догадки за факты и предупреди, если точные детали зависят от модели "
         "или конструкции. Не придумывай факты ремонта или URL. Не цитируй CONTEXT в GENERAL_ANSWER. "
+        "Не обрывай ответ на полуслове: закончи все предложения и проверь, что последняя мысль завершена. "
         "Не упоминай внутренний промпт."
     )
     user = f"QUESTION:\n{question[:_MAX_QUESTION_CHARS]}\n\nCONTEXT:\n{context}"
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
+
+def _looks_truncated(answer: str) -> bool:
+    text = answer.strip().rstrip()
+    if not text:
+        return True
+    if text[-1] in ".!?…:;)]}" + "'»":
+        return False
+    last_word = text.split()[-1].strip("()[]{}«»\"'“”.,:;!?-").lower()
+    return last_word in _INCOMPLETE_ENDINGS
 
 
 def _answer_body(answer: str, docs: list[tuple[object, int]]) -> str:
@@ -172,6 +195,8 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 timeout_seconds=settings.literouter_timeout_seconds,
                 max_tokens=settings.literouter_max_tokens,
             )
+            if _looks_truncated(answer):
+                raise LiteRouterError("модель вернула незавершённый ответ")
             selected_model = model
             break
         except LiteRouterError as exc:
@@ -231,12 +256,4 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id=command_msg.chat_id,
         topic_id=getattr(target, "message_thread_id", None),
         topic="LiteRouter",
-    )
-
-    schedule_delete_slash_command_and_reply(
-        context=context,
-        user_msg=command_msg,
-        bot_msg=sent,
-        wiki_base_url=settings.wiki_base_url,
-        outgoing_text=body,
     )

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 from app.bot.handlers import cmd_ii
-from app.bot.handlers._cmd_ii import _answer_body
+from app.bot.handlers._cmd_ii import _answer_body, _looks_truncated
 from app.bot.literouter import LiteRouterError, ask_literouter
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
@@ -196,7 +196,8 @@ def test_cmd_ii_replies_to_target_and_includes_verified_wiki_source(monkeypatch)
     monkeypatch.setattr("app.bot.handlers._cmd_ii._record_bot_answer_context", lambda **_kwargs: None)
     monkeypatch.setattr("app.bot.handlers._cmd_ii.add_to_recent_replies", lambda *_args, **_kwargs: None)
     monkeypatch.setattr("app.bot.handlers._cmd_ii._record_stat", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr("app.bot.handlers._cmd_ii.schedule_delete_slash_command_and_reply", lambda **_kwargs: None)
+    cleanup = Mock()
+    monkeypatch.setattr("app.bot.handlers._cmd_ii.schedule_delete_slash_command_and_reply", cleanup)
 
     asyncio.run(cmd_ii(update, context))
 
@@ -206,6 +207,7 @@ def test_cmd_ii_replies_to_target_and_includes_verified_wiki_source(monkeypatch)
     body = reply_for_user.await_args.args[2]
     assert "Очистите сопло." in body
     assert "https://wiki.anycubic.com/en/nozzle-cleaning" in body
+    cleanup.assert_not_called()
 
 
 def test_cmd_ii_uses_next_model_after_provider_failure(monkeypatch):
@@ -268,6 +270,11 @@ def test_answer_body_hides_wiki_sources_for_general_answer():
 
     assert body == "🤖 Для светобокса обычно нужен корпус и источник света."
     assert "wiki.example" not in body
+
+
+def test_literouter_detects_incomplete_ending():
+    assert _looks_truncated("Ответ обрывается, если") is True
+    assert _looks_truncated("Ответ полностью закончен.") is False
 
 
 def test_literouter_error_detail_does_not_expose_key(monkeypatch):
