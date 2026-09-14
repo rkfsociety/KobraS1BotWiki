@@ -341,7 +341,7 @@ def test_miniapp_stats_returns_daily_group_summary(monkeypatch):
     assert status == 200
     assert payload["metrics"]["total_incoming"] == 3
     assert payload["topics"] == [{"title": "Настройка скоростей", "count": 3, "emoji": "⚙️"}]
-    assert "Всего было написано 3 сообщений" in payload["summary"]
+    assert "Всего было написано 3 сообщения" in payload["summary"]
 
 
 def test_admin_can_clear_processed_miniapp_answers(mini_panel):
