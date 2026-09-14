@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from app.bot.handlers import cmd_ii
-from app.bot.literouter import ask_literouter
+from app.bot.literouter import LiteRouterError, ask_literouter
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
 
@@ -80,6 +80,7 @@ def _settings():
         literouter_enabled=True,
         literouter_api_key="secret-value",
         literouter_base_url="https://api.literouter.com/v1",
+        literouter_models=("first-model", "second-model"),
         literouter_model="deepseek-v4-flash:free",
         literouter_timeout_seconds=25,
         literouter_max_tokens=500,
@@ -204,6 +205,38 @@ def test_cmd_ii_replies_to_target_and_includes_verified_wiki_source(monkeypatch)
     body = reply_for_user.await_args.args[2]
     assert "Очистите сопло." in body
     assert "https://wiki.anycubic.com/en/nozzle-cleaning" in body
+
+
+def test_cmd_ii_uses_next_model_after_provider_failure(monkeypatch):
+    target = SimpleNamespace(
+        text="Как прочистить сопло?",
+        caption=None,
+        from_user=SimpleNamespace(id=42, is_bot=False),
+        chat_id=-100123,
+        message_id=21,
+        message_thread_id=None,
+    )
+    update = _update_for_ii(target=target)
+    settings = _settings()
+    context = SimpleNamespace(
+        application=SimpleNamespace(bot_data={"settings": settings}),
+    )
+    ask = AsyncMock(side_effect=[LiteRouterError("первая модель недоступна"), "Ответ резервной модели."])
+
+    monkeypatch.setattr("app.bot.handlers._cmd_ii._deny_unless_admin_command_access", AsyncMock(return_value=False))
+    monkeypatch.setattr("app.bot.handlers._cmd_ii.ask_literouter", ask)
+    monkeypatch.setattr(
+        "app.bot.handlers._cmd_ii.reply_for_user",
+        AsyncMock(return_value=SimpleNamespace(message_id=99)),
+    )
+    monkeypatch.setattr("app.bot.handlers._cmd_ii._record_bot_answer_context", lambda **_kwargs: None)
+    monkeypatch.setattr("app.bot.handlers._cmd_ii.add_to_recent_replies", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("app.bot.handlers._cmd_ii._record_stat", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr("app.bot.handlers._cmd_ii.schedule_delete_slash_command_and_reply", lambda **_kwargs: None)
+
+    asyncio.run(cmd_ii(update, context))
+
+    assert [call.kwargs["model"] for call in ask.await_args_list] == ["first-model", "second-model"]
 
 
 def test_literouter_error_detail_does_not_expose_key(monkeypatch):

@@ -25,6 +25,25 @@ from app.default_ephemeral_exempt import DEFAULT_EPHEMERAL_EXEMPT_CHAT_IDS
 from app.default_ops_chat import DEFAULT_OPS_NOTIFY_CHAT_ID
 
 
+_DEFAULT_LITEROUTER_MODELS = (
+    "gemma-4-31b-it:free",
+    "deepseek-v4-flash:free",
+    "gpt-oss-120b:free",
+    "glm-5.3-flash:free",
+    "glm-5.2:free",
+)
+
+
+def _parse_literouter_models(raw: str, override: str) -> tuple[str, ...]:
+    if raw:
+        models = tuple(dict.fromkeys(item.strip() for item in raw.split(",") if item.strip()))
+        if models:
+            return models
+    if override:
+        return (override,)
+    return _DEFAULT_LITEROUTER_MODELS
+
+
 
 
 
@@ -121,6 +140,8 @@ class Settings:
     literouter_api_key: str
 
     literouter_base_url: str
+
+    literouter_models: tuple[str, ...]
 
     literouter_model: str
 
@@ -319,7 +340,10 @@ def load_settings() -> Settings:
     literouter_api_key = (os.getenv("LITEROUTER_API_KEY") or "").strip()
     literouter_enabled = _get_bool("LITEROUTER_ENABLED", bool(literouter_api_key))
     literouter_base_url = (os.getenv("LITEROUTER_BASE_URL") or "https://api.literouter.com/v1").strip().rstrip("/")
-    literouter_model = (os.getenv("LITEROUTER_MODEL") or "deepseek-v4-flash:free").strip()
+    literouter_models_raw = (os.getenv("LITEROUTER_MODELS") or "").strip()
+    literouter_model_override = (os.getenv("LITEROUTER_MODEL") or "").strip()
+    literouter_models = _parse_literouter_models(literouter_models_raw, literouter_model_override)
+    literouter_model = literouter_models[0]
     literouter_timeout_seconds = max(1, _get_int("LITEROUTER_TIMEOUT_SECONDS", 25))
     literouter_max_tokens = max(64, _get_int("LITEROUTER_MAX_TOKENS", 500))
     literouter_context_docs = max(1, min(5, _get_int("LITEROUTER_CONTEXT_DOCS", 3)))
@@ -612,6 +636,8 @@ def load_settings() -> Settings:
         literouter_api_key=literouter_api_key,
 
         literouter_base_url=literouter_base_url,
+
+        literouter_models=literouter_models,
 
         literouter_model=literouter_model,
 

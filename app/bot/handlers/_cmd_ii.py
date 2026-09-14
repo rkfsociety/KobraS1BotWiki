@@ -141,18 +141,29 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if isinstance(index, WebWikiIndex):
         docs = _find_context_docs(index, question, settings)
 
-    try:
-        answer = await ask_literouter(
-            api_key=settings.literouter_api_key,
-            base_url=settings.literouter_base_url,
-            model=settings.literouter_model,
-            messages=_build_messages(question, docs),
-            timeout_seconds=settings.literouter_timeout_seconds,
-            max_tokens=settings.literouter_max_tokens,
-        )
-    except LiteRouterError as exc:
-        logging.warning("/ii failed chat=%s model=%s: %s", command_msg.chat_id, settings.literouter_model, exc)
-        body = _t(lang, "ii_failed").format(reason=str(exc)[:240])
+    models = tuple(getattr(settings, "literouter_models", ()) or ()) or (settings.literouter_model,)
+    answer: str | None = None
+    selected_model: str | None = None
+    last_error: LiteRouterError | None = None
+    for model in models:
+        try:
+            answer = await ask_literouter(
+                api_key=settings.literouter_api_key,
+                base_url=settings.literouter_base_url,
+                model=model,
+                messages=_build_messages(question, docs),
+                timeout_seconds=settings.literouter_timeout_seconds,
+                max_tokens=settings.literouter_max_tokens,
+            )
+            selected_model = model
+            break
+        except LiteRouterError as exc:
+            last_error = exc
+            logging.warning("/ii model failed chat=%s model=%s: %s", command_msg.chat_id, model, exc)
+
+    if answer is None:
+        reason = str(last_error or "не удалось получить ответ от моделей")
+        body = _t(lang, "ii_failed").format(reason=reason[:240])
         sent = await command_msg.reply_text(body, disable_web_page_preview=True)
         schedule_delete_slash_command_and_reply(
             context=context,
@@ -172,7 +183,8 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         disable_web_page_preview=False,
         log_kind="cmd_ii",
         log_extra={
-            "model": settings.literouter_model,
+            "model": selected_model,
+            "models_tried": models.index(selected_model or models[-1]) + 1,
             "context_docs": len(docs),
             "model_hint": "+".join(sorted(_model_slug_hints(question))) or None,
         },
