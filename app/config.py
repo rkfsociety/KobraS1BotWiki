@@ -162,6 +162,9 @@ class Settings:
 
     allowed_topic_ids: frozenset[int] | None
 
+    #: Тема ежедневной статистики: 0 = общая тема форума без message_thread_id.
+    daily_stats_topic_id: int
+
     cooldown_seconds: int
 
     max_replies_per_minute: int
@@ -614,6 +617,8 @@ def load_settings() -> Settings:
 
             allowed_topic_ids = None
 
+    daily_stats_topic_id = max(0, _get_int("DAILY_STATS_TOPIC_ID", 0))
+
 
 
     return Settings(
@@ -661,6 +666,8 @@ def load_settings() -> Settings:
         allowed_chat_ids=allowed_chat_ids,
 
         allowed_topic_ids=allowed_topic_ids,
+
+        daily_stats_topic_id=daily_stats_topic_id,
 
         cooldown_seconds=cooldown_seconds,
 

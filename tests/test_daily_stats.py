@@ -52,6 +52,7 @@ async def test_send_daily_stats_uses_separate_group_scopes(monkeypatch):
             "settings": SimpleNamespace(
                 allowed_chat_ids=frozenset({-1002, -1001}),
                 panel_admin_chat_id=-1009,
+                daily_stats_topic_id=0,
             ),
             "bot_stats": {"daily_scopes": {}},
         }
@@ -66,10 +67,7 @@ async def test_send_daily_stats_uses_separate_group_scopes(monkeypatch):
     assert requested_stats == [(-1002, None, "2026-09-13"), (-1001, None, "2026-09-13")]
     assert requested_topics == [(-1002, None, "2026-09-13", 3), (-1001, None, "2026-09-13", 3)]
     assert [call.kwargs["chat_id"] for call in send_message.await_args_list] == [-1002, -1001]
-    assert all(
-        call.kwargs["message_thread_id"] == daily_stats.GENERAL_TOPIC_ID
-        for call in send_message.await_args_list
-    )
+    assert all("message_thread_id" not in call.kwargs for call in send_message.await_args_list)
     assert "Всего было написано 2 сообщения" in send_message.await_args_list[0].kwargs["text"]
     assert "Всего было написано 1 сообщение" in send_message.await_args_list[1].kwargs["text"]
 
@@ -116,3 +114,25 @@ async def test_send_daily_stats_omits_thread_for_regular_group(monkeypatch):
     await daily_stats.send_daily_stats(context)
 
     assert "message_thread_id" not in send_message.await_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_send_daily_stats_uses_configured_forum_topic(monkeypatch):
+    send_message = AsyncMock()
+    application = SimpleNamespace(
+        bot_data={
+            "settings": SimpleNamespace(allowed_chat_ids=frozenset({-1001}), daily_stats_topic_id=42),
+            "bot_stats": {"daily_scopes": {}},
+        }
+    )
+    context = SimpleNamespace(
+        application=application,
+        bot=SimpleNamespace(
+            get_chat=AsyncMock(return_value=SimpleNamespace(is_forum=True)),
+            send_message=send_message,
+        ),
+    )
+
+    await daily_stats.send_daily_stats(context)
+
+    assert send_message.await_args.kwargs["message_thread_id"] == 42

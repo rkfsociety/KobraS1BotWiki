@@ -16,7 +16,6 @@ try:
 except ZoneInfoNotFoundError:  # pragma: no cover - зависит от tzdata окружения
     DAILY_STATS_TIMEZONE = timezone(timedelta(hours=2), name="Europe/Kaliningrad")
 DAILY_STATS_SEND_TIME = time(hour=0, minute=5, tzinfo=DAILY_STATS_TIMEZONE)
-GENERAL_TOPIC_ID = 1
 
 
 def configured_daily_stats_chat_ids(settings: object) -> tuple[int, ...]:
@@ -65,8 +64,9 @@ async def send_daily_stats(context) -> None:
         try:
             get_chat = getattr(context.bot, "get_chat", None)
             chat = await get_chat(chat_id) if callable(get_chat) else None
-            if getattr(chat, "is_forum", False):
-                send_kwargs["message_thread_id"] = GENERAL_TOPIC_ID
+            daily_stats_topic_id = max(0, int(getattr(settings, "daily_stats_topic_id", 0)))
+            if getattr(chat, "is_forum", False) and daily_stats_topic_id > 0:
+                send_kwargs["message_thread_id"] = daily_stats_topic_id
             await context.bot.send_message(**send_kwargs)
             log.info("Ежедневная статистика отправлена: chat_id=%s day=%s", chat_id, day)
         except Exception as exc:
