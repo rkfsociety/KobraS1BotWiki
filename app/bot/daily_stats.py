@@ -15,7 +15,7 @@ try:
     DAILY_STATS_TIMEZONE = ZoneInfo("Europe/Kaliningrad")
 except ZoneInfoNotFoundError:  # pragma: no cover - зависит от tzdata окружения
     DAILY_STATS_TIMEZONE = timezone(timedelta(hours=2), name="Europe/Kaliningrad")
-DAILY_STATS_SEND_TIME = time(hour=8, tzinfo=DAILY_STATS_TIMEZONE)
+DAILY_STATS_SEND_TIME = time(hour=0, minute=5, tzinfo=DAILY_STATS_TIMEZONE)
 GENERAL_TOPIC_ID = 1
 
 

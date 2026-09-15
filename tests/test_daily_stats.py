@@ -23,6 +23,12 @@ def test_configured_daily_stats_chat_ids_falls_back_to_panel_chat():
     assert daily_stats.configured_daily_stats_chat_ids(settings) == (-1009,)
 
 
+def test_daily_stats_send_time_is_0005_kaliningrad():
+    assert daily_stats.DAILY_STATS_SEND_TIME.hour == 0
+    assert daily_stats.DAILY_STATS_SEND_TIME.minute == 5
+    assert daily_stats.DAILY_STATS_SEND_TIME.tzinfo is daily_stats.DAILY_STATS_TIMEZONE
+
+
 @pytest.mark.asyncio
 async def test_send_daily_stats_uses_separate_group_scopes(monkeypatch):
     monkeypatch.setattr(daily_stats, "_previous_local_day", lambda: "2026-09-13")

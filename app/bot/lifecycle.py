@@ -586,7 +586,7 @@ def main() -> None:
             name="daily_stats",
         )
         logging.info(
-            "Ежедневная статистика групп: %s чатов, отправка в General в 08:00 Europe/Kaliningrad",
+            "Ежедневная статистика групп: %s чатов, отправка в General в 00:05 Europe/Kaliningrad",
             len(daily_stats_chat_ids),
         )
 
