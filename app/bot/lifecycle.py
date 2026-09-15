@@ -17,7 +17,6 @@ try:
 except ImportError:  # pragma: no cover - Windows fallback
     fcntl = None  # type: ignore[assignment]
 
-from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -82,7 +81,7 @@ from app.bot.telegram_log_mirror import attach_telegram_log_mirror, flush_telegr
 from app.bot.stores import _load_clarify_store, _load_fix_store, flush_answer_ctx_store
 from app.bot.missed_questions import try_git_push_missed_questions
 from app.bot.wiki_reindex import SitemapMonitor, WikiReindexer
-from app.config import Settings, load_settings
+from app.config import Settings, load_environment_files, load_settings
 from app.error_codes_catalog import ensure_error_codes_catalog, merge_manual_overrides
 from app.resource_limits import apply_posix_virtual_memory_limit_mb
 from app.web_wiki_index import WebWikiIndex, WebWikiIndexer
@@ -220,8 +219,8 @@ def main() -> None:
     logging.info("Лог-файл: %s", log_path.resolve())
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    # Подхватываем .env, если он рядом с запуском.
-    load_dotenv(override=False)
+    # Сначала секреты, затем обычная конфигурация; переменные окружения процесса имеют приоритет.
+    load_environment_files()
 
     settings = load_settings()
 

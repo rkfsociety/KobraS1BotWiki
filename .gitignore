@@ -20,6 +20,7 @@ scripts/_tmp_*.py
 
 # Environment
 .env
+.env.secrets
 .env.local
 *.env.*
 

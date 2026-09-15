@@ -16,6 +16,8 @@ from dataclasses import dataclass
 
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 
 from app.default_developers import DEFAULT_DEVELOPER_USER_IDS
@@ -108,6 +110,12 @@ def _resolve_path(p: str) -> str:
         return str(path)
 
     return str((_project_root() / path).resolve())
+
+
+def load_environment_files() -> None:
+    """Загружает секреты отдельно и раньше обычной конфигурации."""
+    load_dotenv(dotenv_path=_project_root() / ".env.secrets", override=False)
+    load_dotenv(dotenv_path=_project_root() / ".env", override=False)
 
 
 
@@ -310,7 +318,7 @@ def load_settings() -> Settings:
 
     if not token:
 
-        raise RuntimeError("Не задан TELEGRAM_BOT_TOKEN в .env / переменных окружения. Создайте .env на основе .env.example")
+        raise RuntimeError("Не задан TELEGRAM_BOT_TOKEN в .env.secrets / переменных окружения. Создайте .env.secrets на основе .env.secrets.example")
 
 
 

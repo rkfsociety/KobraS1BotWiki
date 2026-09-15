@@ -7,7 +7,8 @@ Telegram-бот для групп поддержки Anycubic. Читает во
 ```bash
 python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.lock
-cp .env.example .env   # задать TELEGRAM_BOT_TOKEN, WIKI_BASE_URL, WIKI_SITEMAP_URL
+cp .env.example .env
+cp .env.secrets.example .env.secrets   # заполнить секреты отдельно
 python -m app.bot
 ```
 

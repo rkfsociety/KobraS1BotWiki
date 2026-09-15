@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.config import _get_int, _get_optional_int, _parse_literouter_models, load_settings
+from app.config import _get_int, _get_optional_int, _parse_literouter_models, load_environment_files, load_settings
 
 
 def test_get_int_falls_back_for_invalid_environment_value(monkeypatch):
@@ -36,3 +36,15 @@ def test_load_settings_uses_zero_for_daily_stats_general_topic(monkeypatch):
     monkeypatch.setenv("DAILY_STATS_TOPIC_ID", "0")
 
     assert load_settings().daily_stats_topic_id == 0
+
+
+def test_load_environment_files_loads_secrets_before_regular_env(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "app.config.load_dotenv",
+        lambda *, dotenv_path, override: calls.append((dotenv_path.name, override)),
+    )
+
+    load_environment_files()
+
+    assert calls == [(".env.secrets", False), (".env", False)]

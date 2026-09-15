@@ -15,10 +15,15 @@ if [[ -f .env ]]; then
 fi
 SCREEN_NAME="${BOT_SCREEN_NAME:-kobras1botwiki}"
 
-# Проверка наличия .env файла
+# Проверка наличия файлов конфигурации
 if [ ! -f ".env" ]; then
     echo "[ERROR] Не найден .env в папке проекта: $(pwd)"
-    echo "Скопируйте .env.example в .env и заполните TELEGRAM_BOT_TOKEN."
+    echo "Скопируйте .env.example в .env."
+    exit 1
+fi
+if [ ! -f ".env.secrets" ]; then
+    echo "[ERROR] Не найден .env.secrets в папке проекта: $(pwd)"
+    echo "Скопируйте .env.secrets.example в .env.secrets и заполните секреты."
     exit 1
 fi
 
