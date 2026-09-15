@@ -96,6 +96,8 @@ async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if tid is not None:
         parts.append(f"{html.escape(_t(lang, 'cmd_topic_id'))}: <code>{tid}</code>")
+    elif chat.type == ChatType.SUPERGROUP and getattr(chat, "is_forum", False):
+        parts.append(html.escape(_t(lang, "cmd_topic_general")))
 
     text = "\n".join(parts)
 

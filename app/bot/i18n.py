@@ -63,6 +63,10 @@ def _t(lang: str, key: str) -> str:
         "cmd_id": "ID этого чата:",
         "cmd_type": "Тип",
         "cmd_topic_id": "ID темы (topic_id, для ALLOWED_TOPIC_IDS)",
+        "cmd_topic_general": (
+            "Общая тема форума (General): Telegram не передал числовой thread_id; "
+            "для ALLOWED_TOPIC_IDS используйте 0"
+        ),
         "wiki_usage": "Использование: /wiki <вопрос или ключевые слова>",
         "wiki_nothing_found": "Ничего не нашёл в вики.",
         "wiki_low_conf": "Нашёл что-то похожее, но уверенность низкая. Попробуй уточнить запрос.",
@@ -153,6 +157,10 @@ def _t(lang: str, key: str) -> str:
         "cmd_id": "Chat ID:",
         "cmd_type": "Type",
         "cmd_topic_id": "Topic id (thread_id, for ALLOWED_TOPIC_IDS)",
+        "cmd_topic_general": (
+            "General forum topic: Telegram did not provide a numeric thread_id; "
+            "use 0 for ALLOWED_TOPIC_IDS"
+        ),
         "wiki_usage": "Usage: /wiki <question or keywords>",
         "wiki_nothing_found": "I couldn’t find anything in the wiki.",
         "wiki_low_conf": "I found something similar, but confidence is low. Try refining your query.",
