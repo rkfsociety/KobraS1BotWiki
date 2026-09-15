@@ -158,11 +158,13 @@ def _sanitize_daily_scope(value: object) -> dict[str, Any] | None:
     scope = _empty_daily_scope(day=day, chat_id=chat_id, topic_id=topic_id)
     scope["total_incoming"] = max(0, _safe_int(value.get("total_incoming")))
     scope["total_answers"] = max(0, _safe_int(value.get("total_answers")))
-    scope["topic_label"] = str(value.get("topic_label") or "")[:200]
+    # Старые версии записывали сюда заголовки ответов бота и показывали их
+    # как темы обсуждения. Входящие сообщения пользователей не должны
+    # наследовать эти метки, поэтому устаревшие поля намеренно не загружаем.
     hourly = value.get("hourly_activity")
     if isinstance(hourly, list) and len(hourly) == 24:
         scope["hourly_activity"] = [max(0, _safe_int(item)) for item in hourly]
-    for field, limit in (("topics", _MAX_UNIQUE_QUESTIONS), ("questions", _MAX_UNIQUE_QUESTIONS), ("wiki_pages", _MAX_WIKI_PAGES)):
+    for field, limit in (("questions", _MAX_UNIQUE_QUESTIONS), ("wiki_pages", _MAX_WIKI_PAGES)):
         raw = value.get(field)
         if isinstance(raw, dict):
             scope[field] = _bound_counter(
@@ -494,6 +496,8 @@ def record_answer(
     source="manual_qa" — ответ из ручного FAQ (url игнорируется)
 
     Гистограмму по часам не трогает — она считает входящие (record_incoming_activity).
+    Аргумент topic сохранён для совместимости, но ответы бота не становятся
+    темами дневной активности.
     """
     stats = _runtime_stats(bot_data)
 
@@ -521,12 +525,6 @@ def record_answer(
         day = _today_key()
         for scope in _daily_scopes_for_event(stats, day=day, chat_id=chat_id, topic_id=topic_id):
             scope["total_answers"] = max(0, _safe_int(scope.get("total_answers"))) + 1
-            topic_label = topic.strip()[:200] if topic and topic.strip() else ""
-            if topic_label and topic_id is not None and scope.get("topic_id") == topic_id:
-                scope["topic_label"] = topic_label
-                scope["topics"] = {topic_label: max(1, _safe_int(scope.get("total_incoming")))}
-            elif topic_label and topic_id is None:
-                _bump_daily_counter(scope, "topics", topic_label, limit=_MAX_UNIQUE_QUESTIONS)
             if q_norm:
                 _bump_daily_counter(scope, "questions", q_norm, limit=_MAX_UNIQUE_QUESTIONS)
             if source == "wiki" and url:
@@ -671,32 +669,9 @@ def get_daily_stats(
         result = _sanitize_daily_scope(scope) or _empty_daily_scope(
             day=normalized_day, chat_id=chat_id, topic_id=topic_id
         )
-    if topic_id is None:
-        # Для сводки группы добавляем распознанные форумные темы целиком,
-        # чтобы число возле темы означало сообщения, а не ответы бота.
-        topic_counts = dict(result.get("topics") or {})
-        scopes = stats.get("daily_scopes")
-        if isinstance(scopes, dict):
-            for candidate_raw in scopes.values():
-                candidate = _sanitize_daily_scope(candidate_raw)
-                if not candidate or candidate.get("chat_id") != chat_id or candidate.get("date") != normalized_day:
-                    continue
-                candidate_topic = candidate.get("topic_id")
-                if candidate_topic is None:
-                    continue
-                label = candidate.get("topic_label")
-                if isinstance(label, str) and label.strip():
-                    topic_counts[label] = topic_counts.get(label, 0) + max(
-                        0, _safe_int(candidate.get("total_incoming"))
-                    )
-                else:
-                    for label, count in (candidate.get("topics") or {}).items():
-                        topic_counts[label] = topic_counts.get(label, 0) + max(0, _safe_int(count))
-        result["topics"] = topic_counts
-    elif result.get("topic_label"):
-        result["topics"] = {
-            str(result["topic_label"]): max(1, _safe_int(result.get("total_incoming")))
-        }
+    # Темы сводки не строятся из ответов бота. Поля topics/topic_label,
+    # оставшиеся в старом кэше, очищаются через _sanitize_daily_scope.
+    result["topics"] = {}
     return result
 
 

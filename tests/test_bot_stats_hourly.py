@@ -68,7 +68,42 @@ def test_daily_stats_are_separated_by_group_and_topic():
     assert other_topic["total_answers"] == 0
     assert group["total_incoming"] == 3
     assert group["total_answers"] == 1
-    assert get_daily_top_topics(bd, chat_id=-100) == [("Настройка скоростей 3D-печати в слайсере", 2)]
+    assert get_daily_top_topics(bd, chat_id=-100) == []
+
+
+def test_bot_answer_labels_are_not_daily_topics():
+    bd: dict = {}
+    record_incoming_activity(bd, user_id=1, chat_id=-100, topic_id=7)
+    record_answer(
+        bd,
+        url="https://wiki.example/speed",
+        question="как настроить скорости",
+        source="wiki",
+        chat_id=-100,
+        topic_id=7,
+        topic="LiteRouter",
+    )
+
+    assert get_daily_top_topics(bd, chat_id=-100) == []
+    assert get_daily_stats(bd, chat_id=-100, topic_id=7)["topics"] == {}
+
+
+def test_legacy_bot_topics_are_ignored_when_reading_daily_stats():
+    bd = {
+        "bot_stats": {
+            "daily_scopes": {
+                "2026-09-14:-100:all": {
+                    "date": "2026-09-14",
+                    "chat_id": -100,
+                    "topic_id": None,
+                    "total_incoming": 4,
+                    "topics": {"LiteRouter": 6},
+                }
+            }
+        }
+    }
+
+    assert get_daily_top_topics(bd, chat_id=-100, day="2026-09-14") == []
     assert normalize_daily_date("not-a-date") is None
 
 

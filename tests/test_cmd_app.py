@@ -91,7 +91,7 @@ def test_cmd_stats_in_private_chat_uses_configured_group(monkeypatch):
     text = reply_text.await_args.args[0]
     assert "группе" in text
     assert "Всего было написано 2 сообщения" in text
-    assert "⚙️ Настройка скоростей (2 сообщения)" in text
+    assert "Настройка скоростей" not in text
 
 
 def test_cmd_stats_in_group_topic_requires_allowed_reply_context(monkeypatch):
@@ -133,4 +133,4 @@ def test_cmd_stats_in_group_topic_requires_allowed_reply_context(monkeypatch):
 
     asyncio.run(cmd_stats(update, context))
 
-    assert "Обсуждение стокового хотэнда (1 сообщение)" in reply_text.await_args.args[0]
+    assert "Обсуждение стокового хотэнда" not in reply_text.await_args.args[0]

@@ -343,7 +343,7 @@ def test_miniapp_stats_returns_daily_group_summary(monkeypatch):
 
     assert status == 200
     assert payload["metrics"]["total_incoming"] == 3
-    assert payload["topics"] == [{"title": "Настройка скоростей", "count": 3, "emoji": "⚙️"}]
+    assert payload["topics"] == []
     assert "Всего было написано 3 сообщения" in payload["summary"]
 
 
