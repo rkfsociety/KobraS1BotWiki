@@ -1,5 +1,21 @@
 [
   {
+    "text": "Закажи с доставкой на дальний восток... Доедет, отмени заказ)))",
+    "score": null,
+    "best_url": null,
+    "chat_id": -1002295062981,
+    "count": 1,
+    "ts": 1789589073.8617816
+  },
+  {
+    "text": "Резко вспомнил что в тачке в подстаканнике 3 сопла лежит",
+    "score": 10,
+    "best_url": "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-max/kobra-max-source-code",
+    "chat_id": -1003881305021,
+    "count": 1,
+    "ts": 1789588434.0102735
+  },
+  {
     "text": "Бедная кобра",
     "score": null,
     "best_url": null,
@@ -212,8 +228,8 @@
     "score": null,
     "best_url": null,
     "chat_id": -1002295062981,
-    "count": 1,
-    "ts": 1789569837.4879503
+    "count": 2,
+    "ts": 1789588797.28154
   },
   {
     "text": "Старпласт, птг, температура 230 была",
