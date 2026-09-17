@@ -198,6 +198,8 @@ async def _try_reply_manual_qa(
         msg,
         settings,
         body,
+        chat_store=context.application.bot_data.get("chat_store"),
+        source="manual_qa",
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True,
         log_kind=log_kind,

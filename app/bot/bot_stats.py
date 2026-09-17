@@ -1,6 +1,8 @@
 """Сбор статистики бота: топ вики/вопросов + активность чата по часам.
 
-Хранится в bot_data["bot_stats"] и персистируется в .cache/bot_stats.json.
+Агрегаты совместимости хранятся в bot_data["bot_stats"] и персистируются в
+.cache/bot_stats.json. Источник дневного количества сообщений после запуска
+единого ChatStore — каноническая база data/chat.sqlite3.
 Формат на диске:
   {
     "wiki_pages": {"<url>": <count>, ...},
@@ -21,10 +23,11 @@ import logging
 import math
 import threading
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from heapq import nlargest, nsmallest
+from zoneinfo import ZoneInfo
 
 from app.bot.stores import _save_interval_elapsed, _save_json_atomic
 
@@ -41,6 +44,7 @@ _MAX_STATS_CACHE_BYTES = 16 * 1024 * 1024
 _STATS_VERSION = 3
 _DAILY_RETENTION_DAYS = 31
 _MAX_DAILY_SCOPES = 2048
+_STATS_TIMEZONE = ZoneInfo("Europe/Kaliningrad")
 
 
 def _stats_path() -> Path:
@@ -98,6 +102,13 @@ def _normalize_date_key(value: Any) -> str | None:
 def normalize_daily_date(value: Any = None) -> str | None:
     """Проверяет дату дневной статистики и возвращает ISO-формат."""
     return _normalize_date_key(value)
+
+
+def _daily_epoch_bounds(day: str) -> tuple[float, float]:
+    """Возвращает UTC-границы локального календарного дня статистики."""
+    start = datetime.fromisoformat(day).replace(tzinfo=_STATS_TIMEZONE)
+    end = start + timedelta(days=1)
+    return start.astimezone(timezone.utc).timestamp(), end.astimezone(timezone.utc).timestamp()
 
 
 def _daily_scope_key(*, day: str, chat_id: int, topic_id: int | None) -> str:
@@ -669,6 +680,23 @@ def get_daily_stats(
         result = _sanitize_daily_scope(scope) or _empty_daily_scope(
             day=normalized_day, chat_id=chat_id, topic_id=topic_id
         )
+    chat_store = bot_data.get("chat_store")
+    if chat_store is not None:
+        try:
+            start_ts, end_ts = _daily_epoch_bounds(normalized_day)
+            stored_incoming = chat_store.count_chat_messages(
+                chat_id, start_ts, end_ts, topic_id=topic_id, role="user"
+            )
+            stored_answers = chat_store.count_chat_messages(
+                chat_id, start_ts, end_ts, topic_id=topic_id, role="bot"
+            )
+            # До первой записи в новой базе сохраняем доступ к старой агрегированной
+            # статистике. После появления сообщений источником становятся только SQL-данные.
+            if stored_incoming or stored_answers:
+                result["total_incoming"] = stored_incoming
+                result["total_answers"] = stored_answers
+        except Exception:
+            log.exception("Не удалось прочитать дневную статистику из общей базы")
     # Темы сводки не строятся из ответов бота. Поля topics/topic_label,
     # оставшиеся в старом кэше, очищаются через _sanitize_daily_scope.
     result["topics"] = {}

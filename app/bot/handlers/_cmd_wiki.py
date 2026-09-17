@@ -185,6 +185,8 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         msg,
         settings,
         reply,
+        chat_store=context.application.bot_data.get("chat_store"),
+        source="wiki",
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=False,
         log_kind="cmd_wiki",

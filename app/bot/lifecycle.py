@@ -31,6 +31,7 @@ from telegram.ext import (
 
 from app.bot.error_display import _load_manual_error_codes
 from app.bot.git_autopull import git_sync_from_remote, project_repo_root, schedule_restart_after_pull
+from app.bot.chat_store import ChatStore
 from app.bot.handlers import (
     cmd_admincheck,
     cmd_app,
@@ -256,6 +257,7 @@ def main() -> None:
 
     app = Application.builder().token(settings.telegram_bot_token).build()
     app.bot_data["settings"] = settings
+    app.bot_data["chat_store"] = ChatStore(project_repo_root() / "data" / "chat.sqlite3")
     if log_mirror_handler is not None:
         app.bot_data["log_mirror_handler"] = log_mirror_handler
     app.bot_data["wiki_index"] = wiki_index

@@ -193,7 +193,9 @@ class _PanelState:
         # кэш админов группы: {"chat": int, "ids": set[int], "exp": float}
         self.admin_cache: dict[str, Any] = {}
         self.miniapp_sessions: dict[str, dict[str, Any]] = {}
-        self.chat_store = ChatStore(project_repo_root() / "data" / "chat.sqlite3")
+        self.chat_store = application.bot_data.get("chat_store") or ChatStore(
+            project_repo_root() / "data" / "chat.sqlite3"
+        )
         self.lock = threading.Lock()
         self._load_sessions()
 

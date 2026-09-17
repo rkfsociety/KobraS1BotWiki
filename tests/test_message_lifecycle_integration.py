@@ -3,9 +3,13 @@ from __future__ import annotations
 
 import asyncio
 import types
+from datetime import datetime, timezone
+from pathlib import Path
 
+from telegram import Chat, Message, Update, User
 from telegram.constants import ChatType
 
+from app.bot.chat_store import ChatStore
 from app.bot.handlers import _on_message as message_module
 from app.bot.lifecycle import _register_handlers
 
@@ -103,6 +107,36 @@ def test_message_outside_allowed_topic_is_included_in_daily_stats(monkeypatch):
 
     assert recorded[0]["topic_id"] == 99
     assert recorded[0]["track_daily"] is True
+
+
+def test_any_update_persists_group_message_before_reply_filters(tmp_path: Path):
+    store = ChatStore(tmp_path / "chat.sqlite3")
+    try:
+        user = User(id=7, first_name="Роман", is_bot=False)
+        chat = Chat(id=-100123, type=ChatType.SUPERGROUP)
+        message = Message(
+            message_id=10,
+            date=datetime.now(timezone.utc),
+            chat=chat,
+            from_user=user,
+            text="вопрос для общей базы",
+        )
+        update = Update(update_id=1, message=message)
+        context = types.SimpleNamespace(
+            application=types.SimpleNamespace(
+                bot_data={"chat_store": store, "settings": _Settings()}
+            )
+        )
+
+        asyncio.run(message_module.on_any_update(update, context))
+
+        saved = store.list_chat_messages(-100123, 0, datetime.now(timezone.utc).timestamp() + 1)
+        assert len(saved) == 1
+        assert saved[0].text == "вопрос для общей базы"
+        assert saved[0].chat_id == -100123
+        assert saved[0].telegram_message_id == 10
+    finally:
+        store.close()
 
 
 def test_chatter_is_filtered_before_search_or_reply(monkeypatch):
@@ -207,8 +241,8 @@ def test_lifecycle_registers_commands_update_and_message_handlers_in_order():
     callbacks = [getattr(handler, "callback", None).__name__ for handler, _ in app.handlers]
     assert callbacks[:15] == [
         "cmd_start", "cmd_help", "cmd_id", "cmd_admincheck", "cmd_app", "cmd_wiki",
-        "cmd_ping", "cmd_status", "cmd_stats", "cmd_error", "cmd_fix", "cmd_qaadd", "cmd_qalist",
-        "cmd_qadel", "cmd_update",
+        "cmd_ii", "cmd_ping", "cmd_status", "cmd_stats", "cmd_error", "cmd_fix", "cmd_qaadd",
+        "cmd_qalist", "cmd_qadel",
     ]
     assert "on_channel_command" in callbacks
     assert "on_any_update" in callbacks

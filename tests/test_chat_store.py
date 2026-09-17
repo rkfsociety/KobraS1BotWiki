@@ -30,6 +30,9 @@ def test_creates_database_schema_and_indexes(tmp_path: Path) -> None:
         assert {"chat_messages", "rate_limit_events"} <= tables
         assert {
             "idx_chat_messages_user_id_id",
+            "idx_chat_messages_chat_created_at",
+            "idx_chat_messages_chat_topic_created_at",
+            "idx_chat_messages_telegram_identity",
             "idx_chat_messages_user_id_created_at",
             "idx_chat_messages_duplicate_lookup",
             "idx_chat_messages_role_id",
@@ -65,6 +68,7 @@ def test_existing_schema_is_migrated_and_message_url_is_preserved(tmp_path: Path
                 row[1] for row in connection.execute("PRAGMA table_info(chat_messages)")
             }
         assert "url" in columns
+        assert {"chat_id", "topic_id", "telegram_message_id"} <= columns
         message = store.add_message(1, "bot", "Откройте wiki", "wiki", url="https://wiki.example/page")
         assert message.url == "https://wiki.example/page"
         assert store.list_messages(1)[0].url == "https://wiki.example/page"
@@ -109,6 +113,56 @@ def test_messages_support_cursor_pagination(tmp_path: Path) -> None:
         assert [message.text for message in store.list_messages(1, limit=2, before_id=messages[3].id)] == [
             "1",
             "2",
+        ]
+    finally:
+        store.close()
+
+
+def test_telegram_messages_are_separated_by_group_and_topic(tmp_path: Path) -> None:
+    store = ChatStore(tmp_path / "chat.sqlite3")
+    try:
+        first = store.add_telegram_message(
+            chat_id=-100,
+            topic_id=7,
+            telegram_message_id=11,
+            user_id=1,
+            text="первое сообщение",
+        )
+        duplicate = store.add_telegram_message(
+            chat_id=-100,
+            topic_id=7,
+            telegram_message_id=11,
+            user_id=1,
+            text="повторная доставка",
+        )
+        store.add_telegram_message(
+            chat_id=-100,
+            topic_id=8,
+            telegram_message_id=12,
+            user_id=2,
+            text="другая тема",
+        )
+        store.add_telegram_message(
+            chat_id=-200,
+            topic_id=7,
+            telegram_message_id=13,
+            user_id=3,
+            text="другая группа",
+        )
+
+        assert duplicate == first
+        assert first.chat_id == -100
+        assert first.topic_id == 7
+        assert first.telegram_message_id == 11
+        assert [m.text for m in store.list_chat_messages(-100, 0, first.created_at + 10)] == [
+            "первое сообщение",
+            "другая тема",
+        ]
+        assert [m.text for m in store.list_chat_messages(-100, 0, first.created_at + 10, topic_id=7)] == [
+            "первое сообщение",
+        ]
+        assert [m.text for m in store.list_chat_messages(-200, 0, first.created_at + 10)] == [
+            "другая группа",
         ]
     finally:
         store.close()

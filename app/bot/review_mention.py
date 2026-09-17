@@ -1,6 +1,9 @@
 """Упоминание ревьюера в ответах бота в группах (чтобы приходило уведомление)."""
 from __future__ import annotations
 
+import logging
+from typing import Any
+
 from telegram import Message
 from telegram.constants import ChatType
 
@@ -39,6 +42,8 @@ async def reply_for_user(
     log_kind: str | None = None,
     log_extra: dict | None = None,
     log_user_id: int | None = None,
+    chat_store: Any = None,
+    source: str | None = None,
     **kwargs,
 ) -> Message:
     """reply_text с @ревьюером в группах (не в личке); опционально — лог в зеркало Telegram."""
@@ -46,6 +51,21 @@ async def reply_for_user(
     if should_tag_reviewer(msg):
         body = with_review_mention(text, settings)
     sent = await msg.reply_text(body, **kwargs)
+    if chat_store is not None:
+        try:
+            chat = msg.chat
+            chat_store.add_telegram_message(
+                chat_id=chat.id,
+                topic_id=getattr(msg, "message_thread_id", None),
+                telegram_message_id=sent.message_id,
+                user_id=getattr(getattr(sent, "from_user", None), "id", None) or 0,
+                text=body,
+                role="bot",
+                source=source or log_kind or "telegram",
+                reply_to_id=getattr(msg, "message_id", None),
+            )
+        except Exception:
+            logging.exception("Не удалось сохранить ответ Telegram в общей базе")
     if log_kind:
         from app.bot.reply_logging import log_bot_reply_for_message
 

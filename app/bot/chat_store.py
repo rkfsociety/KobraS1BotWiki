@@ -1,3 +1,4 @@
+"""Каноническое SQLite-хранилище сообщений Mini App и Telegram-групп."""
 from __future__ import annotations
 
 import math
@@ -18,6 +19,9 @@ class ChatMessage:
     created_at: float
     reply_to_id: int | None
     url: str | None = None
+    chat_id: int | None = None
+    topic_id: int | None = None
+    telegram_message_id: int | None = None
 
 
 class ChatStore:
@@ -35,6 +39,9 @@ class ChatStore:
                 CREATE TABLE IF NOT EXISTS chat_messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
+                    chat_id INTEGER,
+                    topic_id INTEGER,
+                    telegram_message_id INTEGER,
                     role TEXT NOT NULL,
                     text TEXT NOT NULL,
                     source TEXT NOT NULL,
@@ -69,6 +76,33 @@ class ChatStore:
             }
             if "url" not in columns:
                 self._connection.execute("ALTER TABLE chat_messages ADD COLUMN url TEXT")
+            for column, definition in (
+                ("chat_id", "INTEGER"),
+                ("topic_id", "INTEGER"),
+                ("telegram_message_id", "INTEGER"),
+            ):
+                if column not in columns:
+                    self._connection.execute(
+                        f"ALTER TABLE chat_messages ADD COLUMN {column} {definition}"
+                    )
+            self._connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_created_at
+                    ON chat_messages (chat_id, created_at, id)
+                """
+            )
+            self._connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_topic_created_at
+                    ON chat_messages (chat_id, topic_id, created_at, id)
+                """
+            )
+            self._connection.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_messages_telegram_identity
+                    ON chat_messages (chat_id, telegram_message_id)
+                """
+            )
             self._connection.commit()
 
     def close(self) -> None:
@@ -83,15 +117,24 @@ class ChatStore:
         source: str,
         reply_to_id: int | None = None,
         url: str | None = None,
+        chat_id: int | None = None,
+        topic_id: int | None = None,
+        telegram_message_id: int | None = None,
     ) -> ChatMessage:
         created_at = time.time()
         with self._lock, self._connection:
             cursor = self._connection.execute(
                 """
-                INSERT INTO chat_messages (user_id, role, text, source, created_at, reply_to_id, url)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO chat_messages (
+                    user_id, chat_id, topic_id, telegram_message_id,
+                    role, text, source, created_at, reply_to_id, url
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (user_id, role, text, source, created_at, reply_to_id, url),
+                (
+                    user_id, chat_id, topic_id, telegram_message_id,
+                    role, text, source, created_at, reply_to_id, url,
+                ),
             )
             message_id = int(cursor.lastrowid)
         # Все значения, кроме AUTOINCREMENT id, уже есть у вызывающего кода;
@@ -105,7 +148,59 @@ class ChatStore:
             created_at=created_at,
             reply_to_id=reply_to_id,
             url=url,
+            chat_id=chat_id,
+            topic_id=topic_id,
+            telegram_message_id=telegram_message_id,
         )
+
+    def add_telegram_message(
+        self,
+        *,
+        chat_id: int,
+        topic_id: int | None,
+        telegram_message_id: int,
+        user_id: int,
+        text: str,
+        role: str = "user",
+        source: str = "telegram",
+        reply_to_id: int | None = None,
+        url: str | None = None,
+    ) -> ChatMessage:
+        """Сохраняет Telegram-сообщение в общей базе идемпотентно."""
+        with self._lock:
+            existing = self._connection.execute(
+                """
+                SELECT * FROM chat_messages
+                WHERE chat_id = ? AND telegram_message_id = ?
+                """,
+                (chat_id, telegram_message_id),
+            ).fetchone()
+            if existing is not None:
+                return self._message_from_row(existing)
+            try:
+                return self.add_message(
+                    user_id,
+                    role,
+                    text,
+                    source,
+                    reply_to_id=reply_to_id,
+                    url=url,
+                    chat_id=chat_id,
+                    topic_id=topic_id,
+                    telegram_message_id=telegram_message_id,
+                )
+            except sqlite3.IntegrityError:
+                # Another worker may have inserted the same Telegram update.
+                existing = self._connection.execute(
+                    """
+                    SELECT * FROM chat_messages
+                    WHERE chat_id = ? AND telegram_message_id = ?
+                    """,
+                    (chat_id, telegram_message_id),
+                ).fetchone()
+                if existing is None:
+                    raise
+                return self._message_from_row(existing)
 
     def add_exchange(
         self,
@@ -174,6 +269,62 @@ class ChatStore:
         with self._lock:
             rows = self._connection.execute(query, parameters).fetchall()
         return [self._message_from_row(row) for row in reversed(rows)]
+
+    def list_chat_messages(
+        self,
+        chat_id: int,
+        start_ts: float,
+        end_ts: float,
+        *,
+        topic_id: int | None = None,
+        role: str | None = "user",
+        limit: int | None = None,
+    ) -> list[ChatMessage]:
+        """Возвращает сообщения группы за интервал, разделяя форумные темы."""
+        if end_ts <= start_ts or (limit is not None and limit <= 0):
+            return []
+        query = """
+            SELECT * FROM chat_messages
+            WHERE chat_id = ? AND created_at >= ? AND created_at < ?
+        """
+        parameters: list[object] = [chat_id, start_ts, end_ts]
+        if topic_id is not None:
+            query += " AND topic_id = ?"
+            parameters.append(topic_id)
+        if role is not None:
+            query += " AND role = ?"
+            parameters.append(role)
+        query += " ORDER BY created_at ASC, id ASC"
+        if limit is not None:
+            query += " LIMIT ?"
+            parameters.append(limit)
+        with self._lock:
+            rows = self._connection.execute(query, parameters).fetchall()
+        return [self._message_from_row(row) for row in rows]
+
+    def count_chat_messages(
+        self,
+        chat_id: int,
+        start_ts: float,
+        end_ts: float,
+        *,
+        topic_id: int | None = None,
+        role: str | None = "user",
+    ) -> int:
+        """Считает сообщения группы за интервал из канонической базы."""
+        query = """
+            SELECT COUNT(*) FROM chat_messages
+            WHERE chat_id = ? AND created_at >= ? AND created_at < ?
+        """
+        parameters: list[object] = [chat_id, start_ts, end_ts]
+        if topic_id is not None:
+            query += " AND topic_id = ?"
+            parameters.append(topic_id)
+        if role is not None:
+            query += " AND role = ?"
+            parameters.append(role)
+        with self._lock:
+            return int(self._connection.execute(query, parameters).fetchone()[0])
 
     def allow_request(self, user_id: int, now: float | None = None) -> tuple[bool, int]:
         now = time.time() if now is None else now
@@ -366,4 +517,7 @@ class ChatStore:
             created_at=row["created_at"],
             reply_to_id=row["reply_to_id"],
             url=row["url"],
+            chat_id=row["chat_id"],
+            topic_id=row["topic_id"],
+            telegram_message_id=row["telegram_message_id"],
         )

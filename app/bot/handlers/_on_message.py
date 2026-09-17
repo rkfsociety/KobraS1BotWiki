@@ -94,14 +94,33 @@ async def on_any_update(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     Диагностика: логируем факт получения любого update, чтобы понять
     приходит ли вообще обычный message в бота.
     """
-    settings = context.application.bot_data.get("settings")
-    if not settings or not getattr(settings, "log_decisions", False):
-        return
-
     try:
         if isinstance(update, Update):
             chat = update.effective_chat
             m = update.effective_message
+            # Это единственная точка записи входящих Telegram-сообщений:
+            # сохраняем текст до фильтров ответа, включая команды и оффтоп.
+            if (update.message or update.channel_post) and chat and m:
+                from_user = m.from_user
+                text = m.text if m.text is not None else m.caption
+                if text and text.strip() and not (from_user and getattr(from_user, "is_bot", False)):
+                    chat_store = context.application.bot_data.get("chat_store")
+                    if chat_store is not None:
+                        try:
+                            chat_store.add_telegram_message(
+                                chat_id=chat.id,
+                                topic_id=m.message_thread_id,
+                                telegram_message_id=m.message_id,
+                                user_id=from_user.id if from_user else 0,
+                                text=text.strip(),
+                            )
+                        except Exception:
+                            logging.exception("Не удалось сохранить Telegram-сообщение в общей базе")
+
+            settings = context.application.bot_data.get("settings")
+            if not settings or not getattr(settings, "log_decisions", False):
+                return
+
             if chat and m and not chat_topic_in_allowed_lists(
                 allowed_chat_ids=settings.allowed_chat_ids,
                 allowed_topic_ids=settings.allowed_topic_ids,
@@ -188,6 +207,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         bot_can_send=bot_can_send,
     )
 
+    # В группах часто вопросы прилетают как "text", но иногда как подпись к медиа.
+    raw_text = msg.text if msg.text is not None else msg.caption
+    text = raw_text.strip() if raw_text else ""
+
     # Активность чата: считаем все входящие сообщения группы, даже если бот
     # не может отвечать в этой теме. Ограничения темы относятся только к ответу.
     try:
@@ -203,15 +226,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 track_daily=True,
             )
     except Exception:
-        pass
-
-    # В группах часто вопросы прилетают как "text", но иногда как подпись к медиа.
-    raw_text = msg.text if msg.text is not None else msg.caption
-
-    if not raw_text:
-        return
-
-    text = raw_text.strip()
+        logging.exception("Не удалось обработать входящее Telegram-сообщение")
 
     if not text:
         return
@@ -371,6 +386,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                     msg,
                     settings,
                     formatted,
+                    chat_store=context.application.bot_data.get("chat_store"),
+                    source="error_code",
                     parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True,
                     log_kind="error_code_text",
@@ -548,6 +565,8 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         msg,
         settings,
         reply,
+        chat_store=context.application.bot_data.get("chat_store"),
+        source="wiki",
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=False,
         log_kind="wiki",

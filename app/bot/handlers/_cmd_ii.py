@@ -317,6 +317,8 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         target,
         settings,
         message_parts[0],
+        chat_store=context.application.bot_data.get("chat_store"),
+        source="ai",
         disable_web_page_preview=False,
         log_kind="cmd_ii",
         log_extra={
