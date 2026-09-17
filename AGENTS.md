@@ -28,7 +28,7 @@
 
 ## Деплой и сервер
 
-- Бот запускается **только** под пользователем `anycubicwikibot` (git-алиас `github-kobra` настроен только у него; под root `git pull` падает и плодит дубли). Подробности — в `/home/dshome/.codex/project_memories/KobraS1BotWiki.md` (секция `server-deployment`; файл вне git).
+- Бот запускается **только** под пользователем `anycubicwikibot` (git-алиас `github-kobra` настроен только у него; под root `git pull` падает и плодит дубли). Подробности хранятся в `.codex/project-memory.md` (секция `server-deployment`).
 - Поток: запушить с локалки → на сервере `git pull --ff-only` под `anycubicwikibot` → `sudo systemctl restart kobras1botwiki.service` (суффикс `.service` обязателен для NOPASSWD-sudo).
 - Перед своим push всегда `git pull` — живой бот сам коммитит data-файлы. data-файлы на сервере перед pull сбрасывать (`git checkout -- data/`).
 
