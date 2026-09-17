@@ -141,19 +141,36 @@ echo "[OK] $SERVICE active (MainPID=$main_pid)"
 # После успешной миграции runtime-state больше не зависит от tracked JSON.
 git checkout -- data/
 
-sudo install -o root -g root -m 0644 \
+if sudo -n install -o root -g root -m 0644 \
     "$REPO_DIR/deploy/$BACKUP_SERVICE" \
-    "/etc/systemd/system/$BACKUP_SERVICE"
-sudo install -o root -g root -m 0644 \
+    "/etc/systemd/system/$BACKUP_SERVICE" 2>/dev/null && \
+   sudo -n install -o root -g root -m 0644 \
     "$REPO_DIR/deploy/$BACKUP_TIMER" \
-    "/etc/systemd/system/$BACKUP_TIMER"
-sudo systemctl daemon-reload
-sudo systemctl enable --now "$BACKUP_TIMER"
-sudo systemctl start "$BACKUP_SERVICE"
+    "/etc/systemd/system/$BACKUP_TIMER" 2>/dev/null; then
+    sudo -n systemctl daemon-reload
+    sudo -n systemctl enable --now "$BACKUP_TIMER"
+    sudo -n systemctl start "$BACKUP_SERVICE"
 
-if ! systemctl is-enabled --quiet "$BACKUP_TIMER"; then
-    echo "[ERROR] $BACKUP_TIMER не включён" >&2
-    systemctl status "$BACKUP_TIMER" --no-pager || true
-    exit 1
+    if ! systemctl is-enabled --quiet "$BACKUP_TIMER"; then
+        echo "[ERROR] $BACKUP_TIMER не включён" >&2
+        systemctl status "$BACKUP_TIMER" --no-pager || true
+        exit 1
+    fi
+    echo "[OK] $BACKUP_TIMER enabled; первичный backup создан"
+else
+    cron_marker="# KobraS1BotWiki daily SQLite backup"
+    cron_line="30 3 * * * cd \"$REPO_DIR\" && \"$python_bin\" \"$REPO_DIR/scripts/backup_chat_database.py\" --keep-days 14 >> \"$REPO_DIR/.cache/db-backups/cron.log\" 2>&1 $cron_marker"
+    current_crontab="$(crontab -l 2>/dev/null || true)"
+    if ! grep -Fq "$cron_marker" <<< "$current_crontab"; then
+        {
+            [[ -n "$current_crontab" ]] && printf '%s\n' "$current_crontab"
+            printf '%s\n' "$cron_line"
+        } | crontab -
+    fi
+    if ! crontab -l 2>/dev/null | grep -Fq "$cron_marker"; then
+        echo "[ERROR] Не удалось установить ежедневный backup в crontab" >&2
+        exit 1
+    fi
+    "$python_bin" "$REPO_DIR/scripts/backup_chat_database.py" --keep-days 14
+    echo "[OK] Daily backup configured via user crontab; первичный backup создан"
 fi
-echo "[OK] $BACKUP_TIMER enabled; первичный backup создан"

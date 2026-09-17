@@ -94,9 +94,11 @@ SQLite и JSON-источников в `.cache/migration-backups/`, сохран
 `chat_messages` и всех обязательных runtime namespace в `bot_state`.
 
 При штатном запуске `./deploy/update-and-restart.sh` units устанавливаются и
-таймер включается автоматически. Для ручной установки (например, при первом
-развёртывании отдельно от обновления кода) используйте от имени пользователя
-с правами sudo:
+таймер включается автоматически, если у deploy-пользователя есть NOPASSWD для
+установки systemd units. Если таких прав нет, скрипт идемпотентно добавляет
+ежедневную задачу в пользовательский crontab и сразу создаёт первичную копию.
+Для ручной установки systemd units (например, при первом развёртывании
+отдельно от обновления кода) используйте от имени пользователя с правами sudo:
 
 ```bash
 sudo cp deploy/kobras1botwiki-db-backup.service /etc/systemd/system/
@@ -107,6 +109,10 @@ sudo systemctl start kobras1botwiki-db-backup.service
 systemctl list-timers kobras1botwiki-db-backup.timer
 ls -l /home/anycubicwikibot/KobraS1BotWiki/.cache/db-backups/
 ```
+
+При fallback через crontab проверяйте запись `# KobraS1BotWiki daily SQLite
+backup` командой `crontab -l`, а журнал запусков — в
+`.cache/db-backups/cron.log`.
 
 Пушить рабочие данные очередей и состояния в Git больше не требуется: Git
 используется только для кода и конфигурации, а резервирование рабочих данных
