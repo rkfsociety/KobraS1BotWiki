@@ -1,25 +1,17 @@
-"""Ручные пары «вопрос → ответ»: файл ``data/manual_qa.json`` в корне репозитория (в git).
-
-После изменений через /qaadd и /qadel при ``MANUAL_QA_GIT_PUSH=1`` (по умолчанию включено)
-выполняются ``git add``, ``git commit``, ``git push`` — запись попадает на GitHub
-(нужны настроенные credentials на сервере).
-
-При первом запуске данные из ``.cache/manual_qa.json`` копируются в ``data/manual_qa.json``.
-"""
+"""Ручные пары «вопрос → ответ» в общей базе ``data/chat.sqlite3``."""
 from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import shutil
-import subprocess
 import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
 from app.bot.git_autopull import project_repo_root
+from app.bot.state_store import load_state as load_db_state, save_state as save_db_state
 from app.bot.stores import _norm_text, _save_json_atomic
 
 # В файле уже есть больше 250 рабочих FAQ; запас предотвращает потерю
@@ -131,6 +123,16 @@ def _default_entries() -> list[dict[str, Any]]:
 def load_manual_qa_store() -> list[dict[str, Any]]:
     _migrate_legacy_cache_if_needed()
     p = _manual_qa_path()
+    is_db, db_raw = load_db_state(
+        "manual_qa", p, _default_entries(), max_bytes=_MAX_FILE_BYTES
+    )
+    if is_db:
+        raw = db_raw
+        if isinstance(raw, list):
+            return [x for x in raw if isinstance(x, dict)][:_MAX_ENTRIES]
+        if isinstance(raw, dict) and isinstance(raw.get("entries"), list):
+            return [x for x in raw["entries"] if isinstance(x, dict)][:_MAX_ENTRIES]
+        return _default_entries()
     try:
         if not p.exists():
             return _default_entries()
@@ -149,69 +151,9 @@ def load_manual_qa_store() -> list[dict[str, Any]]:
 def save_manual_qa_store(entries: list[dict[str, Any]]) -> None:
     _MATCH_CACHE.pop(id(entries), None)
     p = _manual_qa_path()
+    if save_db_state("manual_qa", p, entries[:_MAX_ENTRIES]):
+        return
     _save_json_atomic(p, entries[:_MAX_ENTRIES], indent=2)
-
-
-def try_git_push_manual_qa() -> tuple[bool, str]:
-    """
-    git add data/manual_qa.json && commit && push в корне репозитория.
-    """
-    repo = project_repo_root()
-    rel = "data/manual_qa.json"
-    path = repo / rel
-    if not path.is_file():
-        return False, "нет файла data/manual_qa.json"
-    env = os.environ.copy()
-    env["GIT_TERMINAL_PROMPT"] = "0"
-
-    def run(args: list[str]) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            args,
-            cwd=str(repo),
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
-        )
-
-    if not (repo / ".git").exists():
-        return False, "нет .git — только локальный файл"
-
-    ad = run(["git", "add", "--", rel])
-    if ad.returncode != 0:
-        return False, (ad.stderr or ad.stdout or "git add").strip()[:500]
-
-    diff = run(["git", "diff", "--staged", "--quiet"])
-    if diff.returncode == 0:
-        return True, "в git без изменений"
-
-    cm = run(
-        [
-            "git",
-            "-c",
-            "user.email=bot@kobra-wiki.local",
-            "-c",
-            "user.name=KobraS1BotWiki",
-            "commit",
-            "-m",
-            "chore(bot): update manual_qa.json",
-        ]
-    )
-    if cm.returncode != 0:
-        err = (cm.stderr or cm.stdout or "").strip()
-        if "nothing to commit" in err.lower():
-            return True, "нечего коммитить"
-        return False, err[:500] if err else "git commit failed"
-
-    pull = run(["git", "pull", "--ff-only"])
-    if pull.returncode != 0:
-        return False, (pull.stderr or pull.stdout or "git pull failed").strip()[:500]
-
-    ps = run(["git", "push"])
-    if ps.returncode != 0:
-        return False, (ps.stderr or ps.stdout or "git push").strip()[:500]
-    return True, "отправлено в origin"
 
 
 def _normalize_keys(raw_keys: list[str]) -> list[str]:

@@ -239,10 +239,6 @@ class Settings:
 
     git_restart_command: str | None
 
-    #: После /qaadd и /qadel — git commit + push ``data/manual_qa.json`` (по умолчанию вкл.; выкл.: MANUAL_QA_GIT_PUSH=0)
-
-    manual_qa_git_push: bool
-
     #: Разработчики: служебные команды в группах как у админа; без антиспама и без кулдаунов clarify (см. DEVELOPER_USER_IDS)
 
     developer_user_ids: frozenset[int]
@@ -449,10 +445,6 @@ def load_settings() -> Settings:
     else:
 
         git_restart_command = None
-
-
-
-    manual_qa_git_push = _get_bool("MANUAL_QA_GIT_PUSH", True)
 
 
 
@@ -730,8 +722,6 @@ def load_settings() -> Settings:
         git_autopull_branch=git_autopull_branch,
 
         git_restart_command=git_restart_command,
-
-        manual_qa_git_push=manual_qa_git_push,
 
         developer_user_ids=developer_user_ids,
 

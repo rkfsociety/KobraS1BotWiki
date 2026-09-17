@@ -47,18 +47,53 @@ def record_sent_bot_message(
         return
     try:
         chat = msg.chat
-        chat_store.add_telegram_message(
+        record_outgoing_bot_message(
+            chat_store,
+            sent,
             chat_id=chat.id,
             topic_id=getattr(msg, "message_thread_id", None),
-            telegram_message_id=sent.message_id,
-            user_id=getattr(getattr(sent, "from_user", None), "id", None) or 0,
             text=(getattr(sent, "text", None) if text is None else text) or "",
-            role="bot",
             source=source,
             reply_to_id=getattr(msg, "message_id", None),
         )
     except Exception:
         logging.exception("Не удалось сохранить ответ Telegram в общей базе")
+
+
+def record_outgoing_bot_message(
+    chat_store: Any,
+    sent: Message,
+    *,
+    chat_id: int,
+    topic_id: int | None = None,
+    text: str = "",
+    source: str = "telegram",
+    reply_to_id: int | None = None,
+) -> None:
+    """Единая запись любого успешно отправленного Telegram-сообщения бота."""
+    if chat_store is None or not getattr(sent, "message_id", None):
+        return
+    try:
+        sender = getattr(sent, "from_user", None)
+        message_kwargs = dict(
+            chat_id=chat_id,
+            topic_id=topic_id,
+            telegram_message_id=sent.message_id,
+            user_id=getattr(sender, "id", None) or 0,
+            text=text,
+            role="bot",
+            source=source,
+            reply_to_id=reply_to_id,
+        )
+        username = getattr(sender, "username", None)
+        first_name = getattr(sender, "first_name", None)
+        if username is not None:
+            message_kwargs["username"] = username
+        if first_name is not None:
+            message_kwargs["first_name"] = first_name
+        chat_store.add_telegram_message(**message_kwargs)
+    except Exception:
+        logging.exception("Не удалось записать исходящее сообщение в общей базе")
 
 
 async def reply_for_user(

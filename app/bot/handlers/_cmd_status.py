@@ -16,6 +16,7 @@ from app.bot.bot_stats import get_daily_stats, get_daily_top_topics, normalize_d
 from app.bot.i18n import _lang_from_message, _t
 from app.bot.reply_access import bot_can_reply_in_context, chat_topic_in_allowed_lists
 from app.bot.reply_logging import log_bot_reply_for_message
+from app.bot.review_mention import record_outgoing_bot_message
 from app.web_wiki_index import WebWikiIndex
 
 from ._utils import _deny_unless_admin_command_access, _safe_runtime_timestamp
@@ -231,13 +232,31 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     settings = context.application.bot_data.get("settings")
     day = _stats_date_arg(context)
     if day is None:
-        await msg.reply_text("Дата должна быть в формате YYYY-MM-DD и находиться в пределах последних 31 дней.")
+        text = "Дата должна быть в формате YYYY-MM-DD и находиться в пределах последних 31 дней."
+        sent = await msg.reply_text(text)
+        record_outgoing_bot_message(
+            context.application.bot_data.get("chat_store"), sent,
+            chat_id=chat.id,
+            topic_id=getattr(msg, "message_thread_id", None),
+            text=text,
+            source="cmd_stats",
+            reply_to_id=msg.message_id,
+        )
         return
 
     if chat.type == ChatType.PRIVATE:
         target_chat_id = getattr(settings, "panel_admin_chat_id", None)
         if not isinstance(target_chat_id, int) or isinstance(target_chat_id, bool) or target_chat_id == 0:
-            await msg.reply_text("Статистика группы пока не настроена: задайте PANEL_ADMIN_CHAT_ID.")
+            text = "Статистика группы пока не настроена: задайте PANEL_ADMIN_CHAT_ID."
+            sent = await msg.reply_text(text)
+            record_outgoing_bot_message(
+                context.application.bot_data.get("chat_store"), sent,
+                chat_id=chat.id,
+                topic_id=getattr(msg, "message_thread_id", None),
+                text=text,
+                source="cmd_stats",
+                reply_to_id=msg.message_id,
+            )
             return
         target_topic_id = None
         scope_label = "группе"

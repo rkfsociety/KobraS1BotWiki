@@ -51,7 +51,6 @@ class _StubSettings:
     questions_only = True
     require_trigger = True
     log_decisions = True
-    manual_qa_git_push = False
 
 
 @pytest.fixture()

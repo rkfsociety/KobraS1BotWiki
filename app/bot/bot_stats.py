@@ -1,8 +1,8 @@
 """Сбор статистики бота: топ вики/вопросов + активность чата по часам.
 
 Канонический источник Telegram-метрик — data/chat.sqlite3 через ChatStore.
-Агрегаты в bot_data["bot_stats"] и .cache/bot_stats.json оставлены для
-совместимости и как fallback для исторического периода до наполнения SQLite.
+Агрегаты в bot_data["bot_stats"] и namespace ``bot_stats`` общей SQLite-базы
+оставлены для совместимости и исторического периода до наполнения SQLite.
 Формат на диске:
   {
     "wiki_pages": {"<url>": <count>, ...},
@@ -30,6 +30,7 @@ from heapq import nlargest, nsmallest
 from zoneinfo import ZoneInfo
 
 from app.bot.stores import _save_interval_elapsed, _save_json_atomic
+from app.bot.state_store import load_state as load_db_state, save_state as save_db_state
 
 log = logging.getLogger(__name__)
 
@@ -238,13 +239,19 @@ def load_bot_stats(bot_data: dict[str, Any]) -> None:
     """Загружает статистику с диска при старте бота."""
     try:
         p = _stats_path()
-        if not p.exists():
-            bot_data[_STATS_KEY] = _empty_stats()
-            return
-        if p.stat().st_size > _MAX_STATS_CACHE_BYTES:
-            bot_data[_STATS_KEY] = _empty_stats()
-            return
-        raw = json.loads(p.read_text(encoding="utf-8"))
+        is_db, db_raw = load_db_state(
+            "bot_stats", p, _empty_stats(), max_bytes=_MAX_STATS_CACHE_BYTES
+        )
+        if is_db:
+            raw = db_raw
+        else:
+            if not p.exists():
+                bot_data[_STATS_KEY] = _empty_stats()
+                return
+            if p.stat().st_size > _MAX_STATS_CACHE_BYTES:
+                bot_data[_STATS_KEY] = _empty_stats()
+                return
+            raw = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError("некорректный формат")
         stats = _empty_stats()
@@ -323,7 +330,8 @@ def _persist(bot_data: dict[str, Any], *, force: bool = False) -> None:
             stats = bot_data.get(_STATS_KEY) or {}
             if isinstance(stats, dict):
                 _prune_daily_scopes(stats)
-            _save_json_atomic(p, stats)
+            if not save_db_state("bot_stats", p, stats):
+                _save_json_atomic(p, stats)
             bot_data["_bot_stats_last_save"] = now
         except Exception as exc:
             log.warning("bot_stats: ошибка сохранения — %s", exc)

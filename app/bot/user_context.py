@@ -14,7 +14,8 @@
   - запрос содержит анафору / местоимения (его, её, там, это, …)
   - ИЛИ запрос очень короткий (≤ 3 слова)
 
-Persist: .cache/user_ctx.json, атомарная запись, не чаще раза в минуту.
+Persist: namespace ``user_context`` общей SQLite-базы, запись не чаще раза в
+минуту.
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from app.bot.stores import _save_interval_elapsed, _save_json_atomic
+from app.bot.state_store import load_state as load_db_state, save_state as save_db_state
 
 # ── константы ────────────────────────────────────────────────────────────────
 
@@ -150,11 +152,17 @@ def _ensure_loaded(bot_data: dict[str, Any]) -> None:
 def _load_from_disk(bot_data: dict[str, Any]) -> None:
     try:
         p = _ctx_path()
-        if not p.exists():
-            return
-        if p.stat().st_size > _MAX_CONTEXT_CACHE_BYTES:
-            return
-        raw = json.loads(p.read_text(encoding="utf-8"))
+        is_db, db_raw = load_db_state(
+            "user_context", p, {}, max_bytes=_MAX_CONTEXT_CACHE_BYTES
+        )
+        if is_db:
+            raw = db_raw
+        else:
+            if not p.exists():
+                return
+            if p.stat().st_size > _MAX_CONTEXT_CACHE_BYTES:
+                return
+            raw = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             return
         now = time.time()
@@ -203,6 +211,9 @@ def save_ctx_to_disk(bot_data: dict[str, Any], *, force: bool = False) -> None:
                 "users":       dict(bot_data.get("user_ctx_msgs", {})),
                 "bot_answers": dict(bot_data.get("user_ctx_answers", {})),
             }
+            if save_db_state("user_context", p, data):
+                bot_data["_user_ctx_last_save"] = now
+                return
             _save_json_atomic(p, data)
             bot_data["_user_ctx_last_save"] = now
         except Exception:

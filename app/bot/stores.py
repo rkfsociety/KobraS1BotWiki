@@ -1,4 +1,8 @@
-"""Локальные сторы (JSON) и нормализация запросов."""
+"""Runtime-state сторы общей SQLite-базы и нормализация запросов.
+
+JSON-пути сохраняются только как legacy-источники для миграции и тестовых
+подменённых путей.
+"""
 from __future__ import annotations
 
 import json
@@ -20,6 +24,7 @@ from app.bot.constants import (
     FEEDBACK_STORE,
     FIX_STORE,
 )
+from app.bot.state_store import load_state as load_db_state, save_state as save_db_state
 
 _STORE_SAVE_LOCK = threading.Lock()
 _ANSWER_CTX_SAVE_INTERVAL = 60.0
@@ -107,10 +112,17 @@ def _bound_clarify_store(raw: object) -> dict[str, dict]:
 
 
 def _load_clarify_store() -> dict[str, dict]:
+    is_db, db_raw = load_db_state(
+        "clarify_pending", CLARIFY_STORE, {}, max_bytes=_MAX_STORE_BYTES
+    )
+    if is_db:
+        return _bound_clarify_store(db_raw)
     return _bound_clarify_store(_load_store_json(CLARIFY_STORE))
 
 
 def _save_clarify_store(data: dict[str, dict]) -> None:
+    if save_db_state("clarify_pending", CLARIFY_STORE, _bound_clarify_store(data)):
+        return
     _save_json_atomic(CLARIFY_STORE, _bound_clarify_store(data))
 
 @lru_cache(maxsize=4096)
@@ -139,6 +151,11 @@ def _bound_answer_ctx_store(raw: object) -> dict[str, dict]:
 
 
 def _load_answer_ctx_store() -> dict[str, dict]:
+    is_db, db_raw = load_db_state(
+        "answer_context", ANSWER_CTX_STORE, {}, max_bytes=_MAX_STORE_BYTES
+    )
+    if is_db:
+        return _bound_answer_ctx_store(db_raw)
     return _bound_answer_ctx_store(_load_store_json(ANSWER_CTX_STORE))
 
 
@@ -167,7 +184,8 @@ def _save_answer_ctx_store(
             interval=_ANSWER_CTX_SAVE_INTERVAL,
         ):
             return
-    _save_json_atomic(ANSWER_CTX_STORE, data)
+    if not save_db_state("answer_context", ANSWER_CTX_STORE, data):
+        _save_json_atomic(ANSWER_CTX_STORE, data)
     if bot_data is not None:
         bot_data["_answer_ctx_last_save"] = now
 
@@ -242,10 +260,17 @@ def _load_feedback_store() -> dict[str, list[str]]:
     """
     query_norm -> [bad_url, ...]
     """
+    is_db, db_raw = load_db_state(
+        "feedback", FEEDBACK_STORE, {}, max_bytes=_MAX_STORE_BYTES
+    )
+    if is_db:
+        return _bound_feedback_store(db_raw)
     return _bound_feedback_store(_load_store_json(FEEDBACK_STORE))
 
 
 def _save_feedback_store(data: dict[str, list[str]]) -> None:
+    if save_db_state("feedback", FEEDBACK_STORE, _bound_feedback_store(data)):
+        return
     _save_json_atomic(FEEDBACK_STORE, _bound_feedback_store(data), indent=2)
 
 
@@ -297,10 +322,17 @@ def _load_fix_store() -> dict[str, str]:
     """
     query_norm -> good_url
     """
+    is_db, db_raw = load_db_state(
+        "fixes", FIX_STORE, {}, max_bytes=_MAX_STORE_BYTES
+    )
+    if is_db:
+        return _bound_fix_store(db_raw)
     return _bound_fix_store(_load_store_json(FIX_STORE))
 
 
 def _save_fix_store(data: dict[str, str]) -> None:
+    if save_db_state("fixes", FIX_STORE, _bound_fix_store(data)):
+        return
     _save_json_atomic(FIX_STORE, _bound_fix_store(data), indent=2)
 
 

@@ -5,8 +5,8 @@
 
 Возможности:
 - Дашборд: статус бота, размер индекса вики, счётчики записей.
-- Ручные ответы (manual_qa.json): просмотр / добавление / редактирование / удаление.
-- Фиксы ссылок (fixes.json): просмотр / добавление / удаление.
+- Ручные ответы: просмотр / добавление / редактирование / удаление общего SQLite-state.
+- Фиксы ссылок: просмотр / добавление / удаление общего SQLite-state.
 - Логи решений: хвост logs/bot.log с фильтром.
 
 Правки ручных ответов и фиксов сразу применяются к работающему боту
@@ -55,14 +55,12 @@ from app.bot.bad_answers import (
     delete_bad_answer,
     flag_bad_answer,
     load_bad_answers,
-    try_git_push_bad_answers,
 )
 from app.bot.missed_questions import (
     clear_missed_questions,
     delete_missed_question,
     delete_missed_question_by_text,
     load_missed_questions,
-    try_git_push_missed_questions,
 )
 from app.bot.reply_logging import save_recent_replies
 from app.bot.manual_qa import (
@@ -70,9 +68,9 @@ from app.bot.manual_qa import (
     delete_manual_qa_by_index,
     load_manual_qa_store,
     save_manual_qa_store,
-    try_git_push_manual_qa,
 )
 from app.bot.stores import _load_fix_store, _norm_text, _save_fix_store, _save_json_atomic
+from app.bot.state_store import load_state as load_db_state, save_state as save_db_state
 from app.bot.bot_stats import get_top_wiki_pages, get_top_questions, get_hourly_activity, get_top_users, get_total_answers
 from app.bot.admin_activity import (
     action_label,
@@ -203,13 +201,17 @@ class _PanelState:
         """Загружает живые (не истёкшие) сессии с прошлого запуска."""
         try:
             p = _sessions_file()
-            if not p.exists():
-                return
-            file_size = p.stat().st_size
-            if file_size > _MAX_PANEL_SESSIONS_BYTES:
-                logging.warning("panel: файл сессий слишком большой, пропускаем загрузку (байт: %d)", file_size)
-                return
-            raw = json.loads(p.read_text(encoding="utf-8"))
+            is_db, raw = load_db_state(
+                "panel_sessions", p, {}, max_bytes=_MAX_PANEL_SESSIONS_BYTES
+            )
+            if not is_db:
+                if not p.exists():
+                    return
+                file_size = p.stat().st_size
+                if file_size > _MAX_PANEL_SESSIONS_BYTES:
+                    logging.warning("panel: файл сессий слишком большой, пропускаем загрузку (байт: %d)", file_size)
+                    return
+                raw = json.loads(p.read_text(encoding="utf-8"))
             if not isinstance(raw, dict):
                 return
             now = time.time()
@@ -232,7 +234,8 @@ class _PanelState:
         """Сохраняет текущие сессии на диск (вызывается под self.lock)."""
         try:
             p = _sessions_file()
-            _save_json_atomic(p, self.sessions)
+            if not save_db_state("panel_sessions", p, self.sessions):
+                _save_json_atomic(p, self.sessions)
         except Exception as exc:
             logging.warning("panel: не удалось сохранить сессии: %s", exc)
 
@@ -2359,15 +2362,6 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
                 return
             self._flash_redirect("/config", True, f"Сохранено ({changed}). Применится после перезапуска.")
 
-        def _push_qa_if_enabled(self) -> str:
-            if not getattr(state.settings, "manual_qa_git_push", False):
-                return ""
-            try:
-                pushed, info = try_git_push_manual_qa()
-                return f" · git: {info}" if pushed else f" · git ошибка: {info}"
-            except Exception as e:  # noqa: BLE001
-                return f" · git исключение: {e}"
-
         def _refresh_qa_live(self) -> list[dict[str, Any]]:
             entries = load_manual_qa_store()
             if state.application is not None:
@@ -2385,7 +2379,6 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             )
             if ok:
                 self._refresh_qa_live()
-                msg += self._push_qa_if_enabled()
             self._flash_redirect("/qa", ok, msg)
 
         def _qa_edit(self, form: dict[str, str]) -> None:
@@ -2407,8 +2400,7 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             entries[idx] = {"keys": keys, "answer": answer, "title": title, "ts": time.time()}
             save_manual_qa_store(entries)
             self._refresh_qa_live()
-            info = self._push_qa_if_enabled()
-            self._flash_redirect("/qa", True, "Сохранено" + info)
+            self._flash_redirect("/qa", True, "Сохранено")
 
         def _qa_delete(self, form: dict[str, str]) -> None:
             try:
@@ -2419,7 +2411,6 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             ok, msg = delete_manual_qa_by_index(entries=entries, one_based=idx + 1)
             if ok:
                 self._refresh_qa_live()
-                msg += self._push_qa_if_enabled()
             self._flash_redirect("/qa", ok, msg)
 
         def _fixes_add(self, form: dict[str, str]) -> None:
@@ -2475,16 +2466,8 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             replies.pop(idx)
             if state.application is not None:
                 save_recent_replies(state.application.bot_data)
-            # пушим, если включено
-            push_info = ""
-            if getattr(state.settings, "manual_qa_git_push", False):
-                try:
-                    pushed, pmsg = try_git_push_bad_answers()
-                    push_info = f" · git: {pmsg}" if pushed else f" · git ошибка: {pmsg}"
-                except Exception as e:  # noqa: BLE001
-                    push_info = f" · git исключение: {e}"
             self._flash_redirect(f"/?replies_page={replies_page}#recent-replies", True,
-                                 f"Ответ отмечен как ошибочный{push_info}")
+                                 "Ответ отмечен как ошибочный")
 
         def _replies_clear(self, form: dict[str, str]) -> None:  # noqa: ARG002
             """Полностью очищает ленту последних ответов (память + диск)."""
@@ -2503,30 +2486,13 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             except ValueError:
                 idx = -1
             ok, msg = delete_bad_answer(idx=idx)
-            if ok and getattr(state.settings, "manual_qa_git_push", False):
-                try:
-                    pushed, pmsg = try_git_push_bad_answers()
-                    msg += f" · git: {pmsg}" if pushed else f" · git ошибка: {pmsg}"
-                except Exception as e:  # noqa: BLE001
-                    msg += f" · git исключение: {e}"
             self._flash_redirect("/", ok, msg)
-
-        def _push_missed_if_enabled(self) -> str:
-            if not getattr(state.settings, "manual_qa_git_push", False):
-                return ""
-            try:
-                pushed, info = try_git_push_missed_questions()
-                return f" · git: {info}" if pushed else f" · git ошибка: {info}"
-            except Exception as e:  # noqa: BLE001
-                return f" · git исключение: {e}"
 
         def _missed_questions_delete(self, form: dict[str, str]) -> None:
             i_text = form.get("i_text", "").strip()
             sort = form.get("sort", "count")
             if i_text:
                 ok, msg = delete_missed_question_by_text(text=i_text)
-                if ok:
-                    msg += self._push_missed_if_enabled()
                 self._flash_redirect(f"/missed?sort={sort}", ok, msg)
                 return
             try:
@@ -2534,8 +2500,6 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
             except ValueError:
                 idx = -1
             ok, msg = delete_missed_question(idx=idx)
-            if ok:
-                msg += self._push_missed_if_enabled()
             self._flash_redirect("/", ok, msg)
 
         def _missed_questions_clear(self, form: dict[str, str]) -> None:  # noqa: ARG002

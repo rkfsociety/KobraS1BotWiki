@@ -1,19 +1,19 @@
 """Хранение ошибочных ответов бота, отмеченных через веб-панель.
 
-Файл data/bad_answers.json (в git); при необходимости пушится автоматически.
+Рабочее состояние хранится в общей SQLite-базе; старый JSON используется
+только как одноразовый источник миграции и для изолированных тестовых путей.
 Формат: список объектов {question, answer, url, source, note, ts}.
 """
 from __future__ import annotations
 
 import json
-import os
-import subprocess
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
 from app.bot.git_autopull import project_repo_root
+from app.bot.state_store import load_state as load_db_state, save_state as save_db_state
 from app.bot.stores import _save_json_atomic
 
 _LOCK = threading.RLock()
@@ -27,6 +27,9 @@ def _bad_answers_path() -> Path:
 def load_bad_answers() -> list[dict[str, Any]]:
     with _LOCK:
         p = _bad_answers_path()
+        is_db, db_raw = load_db_state("bad_answers", p, [], max_bytes=_MAX_FILE_BYTES)
+        if is_db:
+            return [x for x in db_raw if isinstance(x, dict)] if isinstance(db_raw, list) else []
         try:
             if not p.exists():
                 return []
@@ -43,6 +46,8 @@ def load_bad_answers() -> list[dict[str, Any]]:
 def save_bad_answers(entries: list[dict[str, Any]]) -> None:
     with _LOCK:
         p = _bad_answers_path()
+        if save_db_state("bad_answers", p, entries):
+            return
         _save_json_atomic(p, entries, indent=2)
 
 
@@ -77,50 +82,3 @@ def delete_bad_answer(*, idx: int) -> tuple[bool, str]:
         entries.pop(idx)
         save_bad_answers(entries)
     return True, "удалено"
-
-
-def try_git_push_bad_answers() -> tuple[bool, str]:
-    """git add + commit + push для data/bad_answers.json."""
-    repo = project_repo_root()
-    rel = "data/bad_answers.json"
-    path = repo / rel
-    if not path.is_file():
-        return False, "нет файла data/bad_answers.json"
-    env = os.environ.copy()
-    env["GIT_TERMINAL_PROMPT"] = "0"
-
-    def run(args: list[str]) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            args, cwd=str(repo), env=env,
-            capture_output=True, text=True, timeout=120, check=False,
-        )
-
-    if not (repo / ".git").exists():
-        return False, "нет .git — только локальный файл"
-
-    ad = run(["git", "add", "--", rel])
-    if ad.returncode != 0:
-        return False, (ad.stderr or ad.stdout or "git add failed").strip()[:500]
-    diff = run(["git", "diff", "--staged", "--quiet"])
-    if diff.returncode == 0:
-        return True, "без изменений"
-
-    cm = run([
-        "git", "-c", "user.email=bot@kobra-wiki.local",
-        "-c", "user.name=KobraS1BotWiki",
-        "commit", "-m", "chore(bot): update bad_answers.json",
-    ])
-    if cm.returncode != 0:
-        err = (cm.stderr or cm.stdout or "").strip()
-        if "nothing to commit" in err.lower():
-            return True, "нечего коммитить"
-        return False, err[:500] if err else "git commit failed"
-
-    pull = run(["git", "pull", "--ff-only"])
-    if pull.returncode != 0:
-        return False, (pull.stderr or pull.stdout or "git pull failed").strip()[:500]
-
-    ps = run(["git", "push"])
-    if ps.returncode != 0:
-        return False, (ps.stderr or ps.stdout or "git push").strip()[:500]
-    return True, "отправлено в origin"

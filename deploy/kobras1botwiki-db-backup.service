@@ -1,0 +1,19 @@
+[Unit]
+Description=Daily KobraS1BotWiki SQLite backup
+After=kobras1botwiki.service
+
+[Service]
+Type=oneshot
+User=anycubicwikibot
+Group=anycubicwikibot
+WorkingDirectory=/home/anycubicwikibot/KobraS1BotWiki
+ExecStart=/home/anycubicwikibot/KobraS1BotWiki/.venv/bin/python /home/anycubicwikibot/KobraS1BotWiki/scripts/backup_chat_database.py --keep-days 14
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectControlGroups=yes
+ProtectKernelTunables=yes
+LockPersonality=yes
+RestrictSUIDSGID=yes
+SystemCallArchitectures=native

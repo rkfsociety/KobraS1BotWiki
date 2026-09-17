@@ -13,6 +13,7 @@ from app.bot.ephemeral import schedule_delete_slash_command_and_reply
 from app.bot.help_text import format_help_message
 from app.bot.i18n import _lang_from_message, _t
 from app.bot.reply_logging import log_bot_reply_for_message
+from app.bot.review_mention import record_outgoing_bot_message
 
 from ._utils import _deny_unless_admin_command_access
 
@@ -64,15 +65,31 @@ async def cmd_app(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     bot_username = str(context.application.bot_data.get("bot_username") or "").strip().lstrip("@")
     if not bot_username:
-        await update.effective_message.reply_text("Приложение пока недоступно: имя бота ещё не определено.")
+        sent = await update.effective_message.reply_text("Приложение пока недоступно: имя бота ещё не определено.")
+        record_outgoing_bot_message(
+            context.application.bot_data.get("chat_store"), sent,
+            chat_id=update.effective_chat.id,
+            topic_id=getattr(update.effective_message, "message_thread_id", None),
+            text=getattr(sent, "text", None) or "Приложение пока недоступно: имя бота ещё не определено.",
+            source="cmd_app",
+            reply_to_id=getattr(update.effective_message, "message_id", None),
+        )
         return
 
     keyboard = InlineKeyboardMarkup(
         [[InlineKeyboardButton("📱 Открыть приложение", url=f"https://t.me/{bot_username}?startapp")]]
     )
-    await update.effective_message.reply_text(
+    sent = await update.effective_message.reply_text(
         "Открыть приложение поддержки:",
         reply_markup=keyboard,
+    )
+    record_outgoing_bot_message(
+        context.application.bot_data.get("chat_store"), sent,
+        chat_id=update.effective_chat.id,
+        topic_id=getattr(update.effective_message, "message_thread_id", None),
+        text=getattr(sent, "text", None) or "Открыть приложение поддержки:",
+        source="cmd_app",
+        reply_to_id=getattr(update.effective_message, "message_id", None),
     )
 
 

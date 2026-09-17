@@ -76,13 +76,41 @@ python3 scripts/migrate_legacy_data.py
 sudo systemctl start kobras1botwiki.service
 ```
 
-`scripts/migrate_legacy_data.py` перед записью делает резервную копию
-`data/chat.sqlite3*`, `.cache/bot_stats.json`, `data/missed_questions.json` и
-`.cache/recent_replies.json` в `.cache/migration-backups/`, сохраняет старые
-агрегаты в SQLite как baseline и импортирует доступные текстовые образцы с
-меткой `legacy`. Исходные JSON не удаляются. Старые агрегаты не превращаются
-в выдуманные сообщения: полная история Telegram может быть восстановлена
-только из экспорта/лога сообщений, если такой источник есть.
+`scripts/migrate_legacy_data.py` перед записью делает резервную копию старой
+SQLite и JSON-источников в `.cache/migration-backups/`, сохраняет старые
+агрегаты как baseline и импортирует доступные текстовые образцы с меткой
+`legacy`. При старте новой версии все штатные JSON-state-модули импортируются
+в `bot_state` общей базы до запуска polling. Исходные JSON сохраняются до
+успешной проверки базы, затем deploy-скрипт может очистить их tracked-копии.
+
+### Ежедневные резервные копии базы
+
+Копия создаётся через SQLite Online Backup API, затем проходит
+`PRAGMA integrity_check` и получает sidecar SHA-256. Хранятся последние 14 дней
+в `.cache/db-backups/`.
+
+После запуска сервис дополнительно выполняет
+`scripts/verify_runtime_storage.py`: проверяет целостность базы, наличие
+`chat_messages` и всех обязательных runtime namespace в `bot_state`.
+
+При штатном запуске `./deploy/update-and-restart.sh` units устанавливаются и
+таймер включается автоматически. Для ручной установки (например, при первом
+развёртывании отдельно от обновления кода) используйте от имени пользователя
+с правами sudo:
+
+```bash
+sudo cp deploy/kobras1botwiki-db-backup.service /etc/systemd/system/
+sudo cp deploy/kobras1botwiki-db-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now kobras1botwiki-db-backup.timer
+sudo systemctl start kobras1botwiki-db-backup.service
+systemctl list-timers kobras1botwiki-db-backup.timer
+ls -l /home/anycubicwikibot/KobraS1BotWiki/.cache/db-backups/
+```
+
+Пушить рабочие данные очередей и состояния в Git больше не требуется: Git
+используется только для кода и конфигурации, а резервирование рабочих данных
+выполняет этот таймер.
 
 ## Git и `/update`
 

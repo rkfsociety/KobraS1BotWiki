@@ -1,9 +1,7 @@
 """Команды /qaadd, /qalist, /qadel."""
 from __future__ import annotations
 
-import asyncio
 import html
-import logging
 import re
 
 from telegram import Update
@@ -12,7 +10,7 @@ from telegram.ext import ContextTypes
 
 from app.bot.ephemeral import schedule_delete_slash_command_and_reply
 from app.bot.i18n import _lang_from_message, _t
-from app.bot.manual_qa import add_manual_qa_entry, delete_manual_qa_by_index, try_git_push_manual_qa
+from app.bot.manual_qa import add_manual_qa_entry, delete_manual_qa_by_index
 from app.bot.reply_logging import log_bot_reply_for_message
 
 from ._utils import _deny_unless_admin_command_access
@@ -79,13 +77,7 @@ async def cmd_qaadd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     if ok:
-        detail_full = detail
-        if settings.manual_qa_git_push:
-            pok, pmsg = await asyncio.to_thread(try_git_push_manual_qa)
-            detail_full = f"{detail}; GitHub: {pmsg}"
-            if not pok:
-                logging.warning("manual_qa git push: %s", pmsg)
-        ok_body = _t(lang, "qaadd_ok").format(detail=html.escape(detail_full))
+        ok_body = _t(lang, "qaadd_ok").format(detail=html.escape(detail))
         sent = await msg.reply_text(ok_body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
         schedule_delete_slash_command_and_reply(
             context=context,
@@ -213,13 +205,7 @@ async def cmd_qadel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ok, reason = delete_manual_qa_by_index(entries=entries, one_based=n)
 
     if ok:
-        detail_extra = ""
-        if settings.manual_qa_git_push:
-            pok, pmsg = await asyncio.to_thread(try_git_push_manual_qa)
-            detail_extra = f"; GitHub: {pmsg}"
-            if not pok:
-                logging.warning("manual_qa git push: %s", pmsg)
-        body = _t(lang, "qadel_ok").format(n=n) + html.escape(detail_extra)
+        body = _t(lang, "qadel_ok").format(n=n)
         sent = await msg.reply_text(body, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
         schedule_delete_slash_command_and_reply(
             context=context,

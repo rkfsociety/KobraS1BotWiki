@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from app.bot.bot_stats import get_daily_stats, get_daily_top_topics
 from app.bot.daily_summary import format_daily_summary
 from app.bot.topic_classifier import classify_daily_topics
+from app.bot.review_mention import record_outgoing_bot_message
 
 log = logging.getLogger(__name__)
 
@@ -74,7 +75,16 @@ async def send_daily_stats(context) -> None:
             daily_stats_topic_id = max(0, int(getattr(settings, "daily_stats_topic_id", 0)))
             if getattr(chat, "is_forum", False) and daily_stats_topic_id > 0:
                 send_kwargs["message_thread_id"] = daily_stats_topic_id
-            await context.bot.send_message(**send_kwargs)
+            sent = await context.bot.send_message(**send_kwargs)
+            if chat_store is not None:
+                record_outgoing_bot_message(
+                    chat_store,
+                    sent,
+                    chat_id=chat_id,
+                    topic_id=send_kwargs.get("message_thread_id"),
+                    text=summary,
+                    source="daily_stats",
+                )
             log.info("Ежедневная статистика отправлена: chat_id=%s day=%s", chat_id, day)
         except Exception as exc:
             # Ошибка в одном чате не должна блокировать отправку в остальные.

@@ -25,6 +25,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppI
 from telegram.constants import ChatMemberStatus
 from telegram.ext import ContextTypes
 
+from app.bot.review_mention import record_outgoing_bot_message
+
 _TTL_SECONDS = 300
 _MAX_CODES = 200
 
@@ -122,9 +124,24 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     args = context.args or []
     settings = context.application.bot_data.get("settings")
+
+    async def reply(text: str, **kwargs: Any) -> None:
+        sent = await msg.reply_text(text, **kwargs)
+        store = context.application.bot_data.get("chat_store")
+        if store is not None:
+            record_outgoing_bot_message(
+                store,
+                sent,
+                chat_id=msg.chat_id,
+                topic_id=getattr(msg, "message_thread_id", None),
+                text=text,
+                source="panel_login",
+                reply_to_id=msg.message_id,
+            )
+
     if not args:
         keyboard = _miniapp_keyboard(settings)
-        await msg.reply_text(
+        await reply(
             "Привет! Я бот-помощник по вики. Задавайте вопросы в группе — постараюсь подсказать.",
             reply_markup=keyboard,
         )
@@ -134,9 +151,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if payload.lower() == "app":
         keyboard = _miniapp_keyboard(settings)
         if keyboard is None:
-            await msg.reply_text("Приложение сейчас недоступно.")
+            await reply("Приложение сейчас недоступно.")
         else:
-            await msg.reply_text("Откройте приложение поддержки:", reply_markup=keyboard)
+            await reply("Откройте приложение поддержки:", reply_markup=keyboard)
         return
 
     codes, lock = _store(context.application)
@@ -149,12 +166,12 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             and rec.get("status") == "pending"
         )
     if not valid:
-        await msg.reply_text("Ссылка для входа в панель недействительна или истекла. Откройте панель и начните вход заново.")
+        await reply("Ссылка для входа в панель недействительна или истекла. Откройте панель и начните вход заново.")
         return
 
     chat_id = getattr(settings, "panel_admin_chat_id", None) if settings else None
     if not chat_id:
-        await msg.reply_text("Вход в панель сейчас не настроен.")
+        await reply("Вход в панель сейчас не настроен.")
         return
 
     try:
@@ -162,14 +179,14 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         is_admin = member.status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR)
     except Exception as e:  # noqa: BLE001
         log.warning("panel_login: get_chat_member chat=%s user=%s: %s", chat_id, user.id, e)
-        await msg.reply_text("Не удалось проверить ваши права в группе, попробуйте чуть позже.")
+        await reply("Не удалось проверить ваши права в группе, попробуйте чуть позже.")
         return
 
     label = f"@{user.username}" if user.username else (user.full_name or str(user.id))
     with lock:
         rec = codes.get(payload)
         if not isinstance(rec, dict) or _safe_float(rec.get("exp")) < now:
-            await msg.reply_text("Ссылка истекла, начните вход заново.")
+            await reply("Ссылка истекла, начните вход заново.")
             return
         rec["uid"] = user.id
         rec["user"] = label
@@ -177,10 +194,10 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     if is_admin:
         log.info("panel_login: подтверждён вход uid=%s %s", user.id, label)
-        await msg.reply_text("✅ Вход в панель подтверждён. Вернитесь на страницу — она откроется автоматически.")
+        await reply("✅ Вход в панель подтверждён. Вернитесь на страницу — она откроется автоматически.")
     else:
         log.warning("panel_login: отказ (не админ) uid=%s %s", user.id, label)
-        await msg.reply_text("⛔ Доступ к панели только для администраторов группы.")
+        await reply("⛔ Доступ к панели только для администраторов группы.")
 
 
 def _miniapp_keyboard(settings: Any) -> InlineKeyboardMarkup | None:

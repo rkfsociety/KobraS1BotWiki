@@ -1,4 +1,7 @@
-"""Логирование исходящих ответов бота (зеркало в Telegram — только bot_reply)."""
+"""Логирование исходящих ответов бота (зеркало в Telegram — только bot_reply).
+
+Лента ответов хранится в namespace ``recent_replies`` общей SQLite-базы.
+"""
 from __future__ import annotations
 
 import html as html_mod
@@ -17,6 +20,7 @@ from typing import Any
 from telegram import Message
 
 from app.bot.decision_log import LOG_MIRROR_TEXT_MAX, _msg_ids, incoming_text_for_log
+from app.bot.state_store import load_state as load_db_state, save_state as save_db_state
 
 # --- буфер последних ответов (для дашборда веб-панели) ---
 _RECENT_REPLIES_KEY = "recent_replies"
@@ -52,16 +56,22 @@ def load_recent_replies(bot_data: dict[str, Any]) -> None:
     """Загружает ленту последних ответов с диска при старте бота."""
     try:
         p = _replies_path()
-        if not p.exists():
-            return
-        file_size = p.stat().st_size
-        if file_size > _MAX_RECENT_REPLIES_BYTES:
-            logging.warning(
-                "recent_replies: файл слишком большой, пропускаем загрузку (байт: %d)",
-                file_size,
-            )
-            return
-        raw = json.loads(p.read_text(encoding="utf-8"))
+        is_db, db_raw = load_db_state(
+            "recent_replies", p, [], max_bytes=_MAX_RECENT_REPLIES_BYTES
+        )
+        if is_db:
+            raw = db_raw
+        else:
+            if not p.exists():
+                return
+            file_size = p.stat().st_size
+            if file_size > _MAX_RECENT_REPLIES_BYTES:
+                logging.warning(
+                    "recent_replies: файл слишком большой, пропускаем загрузку (байт: %d)",
+                    file_size,
+                )
+                return
+            raw = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(raw, list):
             return
         existing = bot_data.setdefault(_RECENT_REPLIES_KEY, [])
@@ -96,7 +106,6 @@ def save_recent_replies(
     with _REPLIES_SAVE_LOCK:
         try:
             p = _replies_path()
-            p.parent.mkdir(parents=True, exist_ok=True)
             buf = bot_data.get(_RECENT_REPLIES_KEY)
             if not isinstance(buf, list):
                 buf = []
@@ -106,6 +115,9 @@ def save_recent_replies(
             if sort_buffer:
                 buf.sort(key=_reply_timestamp, reverse=True)
             del buf[_RECENT_REPLIES_MAX:]
+            if save_db_state("recent_replies", p, buf):
+                return
+            p.parent.mkdir(parents=True, exist_ok=True)
             temporary_name: str | None = None
             try:
                 with tempfile.NamedTemporaryFile(
@@ -272,6 +284,21 @@ def log_bot_reply_for_message(
         **extra,
     )
     if sent is not None:
+        try:
+            from app.bot.chat_store import shared_chat_store
+            from app.bot.review_mention import record_outgoing_bot_message
+
+            record_outgoing_bot_message(
+                shared_chat_store(),
+                sent,
+                chat_id=chat_id if chat_id is not None else msg.chat_id,
+                topic_id=thread,
+                text=reply_text,
+                source=kind,
+                reply_to_id=mid,
+            )
+        except Exception:
+            logging.exception("Не удалось сохранить логируемый ответ в общей базе")
         record_bot_message(
             chat_id=chat_id if chat_id is not None else msg.chat_id,
             message_id=sent.message_id,

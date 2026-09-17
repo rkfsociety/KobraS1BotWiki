@@ -9,6 +9,7 @@ from typing import Any
 
 from app.bot.constants import MODERATION_STORE
 from app.bot.stores import _save_json_atomic
+from app.bot.state_store import load_state as load_db_state, save_state as save_db_state
 
 log = logging.getLogger(__name__)
 
@@ -86,10 +87,16 @@ def load_moderation_store(bot_data: dict[str, Any]) -> None:
     """Загружает предупреждения при старте, отбрасывая повреждённые записи."""
     try:
         path = _store_path()
-        if not path.exists() or path.stat().st_size > _MAX_STORE_BYTES:
-            bot_data["moderation_store"] = _empty_store()
-            return
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        is_db, db_raw = load_db_state(
+            "moderation", path, _empty_store(), max_bytes=_MAX_STORE_BYTES
+        )
+        if is_db:
+            raw = db_raw
+        else:
+            if not path.exists() or path.stat().st_size > _MAX_STORE_BYTES:
+                bot_data["moderation_store"] = _empty_store()
+                return
+            raw = json.loads(path.read_text(encoding="utf-8"))
         bot_data["moderation_store"] = _bound_store(raw)
     except Exception as exc:
         log.warning("moderation: ошибка загрузки предупреждений — %s", exc)
@@ -113,7 +120,9 @@ def _save(bot_data: dict[str, Any]) -> None:
     store["last_updated"] = time.time()
     bot_data["moderation_store"] = store
     try:
-        _save_json_atomic(_store_path(), store, indent=2)
+        path = _store_path()
+        if not save_db_state("moderation", path, store):
+            _save_json_atomic(path, store, indent=2)
     except Exception as exc:
         log.warning("moderation: ошибка сохранения предупреждений — %s", exc)
 

@@ -89,14 +89,13 @@ def _t(lang: str, key: str) -> str:
         "fix_confirm": "Ок, вот правильная ссылка:",
         "manual_qa_header": "📝 <b>Ответ (добавлен вручную)</b>",
         "qaadd_usage": (
-            "Использование: одно сообщение (данные пишутся в <code>data/manual_qa.json</code> в репозитории).\n"
+            "Использование: одно сообщение (данные пишутся в общей базе <code>data/chat.sqlite3</code>).\n"
             "<code>/qaadd</code> <i>вопрос или несколько через |||</i>\n"
             "<code>---</code>\n"
             "<i>текст ответа (несколько строк можно)</i>\n\n"
             "Несколько формулировок: "
             "<code>как снять сопло|||замена сопла</code> до разделителя <code>---</code>.\n"
-            "После сохранения при включённом <code>MANUAL_QA_GIT_PUSH</code> бот сделает "
-            "<code>git commit</code> и <code>git push</code> (нужен доступ к origin)."
+            "После сохранения запись сразу доступна всем модулям бота из общей базы."
         ),
         "qalist_empty": "Ручных ответов пока нет.",
         "qalist_header": "<b>Ручные ответы</b> (номер — для <code>/qadel</code>):",
@@ -183,11 +182,11 @@ def _t(lang: str, key: str) -> str:
         "fix_confirm": "OK, here is the correct link:",
         "manual_qa_header": "📝 <b>Manual answer</b>",
         "qaadd_usage": (
-            "Usage: one message (stored in <code>data/manual_qa.json</code> in the repo).\n"
+            "Usage: one message (stored in the shared <code>data/chat.sqlite3</code> database).\n"
             "<code>/qaadd</code> <i>question (use ||| between several triggers)</i>\n"
             "<code>---</code>\n"
             "<i>answer text (multiple lines OK)</i>\n\n"
-            "If <code>MANUAL_QA_GIT_PUSH</code> is enabled, the bot runs <code>git commit</code> and <code>git push</code>."
+            "After saving, the entry is immediately available to all bot modules."
         ),
         "qalist_empty": "No manual answers yet.",
         "qalist_header": "<b>Manual answers</b> (number for <code>/qadel</code>):",

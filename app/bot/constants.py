@@ -1,4 +1,4 @@
-"""Константы и пути к локальным JSON-сторам бота."""
+"""Имена legacy-путей для миграции runtime-state в общую SQLite-базу."""
 from __future__ import annotations
 
 from pathlib import Path

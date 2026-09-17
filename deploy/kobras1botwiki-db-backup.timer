@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily KobraS1BotWiki SQLite backup timer
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+AccuracySec=1min
+Unit=kobras1botwiki-db-backup.service
+
+[Install]
+WantedBy=timers.target

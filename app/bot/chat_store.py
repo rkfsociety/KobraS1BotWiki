@@ -13,6 +13,8 @@ from zoneinfo import ZoneInfo
 
 
 _STATS_TIMEZONE = ZoneInfo("Europe/Kaliningrad")
+_SHARED_STORE_LOCK = threading.Lock()
+_SHARED_STORE: "ChatStore | None" = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +92,11 @@ class ChatStore:
                     source TEXT NOT NULL,
                     imported_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS bot_state (
+                    namespace TEXT PRIMARY KEY,
+                    payload TEXT NOT NULL,
+                    updated_at REAL NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id_id
                     ON chat_messages (user_id, id);
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id_created_at
@@ -149,6 +156,52 @@ class ChatStore:
     def close(self) -> None:
         with self._lock:
             self._connection.close()
+
+    def has_state(self, namespace: str) -> bool:
+        """Возвращает, сохранено ли состояние с таким пространством имён."""
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT 1 FROM bot_state WHERE namespace = ?",
+                (namespace,),
+            ).fetchone()
+        return row is not None
+
+    def load_state(self, namespace: str, default: object = None) -> object:
+        """Загружает JSON-состояние из общей базы, не возвращая общий объект default."""
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT payload FROM bot_state WHERE namespace = ?",
+                (namespace,),
+            ).fetchone()
+        if row is None:
+            return json.loads(json.dumps(default, ensure_ascii=False))
+        try:
+            return json.loads(row["payload"])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return json.loads(json.dumps(default, ensure_ascii=False))
+
+    def save_state(self, namespace: str, payload: object) -> None:
+        """Сохраняет произвольное JSON-состояние в общей базе атомарно."""
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO bot_state (namespace, payload, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(namespace) DO UPDATE SET
+                    payload = excluded.payload,
+                    updated_at = excluded.updated_at
+                """,
+                (namespace, encoded, time.time()),
+            )
+
+    def delete_state(self, namespace: str) -> None:
+        """Удаляет состояние из общей базы."""
+        with self._lock, self._connection:
+            self._connection.execute(
+                "DELETE FROM bot_state WHERE namespace = ?",
+                (namespace,),
+            )
 
     def add_message(
         self,
@@ -872,3 +925,15 @@ class ChatStore:
             telegram_message_id=row["telegram_message_id"],
             legacy=bool(row["legacy"]),
         )
+
+
+def shared_chat_store() -> ChatStore:
+    """Возвращает единственное подключение процесса к канонической базе бота."""
+    global _SHARED_STORE
+    from app.bot.git_autopull import project_repo_root
+
+    path = project_repo_root() / "data" / "chat.sqlite3"
+    with _SHARED_STORE_LOCK:
+        if _SHARED_STORE is None:
+            _SHARED_STORE = ChatStore(path)
+        return _SHARED_STORE

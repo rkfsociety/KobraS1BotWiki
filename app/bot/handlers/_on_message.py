@@ -104,6 +104,19 @@ async def on_any_update(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
                 from_user = m.from_user
                 text = m.text if m.text is not None else m.caption
                 if not (from_user and getattr(from_user, "is_bot", False)):
+                    if not (text or "").strip():
+                        media_kind = next(
+                            (
+                                name
+                                for name in (
+                                    "photo", "video", "document", "audio", "voice",
+                                    "animation", "sticker", "video_note", "location", "contact",
+                                )
+                                if getattr(m, name, None) is not None
+                            ),
+                            "message",
+                        )
+                        text = f"[telegram {media_kind}]"
                     chat_store = context.application.bot_data.get("chat_store")
                     if chat_store is not None:
                         try:

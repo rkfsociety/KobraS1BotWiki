@@ -31,7 +31,7 @@ from telegram.ext import (
 
 from app.bot.error_display import _load_manual_error_codes
 from app.bot.git_autopull import git_sync_from_remote, project_repo_root, schedule_restart_after_pull
-from app.bot.chat_store import ChatStore
+from app.bot.chat_store import shared_chat_store
 from app.bot.handlers import (
     cmd_admincheck,
     cmd_app,
@@ -70,6 +70,7 @@ from app.bot.handlers import (
 )
 from app.bot.manual_qa import load_manual_qa_store
 from app.bot.reply_logging import load_recent_replies
+from app.bot.state_store import migrate_legacy_states
 from app.bot.admin_activity import flush_admin_activity, load_admin_activity
 from app.bot.moderation import flush_moderation_store, load_moderation_store
 from app.bot.bot_stats import flush_bot_stats, load_bot_stats
@@ -78,9 +79,9 @@ from app.bot.daily_stats import DAILY_STATS_SEND_TIME, configured_daily_stats_ch
 from app.bot.panel_login import cmd_start
 from app.bot.reactions import on_message_reaction
 from app.bot.ops_notify import notify_ops
+from app.bot.review_mention import record_outgoing_bot_message
 from app.bot.telegram_log_mirror import attach_telegram_log_mirror, flush_telegram_log_mirror
 from app.bot.stores import _load_clarify_store, _load_fix_store, flush_answer_ctx_store
-from app.bot.missed_questions import try_git_push_missed_questions
 from app.bot.wiki_reindex import SitemapMonitor, WikiReindexer
 from app.config import Settings, load_environment_files, load_settings
 from app.error_codes_catalog import ensure_error_codes_catalog, merge_manual_overrides
@@ -257,7 +258,11 @@ def main() -> None:
 
     app = Application.builder().token(settings.telegram_bot_token).build()
     app.bot_data["settings"] = settings
-    app.bot_data["chat_store"] = ChatStore(project_repo_root() / "data" / "chat.sqlite3")
+    app.bot_data["chat_store"] = shared_chat_store()
+    try:
+        migrate_legacy_states()
+    except Exception:
+        logging.exception("Не удалось мигрировать runtime-state в общую базу")
     if log_mirror_handler is not None:
         app.bot_data["log_mirror_handler"] = log_mirror_handler
     app.bot_data["wiki_index"] = wiki_index
@@ -335,9 +340,16 @@ def main() -> None:
                 """Отправляет уведомление о переиндексации в служебный чат."""
                 if settings.ops_notify_chat_id:
                     try:
-                        await application.bot.send_message(
+                        sent = await application.bot.send_message(
                             chat_id=settings.ops_notify_chat_id,
                             text=msg,
+                        )
+                        record_outgoing_bot_message(
+                            application.bot_data.get("chat_store"),
+                            sent,
+                            chat_id=settings.ops_notify_chat_id,
+                            text=msg,
+                            source="wiki_reindex",
                         )
                     except Exception as e:
                         logging.warning("Не удалось отправить уведомление переиндексации: %s", e)
@@ -394,7 +406,14 @@ def main() -> None:
                 if mention:
                     text = f"{mention} {text}"
                 try:
-                    await app.bot.send_message(chat_id=st.notify_chat_id, text=text)
+                    sent = await app.bot.send_message(chat_id=st.notify_chat_id, text=text)
+                    record_outgoing_bot_message(
+                        app.bot_data.get("chat_store"),
+                        sent,
+                        chat_id=st.notify_chat_id,
+                        text=text,
+                        source="wiki_index",
+                    )
                     idxr.mark_done_notified()
                     logging.info("Отправлено уведомление о завершении индексации в чат %s", st.notify_chat_id)
                 except Exception as e:
@@ -426,7 +445,14 @@ def main() -> None:
             if mention:
                 text = f"{mention} {text}"
             try:
-                await app.bot.send_message(chat_id=st.notify_chat_id, text=text)
+                sent = await app.bot.send_message(chat_id=st.notify_chat_id, text=text)
+                record_outgoing_bot_message(
+                    app.bot_data.get("chat_store"),
+                    sent,
+                    chat_id=st.notify_chat_id,
+                    text=text,
+                    source="wiki_index",
+                )
                 idxr.mark_done_notified()
                 logging.info("Отправлено уведомление о завершении индексации в чат %s", st.notify_chat_id)
             except Exception as e:
@@ -506,29 +532,6 @@ def main() -> None:
             name="check_wiki_updates",
         )
         logging.info("Автопроверка обновлений вики: каждые %s секунд", wiki_check_interval)
-
-    async def _push_missed_questions_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Периодический бэкап data/missed_questions.json в git (если включён MANUAL_QA_GIT_PUSH)."""
-        st: Settings = context.application.bot_data["settings"]
-        if not getattr(st, "manual_qa_git_push", False):
-            return
-        try:
-            ok, msg = await asyncio.to_thread(try_git_push_missed_questions)
-            if ok and msg not in ("без изменений", "нечего коммитить"):
-                logging.info("missed_questions git push: %s", msg)
-            elif not ok:
-                logging.warning("missed_questions git push: %s", msg)
-        except Exception as e:
-            logging.warning("missed_questions git push: исключение: %s", e)
-
-    if settings.manual_qa_git_push:
-        app.bot_data["missed_push_job"] = app.job_queue.run_repeating(
-            _push_missed_questions_job,
-            interval=1800,
-            first=300,
-            name="push_missed_questions",
-        )
-        logging.info("Бэкап missed_questions.json в git: каждые 1800 секунд")
 
     async def _git_autopull_job(context: ContextTypes.DEFAULT_TYPE) -> None:
         application = context.application

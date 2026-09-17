@@ -22,9 +22,9 @@ python -m app.bot
 - [Архитектура](docs/architecture.md)
 - [Эксплуатация](docs/ops.md)
 
-Разбор `data/missed_questions.json`: пополнение `manual_qa.json`, эвристики в `app/bot/heuristics/_banter.py`, затем очистка файла.
+Разбор очереди `missed_questions` в `data/chat.sqlite3`: пополнение `manual_qa`, правки эвристик в `app/bot/heuristics/_banter.py`, затем очистка очереди.
 
-Разбор «отвеченных»: лента `.cache/recent_replies.json` (веб-панель) и помеченные плохие ответы `data/bad_answers.json` — те же шаги; скрипт `scripts/apply_replies_jun2026_qa.py` (июнь 2026).
+Разбор «отвеченных»: состояния `recent_replies` и `bad_answers` в той же базе через веб-панель; скрипт `scripts/apply_replies_jun2026_qa.py` (июнь 2026).
 
 ## Дорожная карта
 

@@ -5,6 +5,8 @@ import logging
 
 from telegram.ext import Application
 
+from app.bot.review_mention import record_outgoing_bot_message
+
 
 def _truncate(s: str, *, max_len: int = 4000) -> str:
     s = (s or "").strip()
@@ -33,6 +35,15 @@ async def notify_ops(
         kwargs: dict = {"chat_id": int(cid), "text": text, "disable_web_page_preview": True}
         if parse_mode:
             kwargs["parse_mode"] = parse_mode
-        await application.bot.send_message(**kwargs)
+        sent = await application.bot.send_message(**kwargs)
+        chat_store = application.bot_data.get("chat_store")
+        if chat_store is not None:
+            record_outgoing_bot_message(
+                chat_store,
+                sent,
+                chat_id=int(cid),
+                text=text,
+                source="ops_notify",
+            )
     except Exception as e:
         logging.warning("ops_notify: не удалось отправить в chat_id=%s: %s", cid, e)

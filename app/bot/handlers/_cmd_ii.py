@@ -11,7 +11,13 @@ from app.bot.ephemeral import schedule_delete_slash_command_and_reply
 from app.bot.i18n import _lang_from_message, _t
 from app.bot.literouter import LiteRouterError, ask_literouter
 from app.bot.reply_logging import add_to_recent_replies
-from app.bot.review_mention import reply_for_user, should_tag_reviewer, with_review_mention
+from app.bot.review_mention import (
+    record_outgoing_bot_message,
+    record_sent_bot_message,
+    reply_for_user,
+    should_tag_reviewer,
+    with_review_mention,
+)
 from app.bot.bot_stats import record_answer as _record_stat
 from app.bot.stores import _record_bot_answer_context
 from app.bot.text_heuristics import _model_slug_hints
@@ -210,6 +216,14 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if target is None or not _message_text(target) or target_user is None or getattr(target_user, "is_bot", False):
         usage = _t(lang, "ii_usage")
         sent = await command_msg.reply_text(usage, disable_web_page_preview=True)
+        record_outgoing_bot_message(
+            context.application.bot_data.get("chat_store"), sent,
+            chat_id=command_msg.chat_id,
+            topic_id=getattr(command_msg, "message_thread_id", None),
+            text=usage,
+            source="cmd_ii",
+            reply_to_id=command_msg.message_id,
+        )
         schedule_delete_slash_command_and_reply(
             context=context,
             user_msg=command_msg,
@@ -222,6 +236,14 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not getattr(settings, "literouter_enabled", False) or not getattr(settings, "literouter_api_key", ""):
         body = _t(lang, "ii_not_configured")
         sent = await command_msg.reply_text(body, disable_web_page_preview=True)
+        record_outgoing_bot_message(
+            context.application.bot_data.get("chat_store"), sent,
+            chat_id=command_msg.chat_id,
+            topic_id=getattr(command_msg, "message_thread_id", None),
+            text=body,
+            source="cmd_ii",
+            reply_to_id=command_msg.message_id,
+        )
         schedule_delete_slash_command_and_reply(
             context=context,
             user_msg=command_msg,
@@ -298,6 +320,14 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reason = str(last_error or "не удалось получить ответ от моделей")
         body = _t(lang, "ii_failed").format(reason=reason[:240])
         sent = await command_msg.reply_text(body, disable_web_page_preview=True)
+        record_outgoing_bot_message(
+            context.application.bot_data.get("chat_store"), sent,
+            chat_id=command_msg.chat_id,
+            topic_id=getattr(command_msg, "message_thread_id", None),
+            text=body,
+            source="cmd_ii",
+            reply_to_id=command_msg.message_id,
+        )
         schedule_delete_slash_command_and_reply(
             context=context,
             user_msg=command_msg,
@@ -331,7 +361,14 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         log_user_id=uid,
     )
     for part in message_parts[1:]:
-        await target.reply_text(part, disable_web_page_preview=False)
+        extra = await target.reply_text(part, disable_web_page_preview=False)
+        record_sent_bot_message(
+            target,
+            extra,
+            chat_store=context.application.bot_data.get("chat_store"),
+            text=part,
+            source="ai",
+        )
 
     _record_bot_answer_context(
         context=context,

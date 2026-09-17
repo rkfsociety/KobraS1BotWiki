@@ -190,10 +190,11 @@ def test_answer_context_pruning_tolerates_malformed_entries(monkeypatch, tmp_pat
     assert len(_App.bot_data["answer_ctx_store"]) == 601
 
 
-def test_answer_context_persistence_is_throttled_and_flushable(monkeypatch):
+def test_answer_context_persistence_is_throttled_and_flushable(monkeypatch, tmp_path):
     import app.bot.stores as stores
 
     calls: list[dict] = []
+    monkeypatch.setattr(stores, "ANSWER_CTX_STORE", tmp_path / "answer_context.json")
     monkeypatch.setattr(stores, "_save_json_atomic", lambda path, data, **kwargs: calls.append(data))
     monkeypatch.setattr(stores.time, "time", lambda: 100.0)
 
@@ -211,10 +212,11 @@ def test_answer_context_persistence_is_throttled_and_flushable(monkeypatch):
     assert len(calls) == 2
 
 
-def test_answer_context_throttling_recovers_from_non_finite_timestamp(monkeypatch):
+def test_answer_context_throttling_recovers_from_non_finite_timestamp(monkeypatch, tmp_path):
     import app.bot.stores as stores
 
     calls: list[dict] = []
+    monkeypatch.setattr(stores, "ANSWER_CTX_STORE", tmp_path / "answer_context.json")
     monkeypatch.setattr(stores, "_save_json_atomic", lambda path, data, **kwargs: calls.append(data))
     monkeypatch.setattr(stores.time, "time", lambda: 100.0)
     bot_data = {"_answer_ctx_last_save": float("nan")}

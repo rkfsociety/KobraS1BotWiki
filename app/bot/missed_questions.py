@@ -1,21 +1,21 @@
 """Сбор вопросов без ответа (score < MIN_SCORE или нет результатов).
 
-Файл data/missed_questions.json — для анализа и пополнения manual_qa.json.
+Рабочая очередь хранится в общей SQLite-базе; старый JSON используется только
+как одноразовый источник миграции и для изолированных тестовых путей.
 Формат: список объектов {text, score, best_url, chat_id, count, ts}.
 Дубликаты по тексту не дублируются — только обновляется счётчик и время.
 """
 from __future__ import annotations
 
 import json
-import os
 import re
-import subprocess
 import threading
 import time
 from pathlib import Path
 from typing import Any
 
 from app.bot.git_autopull import project_repo_root
+from app.bot.state_store import load_state as load_db_state, save_state as save_db_state
 from app.bot.stores import _save_json_atomic
 
 _LOCK = threading.Lock()
@@ -85,6 +85,9 @@ def _path() -> Path:
 
 def load_missed_questions() -> list[dict[str, Any]]:
     p = _path()
+    is_db, db_raw = load_db_state("missed_questions", p, [], max_bytes=_MAX_FILE_BYTES)
+    if is_db:
+        return [x for x in db_raw if isinstance(x, dict)] if isinstance(db_raw, list) else []
     try:
         if not p.exists():
             return []
@@ -100,6 +103,8 @@ def load_missed_questions() -> list[dict[str, Any]]:
 
 def _save(entries: list[dict[str, Any]]) -> None:
     p = _path()
+    if save_db_state("missed_questions", p, entries):
+        return
     _save_json_atomic(p, entries, indent=2)
 
 
@@ -195,50 +200,3 @@ def sanitize_existing() -> tuple[int, int]:
         if changed:
             _save(cleaned)
     return changed, len(cleaned)
-
-
-def try_git_push_missed_questions() -> tuple[bool, str]:
-    """git add + commit + push для data/missed_questions.json. Без изменений — no-op."""
-    repo = project_repo_root()
-    rel = "data/missed_questions.json"
-    path = repo / rel
-    if not path.is_file():
-        return False, "нет файла data/missed_questions.json"
-    env = os.environ.copy()
-    env["GIT_TERMINAL_PROMPT"] = "0"
-
-    def run(args: list[str]) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            args, cwd=str(repo), env=env,
-            capture_output=True, text=True, timeout=120, check=False,
-        )
-
-    if not (repo / ".git").exists():
-        return False, "нет .git — только локальный файл"
-
-    ad = run(["git", "add", "--", rel])
-    if ad.returncode != 0:
-        return False, (ad.stderr or ad.stdout or "git add failed").strip()[:500]
-    diff = run(["git", "diff", "--staged", "--quiet"])
-    if diff.returncode == 0:
-        return True, "без изменений"
-
-    cm = run([
-        "git", "-c", "user.email=bot@kobra-wiki.local",
-        "-c", "user.name=KobraS1BotWiki",
-        "commit", "-m", "chore(bot): update missed_questions.json",
-    ])
-    if cm.returncode != 0:
-        err = (cm.stderr or cm.stdout or "").strip()
-        if "nothing to commit" in err.lower():
-            return True, "нечего коммитить"
-        return False, err[:500] if err else "git commit failed"
-
-    pull = run(["git", "pull", "--ff-only"])
-    if pull.returncode != 0:
-        return False, (pull.stderr or pull.stdout or "git pull failed").strip()[:500]
-
-    ps = run(["git", "push"])
-    if ps.returncode != 0:
-        return False, (ps.stderr or ps.stdout or "git push").strip()[:500]
-    return True, "отправлено в origin"

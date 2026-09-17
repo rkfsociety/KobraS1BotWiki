@@ -13,6 +13,7 @@ from telegram.ext import ContextTypes
 from app.bot.admin_access import bot_has_moderation_right, user_has_moderation_command_access
 from app.bot.admin_activity import record_admin_action
 from app.bot.moderation import add_warning, clear_warnings, get_warnings, remove_warning
+from app.bot.review_mention import record_outgoing_bot_message
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +66,23 @@ def _target_message(update: Update):
     return msg.reply_to_message if msg is not None else None
 
 
+async def _reply(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str, **kwargs):
+    msg = update.effective_message
+    sent = await msg.reply_text(text, **kwargs)
+    chat = update.effective_chat
+    if chat is not None:
+        record_outgoing_bot_message(
+            context.application.bot_data.get("chat_store"),
+            sent,
+            chat_id=chat.id,
+            topic_id=getattr(msg, "message_thread_id", None),
+            text=text,
+            source="moderation",
+            reply_to_id=getattr(msg, "message_id", None),
+        )
+    return sent
+
+
 async def _allowed(update: Update, context: ContextTypes.DEFAULT_TYPE, command: str) -> bool:
     if await user_has_moderation_command_access(update, context):
         return True
@@ -77,10 +95,10 @@ async def _allowed(update: Update, context: ContextTypes.DEFAULT_TYPE, command: 
     return False
 
 
-async def _target_or_usage(update: Update, *, require_user: bool = True):
+async def _target_or_usage(update: Update, context: ContextTypes.DEFAULT_TYPE, *, require_user: bool = True):
     target = _reply_target(update) if require_user else _target_message(update)
     if target is None:
-        await update.effective_message.reply_text(
+        await _reply(update, context,
             "Нужно ответить этой командой на сообщение пользователя: /ban, /mute, /warn и т.п."
             if require_user
             else "Нужно ответить этой командой на сообщение: /del, /pin или /unpin."
@@ -90,7 +108,7 @@ async def _target_or_usage(update: Update, *, require_user: bool = True):
         getattr(target, "is_bot", False)
         or target.id == getattr(update.effective_user, "id", None)
     ):
-        await update.effective_message.reply_text("Нельзя применить это действие к боту или к самому себе.")
+        await _reply(update, context, "Нельзя применить это действие к боту или к самому себе.")
         return None
     return target
 
@@ -101,7 +119,7 @@ async def _has_right(update: Update, context: ContextTypes.DEFAULT_TYPE, right: 
         return False
     if await bot_has_moderation_right(context, chat.id, right):
         return True
-    await update.effective_message.reply_text("У бота нет необходимого права администратора для этой команды.")
+    await _reply(update, context, "У бота нет необходимого права администратора для этой команды.")
     return False
 
 
@@ -125,28 +143,28 @@ async def _target_can_be_moderated(
             target.id,
             exc,
         )
-        await update.effective_message.reply_text(
+        await _reply(update, context,
             "Не удалось проверить статус цели. Команда отменена для безопасности."
         )
         return False
 
     status = getattr(member, "status", None)
     if status in (ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR):
-        await update.effective_message.reply_text(
+        await _reply(update, context,
             f"Нельзя применить /{command} к владельцу или администратору группы."
         )
         return False
     if status is None:
-        await update.effective_message.reply_text(
+        await _reply(update, context,
             "Не удалось определить статус цели. Команда отменена для безопасности."
         )
         return False
     return True
 
 
-async def _api_error(update: Update, command: str, exc: TelegramError) -> None:
+async def _api_error(update: Update, context: ContextTypes.DEFAULT_TYPE, command: str, exc: TelegramError) -> None:
     log.warning("moderation command failed command=/%s chat=%s: %s", command, getattr(update.effective_chat, "id", None), exc)
-    await update.effective_message.reply_text("Telegram не разрешил выполнить действие. Проверьте права бота и цель команды.")
+    await _reply(update, context, "Telegram не разрешил выполнить действие. Проверьте права бота и цель команды.")
 
 
 def _record(context, update: Update, action: str, target) -> None:
@@ -169,7 +187,7 @@ def _record(context, update: Update, action: str, target) -> None:
 async def cmd_ban(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "ban"):
         return
-    target = await _target_or_usage(update)
+    target = await _target_or_usage(update, context)
     if target is None or not await _target_can_be_moderated(update, context, target, "ban"):
         return
     if not await _has_right(update, context, "can_restrict_members"):
@@ -181,16 +199,16 @@ async def cmd_ban(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             revoke_messages=False,
         )
     except TelegramError as exc:
-        await _api_error(update, "ban", exc)
+        await _api_error(update, context, "ban", exc)
         return
     _record(context, update, "ban", target)
-    await update.effective_message.reply_text(f"Пользователь {_target_label(target)} заблокирован.")
+    await _reply(update, context, f"Пользователь {_target_label(target)} заблокирован.")
 
 
 async def cmd_unban(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "unban"):
         return
-    target = await _target_or_usage(update)
+    target = await _target_or_usage(update, context)
     if target is None or not await _has_right(update, context, "can_restrict_members"):
         return
     try:
@@ -200,17 +218,17 @@ async def cmd_unban(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             only_if_banned=True,
         )
     except TelegramError as exc:
-        await _api_error(update, "unban", exc)
+        await _api_error(update, context, "unban", exc)
         return
     _record(context, update, "unban", target)
-    await update.effective_message.reply_text(f"Пользователь {_target_label(target)} разблокирован.")
+    await _reply(update, context, f"Пользователь {_target_label(target)} разблокирован.")
 
 
 async def cmd_kick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Удаляет участника, оставляя ему возможность снова войти в группу."""
     if not await _allowed(update, context, "kick"):
         return
-    target = await _target_or_usage(update)
+    target = await _target_or_usage(update, context)
     if target is None or not await _target_can_be_moderated(update, context, target, "kick"):
         return
     if not await _has_right(update, context, "can_restrict_members"):
@@ -220,21 +238,21 @@ async def cmd_kick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.ban_chat_member(chat_id=chat_id, user_id=target.id, revoke_messages=False)
         await context.bot.unban_chat_member(chat_id=chat_id, user_id=target.id, only_if_banned=True)
     except TelegramError as exc:
-        await _api_error(update, "kick", exc)
+        await _api_error(update, context, "kick", exc)
         return
     _record(context, update, "kick", target)
-    await update.effective_message.reply_text(f"Пользователь {_target_label(target)} удалён из чата.")
+    await _reply(update, context, f"Пользователь {_target_label(target)} удалён из чата.")
 
 
 async def cmd_mute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "mute"):
         return
-    target = await _target_or_usage(update)
+    target = await _target_or_usage(update, context)
     parsed = _parse_duration(list(context.args or []))
     if target is None or not await _target_can_be_moderated(update, context, target, "mute"):
         return
     if parsed is None:
-        await update.effective_message.reply_text("Срок мута: от 30 секунд до 30 дней. Пример: /mute 2h причина")
+        await _reply(update, context, "Срок мута: от 30 секунд до 30 дней. Пример: /mute 2h причина")
         return
     if not await _has_right(update, context, "can_restrict_members"):
         return
@@ -248,11 +266,11 @@ async def cmd_mute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             until_date=until_date,
         )
     except TelegramError as exc:
-        await _api_error(update, "mute", exc)
+        await _api_error(update, context, "mute", exc)
         return
     _record(context, update, "restrict", target)
     suffix = f" Причина: {reason}" if reason else ""
-    await update.effective_message.reply_text(
+    await _reply(update, context,
         f"Пользователь {_target_label(target)} замьючен на {_duration_label(seconds)}.{suffix}"
     )
 
@@ -260,7 +278,7 @@ async def cmd_mute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def cmd_unmute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "unmute"):
         return
-    target = await _target_or_usage(update)
+    target = await _target_or_usage(update, context)
     if target is None or not await _has_right(update, context, "can_restrict_members"):
         return
     try:
@@ -271,10 +289,10 @@ async def cmd_unmute(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             until_date=None,
         )
     except TelegramError as exc:
-        await _api_error(update, "unmute", exc)
+        await _api_error(update, context, "unmute", exc)
         return
     _record(context, update, "unrestrict", target)
-    await update.effective_message.reply_text(f"Пользователь {_target_label(target)} снова может писать.")
+    await _reply(update, context, f"Пользователь {_target_label(target)} снова может писать.")
 
 
 def _member_permissions() -> ChatPermissions:
@@ -306,7 +324,7 @@ def _duration_label(seconds: int) -> str:
 async def cmd_warn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "warn"):
         return
-    target = await _target_or_usage(update)
+    target = await _target_or_usage(update, context)
     if target is None:
         return
     admin = update.effective_user
@@ -319,63 +337,63 @@ async def cmd_warn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         reason=" ".join(context.args or []).strip(),
     )
     _record(context, update, "warn", target)
-    await update.effective_message.reply_text(f"Пользователь {_target_label(target)} получил предупреждение №{count}.")
+    await _reply(update, context, f"Пользователь {_target_label(target)} получил предупреждение №{count}.")
 
 
 async def cmd_unwarn(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "unwarn"):
         return
-    target = await _target_or_usage(update)
+    target = await _target_or_usage(update, context)
     if target is None:
         return
     count = remove_warning(context.application.bot_data, chat_id=update.effective_chat.id, user_id=target.id)
     if count == 0:
-        await update.effective_message.reply_text(f"У пользователя {_target_label(target)} нет предупреждений.")
+        await _reply(update, context, f"У пользователя {_target_label(target)} нет предупреждений.")
         return
     _record(context, update, "unwarn", target)
-    await update.effective_message.reply_text(f"Последнее предупреждение снято. Осталось: {count}.")
+    await _reply(update, context, f"Последнее предупреждение снято. Осталось: {count}.")
 
 
 async def cmd_warnings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "warnings"):
         return
-    target = await _target_or_usage(update)
+    target = await _target_or_usage(update, context)
     if target is None:
         return
     warnings = get_warnings(context.application.bot_data, chat_id=update.effective_chat.id, user_id=target.id)
     if not warnings:
-        await update.effective_message.reply_text(f"У пользователя {_target_label(target)} предупреждений нет.")
+        await _reply(update, context, f"У пользователя {_target_label(target)} предупреждений нет.")
         return
     lines = [f"Предупреждения {_target_label(target)}: {len(warnings)}"]
     for index, warning in enumerate(warnings, 1):
         reason = warning.get("reason") or "без причины"
         lines.append(f"{index}. {reason}")
-    await update.effective_message.reply_text("\n".join(lines))
+    await _reply(update, context, "\n".join(lines))
 
 
 async def cmd_clearwarns(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "clearwarns"):
         return
-    target = await _target_or_usage(update)
+    target = await _target_or_usage(update, context)
     if target is None:
         return
     count = clear_warnings(context.application.bot_data, chat_id=update.effective_chat.id, user_id=target.id)
     if count:
         _record(context, update, "unwarn", target)
-    await update.effective_message.reply_text(f"Предупреждения {_target_label(target)} очищены: {count}.")
+    await _reply(update, context, f"Предупреждения {_target_label(target)} очищены: {count}.")
 
 
 async def cmd_del(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "del"):
         return
-    target = await _target_or_usage(update, require_user=False)
+    target = await _target_or_usage(update, context, require_user=False)
     if target is None or not await _has_right(update, context, "can_delete_messages"):
         return
     try:
         await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=target.message_id)
         await context.bot.delete_message(chat_id=update.effective_chat.id, message_id=update.effective_message.message_id)
     except TelegramError as exc:
-        await _api_error(update, "del", exc)
+        await _api_error(update, context, "del", exc)
         return
     _record_message(context, update, "delete", target)
 
@@ -383,7 +401,7 @@ async def cmd_del(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def cmd_pin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "pin"):
         return
-    target = await _target_or_usage(update, require_user=False)
+    target = await _target_or_usage(update, context, require_user=False)
     if target is None or not await _has_right(update, context, "can_pin_messages"):
         return
     try:
@@ -393,25 +411,25 @@ async def cmd_pin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             disable_notification=True,
         )
     except TelegramError as exc:
-        await _api_error(update, "pin", exc)
+        await _api_error(update, context, "pin", exc)
         return
     _record_message(context, update, "pin", target)
-    await update.effective_message.reply_text("Сообщение закреплено.")
+    await _reply(update, context, "Сообщение закреплено.")
 
 
 async def cmd_unpin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not await _allowed(update, context, "unpin"):
         return
-    target = await _target_or_usage(update, require_user=False)
+    target = await _target_or_usage(update, context, require_user=False)
     if target is None or not await _has_right(update, context, "can_pin_messages"):
         return
     try:
         await context.bot.unpin_chat_message(chat_id=update.effective_chat.id, message_id=target.message_id)
     except TelegramError as exc:
-        await _api_error(update, "unpin", exc)
+        await _api_error(update, context, "unpin", exc)
         return
     _record_message(context, update, "unpin", target)
-    await update.effective_message.reply_text("Сообщение откреплено.")
+    await _reply(update, context, "Сообщение откреплено.")
 
 
 def _record_message(context, update: Update, action: str, message) -> None:

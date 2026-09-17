@@ -1,6 +1,7 @@
 """Учёт модераторских действий админов в разрешённых чатах.
 
-Хранится в bot_data["admin_activity"] и персистится в .cache/admin_activity.json.
+Хранится в bot_data["admin_activity"] и персистится в namespace
+``admin_activity`` общей SQLite-базы.
  Telegram Bot API присылает события изменения статуса участников и закрепления сообщений,
  поэтому считаем баны, кики, муты и другие такие действия. Удаление чужих сообщений админом
  API отдельно не присылает, поэтому команда /del записывается непосредственно обработчиком.
@@ -18,6 +19,7 @@ from typing import Any
 from telegram.constants import ChatMemberStatus
 
 from app.bot.stores import _save_interval_elapsed, _save_json_atomic
+from app.bot.state_store import load_state as load_db_state, save_state as save_db_state
 
 log = logging.getLogger(__name__)
 
@@ -117,13 +119,19 @@ def load_admin_activity(bot_data: dict[str, Any]) -> None:
     """Загружает статистику модерации с диска при старте бота."""
     try:
         p = _activity_path()
-        if not p.exists():
-            bot_data[_ACTIVITY_KEY] = _empty_activity()
-            return
-        if p.stat().st_size > _MAX_ACTIVITY_CACHE_BYTES:
-            bot_data[_ACTIVITY_KEY] = _empty_activity()
-            return
-        raw = json.loads(p.read_text(encoding="utf-8"))
+        is_db, db_raw = load_db_state(
+            "admin_activity", p, _empty_activity(), max_bytes=_MAX_ACTIVITY_CACHE_BYTES
+        )
+        if is_db:
+            raw = db_raw
+        else:
+            if not p.exists():
+                bot_data[_ACTIVITY_KEY] = _empty_activity()
+                return
+            if p.stat().st_size > _MAX_ACTIVITY_CACHE_BYTES:
+                bot_data[_ACTIVITY_KEY] = _empty_activity()
+                return
+            raw = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
             raise ValueError("некорректный формат")
         activity = _empty_activity()
@@ -199,7 +207,8 @@ def _persist(bot_data: dict[str, Any], *, force: bool = False) -> None:
         try:
             p = _activity_path()
             activity = bot_data.get(_ACTIVITY_KEY) or {}
-            _save_json_atomic(p, activity)
+            if not save_db_state("admin_activity", p, activity):
+                _save_json_atomic(p, activity)
             bot_data["_admin_activity_last_save"] = now
         except Exception as exc:
             log.warning("admin_activity: ошибка сохранения — %s", exc)
