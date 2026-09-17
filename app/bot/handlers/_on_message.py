@@ -27,7 +27,7 @@ from app.bot.missed_questions import add_missed_question
 from app.bot.ops_notify import notify_ops
 from app.bot.reply_access import can_bot_reply_in_context, chat_topic_in_allowed_lists, should_process_incoming_wiki_message
 from app.bot.reply_logging import add_to_recent_replies, log_bot_reply_for_message
-from app.bot.review_mention import reply_for_user
+from app.bot.review_mention import record_sent_bot_message, reply_for_user
 from app.bot.stores import _record_bot_answer_context
 from app.bot.telegram_log_mirror import LOG_MIRROR_TEXT_MAX
 from app.bot.text_heuristics import (
@@ -336,6 +336,13 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if _is_generic_help_without_context(text):
         help_text = _t(lang, "generic_help")
         sent_help = await msg.reply_text(help_text, disable_web_page_preview=True)
+        record_sent_bot_message(
+            msg,
+            sent_help,
+            chat_store=context.application.bot_data.get("chat_store"),
+            text=help_text,
+            source="generic_help",
+        )
         log_bot_reply_for_message(
             "generic_help_clarify",
             msg=msg,
@@ -351,6 +358,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         chat_id=chat_id,
         settings=settings,
         user_id=msg.from_user.id if msg.from_user else None,
+        chat_store=context.application.bot_data.get("chat_store"),
     ):
         return
 

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from telegram.constants import ChatType
 
-from app.bot.review_mention import reply_for_user, with_review_mention
+from app.bot.review_mention import record_sent_bot_message, reply_for_user, with_review_mention
 
 
 def _settings(mention: str = "") -> SimpleNamespace:
@@ -45,3 +45,26 @@ def test_reply_for_user_skips_private():
         assert "@rkfsociety" not in msg.reply_text.call_args[0][0]
 
     asyncio.run(_run())
+
+
+def test_record_sent_bot_message_keeps_group_and_topic():
+    store = MagicMock()
+    msg = SimpleNamespace(
+        chat=SimpleNamespace(id=-100),
+        message_thread_id=7,
+        message_id=41,
+    )
+    sent = SimpleNamespace(message_id=42, text="Ответ")
+
+    record_sent_bot_message(msg, sent, chat_store=store, source="wiki")
+
+    store.add_telegram_message.assert_called_once_with(
+        chat_id=-100,
+        topic_id=7,
+        telegram_message_id=42,
+        user_id=0,
+        text="Ответ",
+        role="bot",
+        source="wiki",
+        reply_to_id=41,
+    )

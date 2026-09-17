@@ -4,6 +4,7 @@ from __future__ import annotations
 from telegram import Message
 
 from app.bot.reply_logging import log_bot_reply_for_message
+from app.bot.review_mention import record_sent_bot_message
 from app.bot.text_heuristics import _model_slug_hints
 from app.printer_catalog import (
     explain_ace_filament_slot_reset,
@@ -22,6 +23,7 @@ async def _maybe_reply_printer_design_vs_question(
     chat_id: int,
     settings,
     user_id: int | None,
+    chat_store=None,
 ) -> Message | None:
     """Справочник конструкции: слайсер, дверь камеры — без нерелевантной вики."""
     hints_d = _model_slug_hints(question)
@@ -41,6 +43,7 @@ async def _maybe_reply_printer_design_vs_question(
     if not expl:
         return None
     sent = await msg.reply_text(expl, disable_web_page_preview=True)
+    record_sent_bot_message(msg, sent, chat_store=chat_store, text=expl, source="printer_design")
     log_bot_reply_for_message(
         "printer_design_fact",
         msg=msg,

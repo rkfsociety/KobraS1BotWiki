@@ -13,7 +13,7 @@ from app.bot.design_replies import _maybe_reply_printer_design_vs_question
 from app.bot.ephemeral import schedule_delete_slash_command_and_reply
 from app.bot.i18n import _lang_from_message, _t, format_wiki_card
 from app.bot.reply_logging import log_bot_reply_for_message
-from app.bot.review_mention import reply_for_user
+from app.bot.review_mention import record_sent_bot_message, reply_for_user
 from app.bot.text_heuristics import _is_error_code_query, _model_slug_hints
 from app.bot.wiki_ranking import _response_wiki_url_acceptable, _search_best_with_model_bias
 from app.ru_layer import expand_queries
@@ -41,6 +41,13 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not query:
         ut = _t(lang, "wiki_usage")
         sent = await msg.reply_text(ut, disable_web_page_preview=True)
+        record_sent_bot_message(
+            msg,
+            sent,
+            chat_store=context.application.bot_data.get("chat_store"),
+            text=ut,
+            source="wiki_usage",
+        )
         schedule_delete_slash_command_and_reply(
             context=context,
             user_msg=msg,
@@ -76,6 +83,7 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id=chat_id,
         settings=settings,
         user_id=uid,
+        chat_store=context.application.bot_data.get("chat_store"),
     )
 
     if sent_pd is not None:
@@ -96,6 +104,13 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not best_doc:
         nf = _t(lang, "wiki_nothing_found")
         sent = await msg.reply_text(nf, disable_web_page_preview=True)
+        record_sent_bot_message(
+            msg,
+            sent,
+            chat_store=context.application.bot_data.get("chat_store"),
+            text=nf,
+            source="wiki_missing",
+        )
         schedule_delete_slash_command_and_reply(
             context=context,
             user_msg=msg,
@@ -111,6 +126,13 @@ async def cmd_wiki(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if best_score < settings.min_score:
         lc = _t(lang, "wiki_low_conf")
         sent = await msg.reply_text(lc, disable_web_page_preview=True)
+        record_sent_bot_message(
+            msg,
+            sent,
+            chat_store=context.application.bot_data.get("chat_store"),
+            text=lc,
+            source="wiki_low_confidence",
+        )
         schedule_delete_slash_command_and_reply(
             context=context,
             user_msg=msg,

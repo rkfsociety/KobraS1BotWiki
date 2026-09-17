@@ -33,6 +33,7 @@ from app.bot.error_codes_wiki import (
 from app.bot.i18n import _t, format_wiki_card
 
 from app.bot.reply_logging import log_bot_reply_for_message
+from app.bot.review_mention import record_sent_bot_message
 
 from app.bot.decision_log import log_seen_message, log_skip
 
@@ -214,6 +215,13 @@ async def _try_send_error_code_clarify(
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True,
     )
+    record_sent_bot_message(
+        msg,
+        sent,
+        chat_store=context.application.bot_data.get("chat_store"),
+        text=clarify_body,
+        source="error_code_clarify",
+    )
 
     pending = _runtime_dict(context.application.bot_data, "clarify_pending")
 
@@ -266,6 +274,13 @@ async def _reply_no_guide_for_model(
 
     no_guide_body = _t(lang, 'no_guide_for_model')
     sent = await msg.reply_text(no_guide_body, disable_web_page_preview=True)
+    record_sent_bot_message(
+        msg,
+        sent,
+        chat_store=context.application.bot_data.get("chat_store"),
+        text=no_guide_body,
+        source="no_matching_guide",
+    )
 
     if settings.log_decisions:
 
@@ -488,6 +503,13 @@ async def _deliver_clarify_combined(
         )
 
         sent = await msg.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False)
+        record_sent_bot_message(
+            msg,
+            sent,
+            chat_store=context.application.bot_data.get("chat_store"),
+            text=reply,
+            source="error_code_wiki",
+        )
 
         # Подстрахуемся: даже если кто-то ответит reply, мы не хотим продолжать цепочку по кодам ошибок.
 
@@ -514,6 +536,8 @@ async def _deliver_clarify_combined(
         settings=settings,
 
         user_id=from_user,
+
+        chat_store=context.application.bot_data.get("chat_store"),
 
     ):
 
@@ -549,6 +573,13 @@ async def _deliver_clarify_combined(
 
         uncertain_body = _t(context.application.bot_data.get("last_user_lang") or "ru", "still_uncertain")
         sent = await msg.reply_text(uncertain_body, disable_web_page_preview=True)
+        record_sent_bot_message(
+            msg,
+            sent,
+            chat_store=context.application.bot_data.get("chat_store"),
+            text=uncertain_body,
+            source=uncertain_kind,
+        )
 
         log_bot_reply_for_message(
             uncertain_kind,
@@ -605,6 +636,13 @@ async def _deliver_clarify_combined(
     )
 
     sent = await msg.reply_text(reply, parse_mode=ParseMode.HTML, disable_web_page_preview=False)
+    record_sent_bot_message(
+        msg,
+        sent,
+        chat_store=context.application.bot_data.get("chat_store"),
+        text=reply,
+        source=wiki_kind,
+    )
 
     hints = _model_slug_hints(combined)
 
@@ -840,6 +878,14 @@ async def _try_send_printer_clarify(
         clarify_body,
         parse_mode=ParseMode.HTML,
         disable_web_page_preview=True,
+    )
+
+    record_sent_bot_message(
+        msg,
+        sent,
+        chat_store=context.application.bot_data.get("chat_store"),
+        text=clarify_body,
+        source="clarify_prompt",
     )
 
     pending[ckey] = {"original": text, "ts": now2, "prompt_message_id": sent.message_id}

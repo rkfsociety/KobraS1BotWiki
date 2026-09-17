@@ -34,6 +34,33 @@ def should_tag_reviewer(msg: Message) -> bool:
     return chat.type in (ChatType.GROUP, ChatType.SUPERGROUP)
 
 
+def record_sent_bot_message(
+    msg: Message,
+    sent: Message,
+    *,
+    chat_store: Any = None,
+    text: str | None = None,
+    source: str = "telegram",
+) -> None:
+    """Сохраняет исходящий ответ в общей БД после успешной отправки."""
+    if chat_store is None:
+        return
+    try:
+        chat = msg.chat
+        chat_store.add_telegram_message(
+            chat_id=chat.id,
+            topic_id=getattr(msg, "message_thread_id", None),
+            telegram_message_id=sent.message_id,
+            user_id=getattr(getattr(sent, "from_user", None), "id", None) or 0,
+            text=(getattr(sent, "text", None) if text is None else text) or "",
+            role="bot",
+            source=source,
+            reply_to_id=getattr(msg, "message_id", None),
+        )
+    except Exception:
+        logging.exception("Не удалось сохранить ответ Telegram в общей базе")
+
+
 async def reply_for_user(
     msg: Message,
     settings: Settings,
@@ -51,21 +78,13 @@ async def reply_for_user(
     if should_tag_reviewer(msg):
         body = with_review_mention(text, settings)
     sent = await msg.reply_text(body, **kwargs)
-    if chat_store is not None:
-        try:
-            chat = msg.chat
-            chat_store.add_telegram_message(
-                chat_id=chat.id,
-                topic_id=getattr(msg, "message_thread_id", None),
-                telegram_message_id=sent.message_id,
-                user_id=getattr(getattr(sent, "from_user", None), "id", None) or 0,
-                text=body,
-                role="bot",
-                source=source or log_kind or "telegram",
-                reply_to_id=getattr(msg, "message_id", None),
-            )
-        except Exception:
-            logging.exception("Не удалось сохранить ответ Telegram в общей базе")
+    record_sent_bot_message(
+        msg,
+        sent,
+        chat_store=chat_store,
+        text=body,
+        source=source or log_kind or "telegram",
+    )
     if log_kind:
         from app.bot.reply_logging import log_bot_reply_for_message
 
