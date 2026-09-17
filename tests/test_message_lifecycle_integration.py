@@ -135,6 +135,17 @@ def test_any_update_persists_group_message_before_reply_filters(tmp_path: Path):
         assert saved[0].text == "вопрос для общей базы"
         assert saved[0].chat_id == -100123
         assert saved[0].telegram_message_id == 10
+
+        media = Message(
+            message_id=11,
+            date=datetime.now(timezone.utc),
+            chat=chat,
+            from_user=user,
+        )
+        asyncio.run(message_module.on_any_update(Update(update_id=2, message=media), context))
+        saved = store.list_chat_messages(-100123, 0, datetime.now(timezone.utc).timestamp() + 1)
+        assert len(saved) == 2
+        assert saved[1].text == ""
     finally:
         store.close()
 

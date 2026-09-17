@@ -99,11 +99,11 @@ async def on_any_update(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
             chat = update.effective_chat
             m = update.effective_message
             # Это единственная точка записи входящих Telegram-сообщений:
-            # сохраняем текст до фильтров ответа, включая команды и оффтоп.
+            # сохраняем их до фильтров ответа, включая команды, медиа и оффтоп.
             if (update.message or update.channel_post) and chat and m:
                 from_user = m.from_user
                 text = m.text if m.text is not None else m.caption
-                if text and text.strip() and not (from_user and getattr(from_user, "is_bot", False)):
+                if not (from_user and getattr(from_user, "is_bot", False)):
                     chat_store = context.application.bot_data.get("chat_store")
                     if chat_store is not None:
                         try:
@@ -112,7 +112,7 @@ async def on_any_update(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
                                 topic_id=m.message_thread_id,
                                 telegram_message_id=m.message_id,
                                 user_id=from_user.id if from_user else 0,
-                                text=text.strip(),
+                                text=(text or "").strip(),
                             )
                         except Exception:
                             logging.exception("Не удалось сохранить Telegram-сообщение в общей базе")
