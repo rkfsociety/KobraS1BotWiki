@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import json
 import sqlite3
 import threading
 import time
@@ -29,6 +30,7 @@ class ChatMessage:
     telegram_message_id: int | None = None
     username: str | None = None
     first_name: str | None = None
+    legacy: bool = False
 
 
 class ChatStore:
@@ -73,6 +75,21 @@ class ChatStore:
                     created_at REAL NOT NULL,
                     UNIQUE (chat_id, day, title)
                 );
+                CREATE TABLE IF NOT EXISTS legacy_stats (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    payload TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    imported_at REAL NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS legacy_daily_stats (
+                    scope_key TEXT PRIMARY KEY,
+                    chat_id INTEGER NOT NULL,
+                    day TEXT NOT NULL,
+                    topic_id INTEGER,
+                    payload TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    imported_at REAL NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id_id
                     ON chat_messages (user_id, id);
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id_created_at
@@ -103,6 +120,7 @@ class ChatStore:
                 ("chat_id", "INTEGER"),
                 ("topic_id", "INTEGER"),
                 ("telegram_message_id", "INTEGER"),
+                ("legacy", "INTEGER NOT NULL DEFAULT 0"),
             ):
                 if column not in columns:
                     self._connection.execute(
@@ -310,6 +328,7 @@ class ChatStore:
         topic_id: int | None = None,
         role: str | None = "user",
         limit: int | None = None,
+        include_legacy: bool = True,
     ) -> list[ChatMessage]:
         """Возвращает сообщения группы за интервал, разделяя форумные темы."""
         if end_ts <= start_ts or (limit is not None and limit <= 0):
@@ -319,6 +338,8 @@ class ChatStore:
             WHERE chat_id = ? AND created_at >= ? AND created_at < ?
         """
         parameters: list[object] = [chat_id, start_ts, end_ts]
+        if not include_legacy:
+            query += " AND legacy = 0"
         if topic_id is not None:
             query += " AND topic_id = ?"
             parameters.append(topic_id)
@@ -367,9 +388,15 @@ class ChatStore:
     ) -> dict[str, object]:
         """Агрегирует дневные метрики из одной выборки канонической базы."""
         messages = self.list_chat_messages(
-            chat_id, start_ts, end_ts, topic_id=topic_id, role=None
+            chat_id, start_ts, end_ts, topic_id=topic_id, role=None, include_legacy=False
         )
-        return self._aggregate_metrics(messages)
+        live = self._aggregate_metrics(messages)
+        legacy = self._legacy_daily_metrics(chat_id=chat_id, day=self._day_from_bounds(start_ts))
+        if topic_id is not None:
+            legacy = self._legacy_daily_metrics(
+                chat_id=chat_id, day=self._day_from_bounds(start_ts), topic_id=topic_id
+            )
+        return self._merge_metrics(legacy, live)
 
     def global_metrics(self) -> dict[str, object]:
         """Агрегирует общую статистику Telegram из канонической базы."""
@@ -377,11 +404,187 @@ class ChatStore:
             rows = self._connection.execute(
                 """
                 SELECT * FROM chat_messages
-                WHERE chat_id IS NOT NULL
+                WHERE chat_id IS NOT NULL AND legacy = 0
                 ORDER BY created_at ASC, id ASC
                 """
             ).fetchall()
-        return self._aggregate_metrics([self._message_from_row(row) for row in rows])
+        live = self._aggregate_metrics([self._message_from_row(row) for row in rows])
+        legacy = self._legacy_stats()
+        return self._merge_metrics(legacy, live)
+
+    @staticmethod
+    def _day_from_bounds(start_ts: float) -> str:
+        return datetime.fromtimestamp(start_ts, tz=_STATS_TIMEZONE).date().isoformat()
+
+    def save_legacy_stats(self, payload: dict[str, object], *, source: str) -> None:
+        """Сохраняет старый агрегат как baseline, не превращая его в фиктивные сообщения."""
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO legacy_stats (id, payload, source, imported_at)
+                VALUES (1, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    payload = excluded.payload,
+                    source = excluded.source,
+                    imported_at = excluded.imported_at
+                """,
+                (encoded, source, time.time()),
+            )
+
+    def save_legacy_daily_scope(
+        self,
+        *,
+        scope_key: str,
+        chat_id: int,
+        day: str,
+        topic_id: int | None,
+        payload: dict[str, object],
+        source: str,
+    ) -> None:
+        """Сохраняет старую дневную сводку в общей БД отдельным baseline-слоем."""
+        encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        with self._lock, self._connection:
+            self._connection.execute(
+                """
+                INSERT INTO legacy_daily_stats
+                    (scope_key, chat_id, day, topic_id, payload, source, imported_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(scope_key) DO UPDATE SET
+                    chat_id = excluded.chat_id,
+                    day = excluded.day,
+                    topic_id = excluded.topic_id,
+                    payload = excluded.payload,
+                    source = excluded.source,
+                    imported_at = excluded.imported_at
+                """,
+                (scope_key, chat_id, day, topic_id, encoded, source, time.time()),
+            )
+
+    def import_legacy_message(
+        self,
+        *,
+        legacy_key: str,
+        chat_id: int,
+        topic_id: int | None,
+        user_id: int,
+        role: str,
+        text: str,
+        source: str,
+        created_at: float,
+        username: str | None = None,
+        first_name: str | None = None,
+        url: str | None = None,
+    ) -> bool:
+        """Импортирует один доступный legacy-образец идемпотентно."""
+        with self._lock, self._connection:
+            columns = {
+                row[1]
+                for row in self._connection.execute("PRAGMA table_info(chat_messages)").fetchall()
+            }
+            if "legacy_key" not in columns:
+                self._connection.execute("ALTER TABLE chat_messages ADD COLUMN legacy_key TEXT")
+                self._connection.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_messages_legacy_key "
+                    "ON chat_messages (legacy_key) WHERE legacy_key IS NOT NULL"
+                )
+            cursor = self._connection.execute(
+                """
+                INSERT OR IGNORE INTO chat_messages (
+                    user_id, username, first_name, chat_id, topic_id, telegram_message_id,
+                    role, text, source, created_at, reply_to_id, url, legacy, legacy_key
+                ) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NULL, ?, 1, ?)
+                """,
+                (
+                    user_id, username, first_name, chat_id, topic_id, role, text,
+                    source, created_at, url, legacy_key,
+                ),
+            )
+            return cursor.rowcount > 0
+
+    def _legacy_stats(self) -> dict[str, object]:
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT payload FROM legacy_stats WHERE id = 1"
+            ).fetchone()
+        if row is None:
+            return {}
+        try:
+            payload = json.loads(row["payload"])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def _legacy_daily_metrics(
+        self, *, chat_id: int, day: str, topic_id: int | None = None
+    ) -> dict[str, object]:
+        with self._lock:
+            row = self._connection.execute(
+                """
+                SELECT payload FROM legacy_daily_stats
+                WHERE chat_id = ? AND day = ?
+                  AND ((topic_id IS NULL AND ? IS NULL) OR topic_id = ?)
+                ORDER BY imported_at DESC LIMIT 1
+                """,
+                (chat_id, day, topic_id, topic_id),
+            ).fetchone()
+        if row is None:
+            return {}
+        try:
+            payload = json.loads(row["payload"])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    @staticmethod
+    def _merge_metrics(
+        baseline: dict[str, object], current: dict[str, object]
+    ) -> dict[str, object]:
+        """Складывает baseline и новые агрегаты без изменения исходных словарей."""
+        result = {
+            "total_incoming": int(baseline.get("total_incoming", 0) or 0)
+            + int(current.get("total_incoming", 0) or 0),
+            "total_answers": int(baseline.get("total_answers", 0) or 0)
+            + int(current.get("total_answers", 0) or 0),
+            "hourly_activity": [
+                int(a or 0) + int(b or 0)
+                for a, b in zip(
+                    baseline.get("hourly_activity", [0] * 24),
+                    current.get("hourly_activity", [0] * 24),
+                )
+            ],
+            "questions": {},
+            "wiki_pages": {},
+            "user_messages": {},
+        }
+        for field in ("questions", "wiki_pages"):
+            merged: dict[str, int] = {}
+            for payload in (baseline.get(field), current.get(field)):
+                if isinstance(payload, dict):
+                    for key, value in payload.items():
+                        if isinstance(key, str):
+                            merged[key] = merged.get(key, 0) + int(value or 0)
+            result[field] = merged
+        users: dict[str, dict[str, object]] = {}
+        for payload in (baseline.get("user_messages"), current.get("user_messages")):
+            if not isinstance(payload, dict):
+                continue
+            for key, value in payload.items():
+                if not isinstance(value, dict):
+                    continue
+                item = users.setdefault(
+                    str(key),
+                    {
+                        "user_id": value.get("user_id") or key,
+                        "label": value.get("label") or key,
+                        "count": 0,
+                    },
+                )
+                item["count"] = int(item["count"]) + int(value.get("count", 0) or 0)
+                if value.get("label") and item.get("label") in (None, key):
+                    item["label"] = value["label"]
+        result["user_messages"] = users
+        return result
 
     @staticmethod
     def _aggregate_metrics(messages: list[ChatMessage]) -> dict[str, object]:
@@ -667,4 +870,5 @@ class ChatStore:
             chat_id=row["chat_id"],
             topic_id=row["topic_id"],
             telegram_message_id=row["telegram_message_id"],
+            legacy=bool(row["legacy"]),
         )

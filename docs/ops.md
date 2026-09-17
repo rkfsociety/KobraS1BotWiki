@@ -62,6 +62,28 @@ sudo -u <пользователь_бота> tail -f /путь/к/KobraS1BotWiki/
 разных групп не смешиваются. Если `ALLOWED_CHAT_IDS` не задан, используется
 `PANEL_ADMIN_CHAT_ID`.
 
+## Миграция старых данных в единую SQLite
+
+Перед первым запуском версии с единой историей остановите сервис: миграция не
+должна выполняться параллельно с polling. После `git pull --ff-only` запустите
+скрипт от имени `anycubicwikibot`:
+
+```bash
+sudo systemctl stop kobras1botwiki.service
+cd /home/anycubicwikibot/KobraS1BotWiki
+git pull --ff-only
+python3 scripts/migrate_legacy_data.py
+sudo systemctl start kobras1botwiki.service
+```
+
+`scripts/migrate_legacy_data.py` перед записью делает резервную копию
+`data/chat.sqlite3*`, `.cache/bot_stats.json`, `data/missed_questions.json` и
+`.cache/recent_replies.json` в `.cache/migration-backups/`, сохраняет старые
+агрегаты в SQLite как baseline и импортирует доступные текстовые образцы с
+меткой `legacy`. Исходные JSON не удаляются. Старые агрегаты не превращаются
+в выдуманные сообщения: полная история Telegram может быть восстановлена
+только из экспорта/лога сообщений, если такой источник есть.
+
 ## Git и `/update`
 
 Команда `/update` выполняет `git fetch` + синхронизацию от имени пользователя процесса бота.
