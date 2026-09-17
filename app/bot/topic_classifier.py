@@ -135,7 +135,7 @@ async def classify_daily_topics(
                 model=model,
                 messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
                 timeout_seconds=settings.literouter_timeout_seconds,
-                max_tokens=1200,
+                max_tokens=getattr(settings, "literouter_max_tokens", None),
                 cooldown_seconds=getattr(settings, "literouter_cooldown_seconds", 5),
             )
             parsed = _parse_result(answer, weights, limit=min(_MAX_TOPICS, max(1, limit)))

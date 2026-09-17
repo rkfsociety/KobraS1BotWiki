@@ -65,5 +65,6 @@ def test_classify_daily_topics_reads_group_messages_and_saves_result(tmp_path, m
         assert store.list_daily_topics(chat_id=-100, day=day) == result
         request = ask.await_args.kwargs["messages"]
         assert "сопло стучит об заполнение" in request[1]["content"]
+        assert ask.await_args.kwargs["max_tokens"] is None
     finally:
         store.close()
