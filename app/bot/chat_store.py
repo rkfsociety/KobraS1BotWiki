@@ -290,7 +290,7 @@ class ChatStore:
     ) -> list[ChatMessage]:
         if limit <= 0:
             return []
-        query = "SELECT * FROM chat_messages WHERE user_id = ?"
+        query = "SELECT * FROM chat_messages WHERE chat_id IS NULL AND user_id = ?"
         parameters: list[int] = [user_id]
         if before_id is not None:
             query += " AND id < ?"
@@ -532,8 +532,9 @@ class ChatStore:
                        a.reply_to_id AS answer_reply_to_id, a.url AS answer_url
                 FROM chat_messages AS q
                 JOIN chat_messages AS a
-                  ON a.user_id = q.user_id AND a.role = 'bot' AND a.reply_to_id = q.id
-                WHERE q.user_id = ? AND q.role = 'user' AND q.text = ?
+                  ON a.user_id = q.user_id AND a.chat_id IS NULL
+                 AND a.role = 'bot' AND a.reply_to_id = q.id
+                WHERE q.chat_id IS NULL AND q.user_id = ? AND q.role = 'user' AND q.text = ?
                   AND q.created_at >= ? AND q.created_at <= ?
                 ORDER BY q.id DESC, a.id DESC LIMIT 1
                 """,
@@ -585,7 +586,7 @@ class ChatStore:
         return {"short_remaining": short_remaining, "window_remaining": max(0, 20 - int(count))}
 
     def list_recent_answers(self, limit: int = 50) -> list[tuple[ChatMessage, ChatMessage]]:
-        """Возвращает последние пары (вопрос, ответ) для всей группы в порядке убывания id."""
+        """Возвращает последние пары вопросов и ответов Mini App."""
         if limit <= 0:
             return []
         with self._lock:
@@ -597,7 +598,8 @@ class ChatStore:
                        q.source as q_source, q.created_at as q_created
                 FROM chat_messages a
                 JOIN chat_messages q ON q.id = a.reply_to_id
-                WHERE a.role = 'bot' AND q.role = 'user'
+                WHERE a.chat_id IS NULL AND q.chat_id IS NULL
+                  AND a.role = 'bot' AND q.role = 'user'
                 ORDER BY a.id DESC LIMIT ?
                 """,
                 (limit,),
@@ -632,9 +634,9 @@ class ChatStore:
             self._connection.execute(
                 """
                 DELETE FROM chat_messages
-                WHERE user_id = ? AND id NOT IN (
+                WHERE chat_id IS NULL AND user_id = ? AND id NOT IN (
                     SELECT id FROM chat_messages
-                    WHERE user_id = ? ORDER BY id DESC LIMIT ?
+                    WHERE chat_id IS NULL AND user_id = ? ORDER BY id DESC LIMIT ?
                 )
                 """,
                 (user_id, user_id, keep),
@@ -643,7 +645,9 @@ class ChatStore:
     def clear_all_history(self) -> int:
         """Удаляет историю Mini App и связанные события ограничения запросов."""
         with self._lock, self._connection:
-            deleted = self._connection.execute("DELETE FROM chat_messages").rowcount
+            deleted = self._connection.execute(
+                "DELETE FROM chat_messages WHERE chat_id IS NULL"
+            ).rowcount
             self._connection.execute("DELETE FROM rate_limit_events")
         return int(deleted)
 

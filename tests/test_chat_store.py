@@ -119,6 +119,27 @@ def test_messages_support_cursor_pagination(tmp_path: Path) -> None:
         store.close()
 
 
+def test_miniapp_history_does_not_expose_or_delete_telegram_messages(tmp_path: Path) -> None:
+    store = ChatStore(tmp_path / "chat.sqlite3")
+    try:
+        store.add_message(7, "user", "miniapp", "miniapp")
+        telegram = store.add_telegram_message(
+            chat_id=-100,
+            topic_id=7,
+            telegram_message_id=11,
+            user_id=7,
+            text="telegram",
+        )
+
+        assert [message.text for message in store.list_messages(7)] == ["miniapp"]
+        assert store.list_recent_answers() == []
+        assert store.clear_all_history() == 1
+        assert store.list_messages(7) == []
+        assert store.list_chat_messages(-100, 0, telegram.created_at + 1)[0].text == "telegram"
+    finally:
+        store.close()
+
+
 def test_telegram_messages_are_separated_by_group_and_topic(tmp_path: Path) -> None:
     store = ChatStore(tmp_path / "chat.sqlite3")
     try:
