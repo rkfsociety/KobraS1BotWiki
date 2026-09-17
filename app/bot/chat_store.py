@@ -54,6 +54,16 @@ class ChatStore:
                     user_id INTEGER NOT NULL,
                     created_at REAL NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS daily_topics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chat_id INTEGER NOT NULL,
+                    day TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    message_count INTEGER NOT NULL,
+                    model TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    UNIQUE (chat_id, day, title)
+                );
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id_id
                     ON chat_messages (user_id, id);
                 CREATE INDEX IF NOT EXISTS idx_chat_messages_user_id_created_at
@@ -68,6 +78,8 @@ class ChatStore:
                     ON rate_limit_events (user_id, created_at);
                 CREATE INDEX IF NOT EXISTS idx_rate_limit_events_created_at
                     ON rate_limit_events (created_at);
+                CREATE INDEX IF NOT EXISTS idx_daily_topics_chat_day
+                    ON daily_topics (chat_id, day, message_count DESC);
                 """
             )
             columns = {
@@ -325,6 +337,50 @@ class ChatStore:
             parameters.append(role)
         with self._lock:
             return int(self._connection.execute(query, parameters).fetchone()[0])
+
+    def replace_daily_topics(
+        self,
+        *,
+        chat_id: int,
+        day: str,
+        topics: list[tuple[str, int]],
+        model: str,
+    ) -> None:
+        """Заменяет AI-темы конкретной группы и календарного дня атомарно."""
+        now = time.time()
+        with self._lock, self._connection:
+            self._connection.execute(
+                "DELETE FROM daily_topics WHERE chat_id = ? AND day = ?",
+                (chat_id, day),
+            )
+            self._connection.executemany(
+                """
+                INSERT INTO daily_topics (chat_id, day, title, message_count, model, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    (chat_id, day, title[:200], max(0, int(count)), model[:100], now)
+                    for title, count in topics
+                    if title and int(count) > 0
+                ],
+            )
+
+    def list_daily_topics(
+        self, *, chat_id: int, day: str, limit: int = 10
+    ) -> list[tuple[str, int]]:
+        """Возвращает сохранённые темы группы за календарный день."""
+        if limit <= 0:
+            return []
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT title, message_count FROM daily_topics
+                WHERE chat_id = ? AND day = ?
+                ORDER BY message_count DESC, id ASC LIMIT ?
+                """,
+                (chat_id, day, limit),
+            ).fetchall()
+        return [(str(row["title"]), max(0, int(row["message_count"]))) for row in rows]
 
     def allow_request(self, user_id: int, now: float | None = None) -> tuple[bool, int]:
         now = time.time() if now is None else now

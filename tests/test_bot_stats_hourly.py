@@ -71,6 +71,26 @@ def test_daily_stats_are_separated_by_group_and_topic():
     assert get_daily_top_topics(bd, chat_id=-100) == []
 
 
+def test_daily_stats_prefers_canonical_store_counts_and_topics():
+    class Store:
+        def count_chat_messages(self, chat_id, start_ts, end_ts, *, topic_id, role):
+            assert chat_id == -100
+            assert end_ts > start_ts
+            return {("user", None): 12, ("bot", None): 3}[(role, topic_id)]
+
+        def list_daily_topics(self, *, chat_id, day, limit):
+            assert (chat_id, day, limit) == (-100, "2026-09-16", 3)
+            return [("Сопло", 8)]
+
+    bd = {"chat_store": Store(), "bot_stats": {"daily_scopes": {}}}
+
+    daily = get_daily_stats(bd, chat_id=-100, day="2026-09-16")
+
+    assert daily["total_incoming"] == 12
+    assert daily["total_answers"] == 3
+    assert get_daily_top_topics(bd, chat_id=-100, day="2026-09-16") == [("Сопло", 8)]
+
+
 def test_bot_answer_labels_are_not_daily_topics():
     bd: dict = {}
     record_incoming_activity(bd, user_id=1, chat_id=-100, topic_id=7)

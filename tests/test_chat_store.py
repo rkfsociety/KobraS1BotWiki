@@ -27,7 +27,7 @@ def test_creates_database_schema_and_indexes(tmp_path: Path) -> None:
             }
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
 
-        assert {"chat_messages", "rate_limit_events"} <= tables
+        assert {"chat_messages", "rate_limit_events", "daily_topics"} <= tables
         assert {
             "idx_chat_messages_user_id_id",
             "idx_chat_messages_chat_created_at",
@@ -38,6 +38,7 @@ def test_creates_database_schema_and_indexes(tmp_path: Path) -> None:
             "idx_chat_messages_role_id",
             "idx_chat_messages_reply_to_role_user",
             "idx_rate_limit_events_created_at",
+            "idx_daily_topics_chat_day",
         } <= indexes
         assert journal_mode.lower() == "wal"
     finally:
@@ -164,6 +165,34 @@ def test_telegram_messages_are_separated_by_group_and_topic(tmp_path: Path) -> N
         assert [m.text for m in store.list_chat_messages(-200, 0, first.created_at + 10)] == [
             "другая группа",
         ]
+    finally:
+        store.close()
+
+
+def test_daily_topics_are_replaced_per_group_and_day(tmp_path: Path) -> None:
+    store = ChatStore(tmp_path / "chat.sqlite3")
+    try:
+        store.replace_daily_topics(
+            chat_id=-100,
+            day="2026-09-16",
+            topics=[("Сопло", 15), ("Слайсер", 9)],
+            model="test-model",
+        )
+        store.replace_daily_topics(
+            chat_id=-100,
+            day="2026-09-16",
+            topics=[("Сопло", 18)],
+            model="test-model-2",
+        )
+        store.replace_daily_topics(
+            chat_id=-200,
+            day="2026-09-16",
+            topics=[("Другая группа", 4)],
+            model="test-model",
+        )
+
+        assert store.list_daily_topics(chat_id=-100, day="2026-09-16") == [("Сопло", 18)]
+        assert store.list_daily_topics(chat_id=-200, day="2026-09-16") == [("Другая группа", 4)]
     finally:
         store.close()
 

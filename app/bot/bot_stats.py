@@ -708,5 +708,16 @@ def get_daily_top_topics(
 ) -> list[tuple[str, int]]:
     if limit <= 0:
         return []
+    normalized_day = _normalize_date_key(day) or _today_key()
+    chat_store = bot_data.get("chat_store")
+    if chat_store is not None:
+        try:
+            stored = chat_store.list_daily_topics(
+                chat_id=chat_id, day=normalized_day, limit=limit
+            )
+            if stored:
+                return stored
+        except Exception:
+            log.exception("Не удалось прочитать темы дня из общей базы")
     daily = get_daily_stats(bot_data, chat_id=chat_id, topic_id=topic_id, day=day)
     return nlargest(limit, _counter_items(daily.get("topics")), key=lambda item: item[1])
