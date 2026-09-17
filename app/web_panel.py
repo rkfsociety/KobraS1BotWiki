@@ -73,7 +73,7 @@ from app.bot.manual_qa import (
     try_git_push_manual_qa,
 )
 from app.bot.stores import _load_fix_store, _norm_text, _save_fix_store, _save_json_atomic
-from app.bot.bot_stats import get_top_wiki_pages, get_top_questions, get_hourly_activity, get_top_users
+from app.bot.bot_stats import get_top_wiki_pages, get_top_questions, get_hourly_activity, get_top_users, get_total_answers
 from app.bot.admin_activity import (
     action_label,
     get_admin_activity_summary,
@@ -1096,8 +1096,7 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
     from app.bot.bot_stats import get_stats_metrics
     from app.bot.missed_questions import load_missed_questions
 
-    bot_stats = bd.get("bot_stats") or {}
-    total_answers = _safe_int(bot_stats.get("total_answers", 0))
+    total_answers = get_total_answers(bd)
     top_wiki_pages = get_top_wiki_pages(bd)
     top_questions = get_top_questions(bd)
     hourly_activity = get_hourly_activity(bd)

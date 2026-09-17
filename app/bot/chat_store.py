@@ -6,7 +6,12 @@ import sqlite3
 import threading
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+
+_STATS_TIMEZONE = ZoneInfo("Europe/Kaliningrad")
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +27,8 @@ class ChatMessage:
     chat_id: int | None = None
     topic_id: int | None = None
     telegram_message_id: int | None = None
+    username: str | None = None
+    first_name: str | None = None
 
 
 class ChatStore:
@@ -39,6 +46,8 @@ class ChatStore:
                 CREATE TABLE IF NOT EXISTS chat_messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
+                    username TEXT,
+                    first_name TEXT,
                     chat_id INTEGER,
                     topic_id INTEGER,
                     telegram_message_id INTEGER,
@@ -89,6 +98,8 @@ class ChatStore:
             if "url" not in columns:
                 self._connection.execute("ALTER TABLE chat_messages ADD COLUMN url TEXT")
             for column, definition in (
+                ("username", "TEXT"),
+                ("first_name", "TEXT"),
                 ("chat_id", "INTEGER"),
                 ("topic_id", "INTEGER"),
                 ("telegram_message_id", "INTEGER"),
@@ -132,19 +143,21 @@ class ChatStore:
         chat_id: int | None = None,
         topic_id: int | None = None,
         telegram_message_id: int | None = None,
+        username: str | None = None,
+        first_name: str | None = None,
     ) -> ChatMessage:
         created_at = time.time()
         with self._lock, self._connection:
             cursor = self._connection.execute(
                 """
                 INSERT INTO chat_messages (
-                    user_id, chat_id, topic_id, telegram_message_id,
+                    user_id, username, first_name, chat_id, topic_id, telegram_message_id,
                     role, text, source, created_at, reply_to_id, url
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    user_id, chat_id, topic_id, telegram_message_id,
+                    user_id, username, first_name, chat_id, topic_id, telegram_message_id,
                     role, text, source, created_at, reply_to_id, url,
                 ),
             )
@@ -154,6 +167,8 @@ class ChatStore:
         return ChatMessage(
             id=message_id,
             user_id=user_id,
+            username=username,
+            first_name=first_name,
             role=role,
             text=text,
             source=source,
@@ -173,6 +188,8 @@ class ChatStore:
         telegram_message_id: int,
         user_id: int,
         text: str,
+        username: str | None = None,
+        first_name: str | None = None,
         role: str = "user",
         source: str = "telegram",
         reply_to_id: int | None = None,
@@ -200,6 +217,8 @@ class ChatStore:
                     chat_id=chat_id,
                     topic_id=topic_id,
                     telegram_message_id=telegram_message_id,
+                    username=username,
+                    first_name=first_name,
                 )
             except sqlite3.IntegrityError:
                 # Another worker may have inserted the same Telegram update.
@@ -337,6 +356,72 @@ class ChatStore:
             parameters.append(role)
         with self._lock:
             return int(self._connection.execute(query, parameters).fetchone()[0])
+
+    def daily_metrics(
+        self,
+        *,
+        chat_id: int,
+        start_ts: float,
+        end_ts: float,
+        topic_id: int | None = None,
+    ) -> dict[str, object]:
+        """Агрегирует дневные метрики из одной выборки канонической базы."""
+        messages = self.list_chat_messages(
+            chat_id, start_ts, end_ts, topic_id=topic_id, role=None
+        )
+        return self._aggregate_metrics(messages)
+
+    def global_metrics(self) -> dict[str, object]:
+        """Агрегирует общую статистику Telegram из канонической базы."""
+        with self._lock:
+            rows = self._connection.execute(
+                """
+                SELECT * FROM chat_messages
+                WHERE chat_id IS NOT NULL
+                ORDER BY created_at ASC, id ASC
+                """
+            ).fetchall()
+        return self._aggregate_metrics([self._message_from_row(row) for row in rows])
+
+    @staticmethod
+    def _aggregate_metrics(messages: list[ChatMessage]) -> dict[str, object]:
+        """Строит совместимый набор агрегатов по уже выбранным сообщениям."""
+        hourly = [0] * 24
+        questions: dict[str, int] = {}
+        wiki_pages: dict[str, int] = {}
+        users: dict[str, dict[str, object]] = {}
+        total_incoming = 0
+        total_answers = 0
+        for message in messages:
+            if message.role == "user":
+                total_incoming += 1
+                hour = datetime.fromtimestamp(message.created_at, tz=_STATS_TIMEZONE).hour
+                hourly[hour] += 1
+                question = " ".join(message.text.lower().split())
+                if question:
+                    questions[question] = questions.get(question, 0) + 1
+                key = str(message.user_id)
+                item = users.setdefault(
+                    key,
+                    {
+                        "user_id": message.user_id,
+                        "label": message.username or message.first_name or key,
+                        "count": 0,
+                    },
+                )
+                item["count"] = int(item["count"]) + 1
+            elif message.role == "bot":
+                total_answers += 1
+                if message.url:
+                    wiki_pages[message.url] = wiki_pages.get(message.url, 0) + 1
+        return {
+            "total_incoming": total_incoming,
+            "total_answers": total_answers,
+            "hourly_activity": hourly,
+            "questions": questions,
+            "wiki_pages": wiki_pages,
+            "user_messages": users,
+        }
 
     def replace_daily_topics(
         self,
@@ -567,6 +652,8 @@ class ChatStore:
         return ChatMessage(
             id=row["id"],
             user_id=row["user_id"],
+            username=row["username"],
+            first_name=row["first_name"],
             role=row["role"],
             text=row["text"],
             source=row["source"],

@@ -13,11 +13,13 @@ from app.bot.bot_stats import (
     get_top_questions,
     get_top_wiki_pages,
     get_top_users,
+    get_total_answers,
     load_bot_stats,
     normalize_daily_date,
     record_answer,
     record_incoming_activity,
 )
+from app.bot.chat_store import ChatStore
 
 
 def test_incoming_bumps_hourly_and_user():
@@ -89,6 +91,61 @@ def test_daily_stats_prefers_canonical_store_counts_and_topics():
     assert daily["total_incoming"] == 12
     assert daily["total_answers"] == 3
     assert get_daily_top_topics(bd, chat_id=-100, day="2026-09-16") == [("Сопло", 8)]
+
+
+def test_global_readers_prefer_canonical_store(tmp_path):
+    store = ChatStore(tmp_path / "chat.sqlite3")
+    try:
+        store.add_telegram_message(
+            chat_id=-100,
+            topic_id=7,
+            telegram_message_id=1,
+            user_id=42,
+            username="roman",
+            text="как настроить первый слой",
+        )
+        store.add_telegram_message(
+            chat_id=-100,
+            topic_id=7,
+            telegram_message_id=2,
+            user_id=42,
+            username="roman",
+            text="как настроить первый слой",
+        )
+        store.add_message(
+            0,
+            "bot",
+            "Откройте страницу",
+            "wiki",
+            url="https://wiki.example/layer",
+            chat_id=-100,
+            topic_id=7,
+        )
+        bd = {
+            "chat_store": store,
+            "bot_stats": {
+                "total_incoming": 999,
+                "total_answers": 999,
+                "questions": {"старый вопрос": 999},
+                "wiki_pages": {"старый url": 999},
+                "hourly_activity": [999] * 24,
+                "user_messages": {"9": {"user_id": 9, "count": 999}},
+            },
+        }
+
+        assert get_total_answers(bd) == 1
+        assert get_top_questions(bd) == [("как настроить первый слой", 2)]
+        assert get_top_wiki_pages(bd) == [("https://wiki.example/layer", 1)]
+        assert get_hourly_activity(bd) == store.global_metrics()["hourly_activity"]
+        assert get_top_users(bd) == [{"user_id": 42, "label": "roman", "count": 2}]
+        assert get_stats_metrics(bd) == {
+            "unique_questions": 1,
+            "unique_users": 1,
+            "answer_rate": 50,
+            "avg_answers_per_user": 1,
+        }
+    finally:
+        store.close()
 
 
 def test_bot_answer_labels_are_not_daily_topics():

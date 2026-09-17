@@ -112,6 +112,8 @@ async def on_any_update(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
                                 topic_id=m.message_thread_id,
                                 telegram_message_id=m.message_id,
                                 user_id=from_user.id if from_user else 0,
+                                username=from_user.username if from_user else None,
+                                first_name=from_user.first_name if from_user else None,
                                 text=(text or "").strip(),
                             )
                         except Exception:

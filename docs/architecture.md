@@ -34,7 +34,7 @@
 | `user_context.py` | Контекст диалога: история сообщений, обогащение запросов анафорой |
 | `bad_answers.py` | Хранение/загрузка ошибочных ответов (`data/bad_answers.json`) |
 | `reply_logging.py` | Лог исходящих ответов; персистентная лента (`.cache/recent_replies.json`) |
-| `bot_stats.py` | Метрики совместимости и чтение дневных счётчиков из канонической SQLite-базы |
+| `bot_stats.py` | Чтение Telegram-метрик из канонической SQLite-базы; JSON-агрегаты — fallback для истории |
 | `chat_store.py` | Единая история Mini App и Telegram-сообщений (`data/chat.sqlite3`), с `chat_id`/`topic_id` |
 | `decision_log.py` | Ссылки на сообщения в чате, текст вопроса для лога |
 | `stores.py` | Кэш feedback, фиксы ссылок `/fix` |

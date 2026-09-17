@@ -165,6 +165,30 @@ def test_telegram_messages_are_separated_by_group_and_topic(tmp_path: Path) -> N
         assert [m.text for m in store.list_chat_messages(-200, 0, first.created_at + 10)] == [
             "другая группа",
         ]
+        store.add_message(
+            0,
+            "bot",
+            "ответ",
+            "wiki",
+            url="https://wiki.example/speed",
+            chat_id=-100,
+            topic_id=7,
+        )
+        metrics = store.daily_metrics(
+            chat_id=-100,
+            start_ts=0,
+            end_ts=first.created_at + 10,
+        )
+        assert metrics["total_incoming"] == 2
+        assert metrics["total_answers"] == 1
+        assert sum(metrics["hourly_activity"]) == 2
+        assert metrics["questions"]["первое сообщение"] == 1
+        assert metrics["wiki_pages"]["https://wiki.example/speed"] == 1
+        global_metrics = store.global_metrics()
+        assert global_metrics["total_incoming"] == 3
+        assert global_metrics["total_answers"] == 1
+        assert global_metrics["questions"]["другая тема"] == 1
+        assert global_metrics["wiki_pages"]["https://wiki.example/speed"] == 1
     finally:
         store.close()
 

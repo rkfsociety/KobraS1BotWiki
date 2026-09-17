@@ -1,8 +1,8 @@
 """Сбор статистики бота: топ вики/вопросов + активность чата по часам.
 
-Агрегаты совместимости хранятся в bot_data["bot_stats"] и персистируются в
-.cache/bot_stats.json. Источник дневного количества сообщений после запуска
-единого ChatStore — каноническая база data/chat.sqlite3.
+Канонический источник Telegram-метрик — data/chat.sqlite3 через ChatStore.
+Агрегаты в bot_data["bot_stats"] и .cache/bot_stats.json оставлены для
+совместимости и как fallback для исторического периода до наполнения SQLite.
 Формат на диске:
   {
     "wiki_pages": {"<url>": <count>, ...},
@@ -549,7 +549,7 @@ def get_top_wiki_pages(bot_data: dict[str, Any], limit: int = 10) -> list[tuple[
     """Топ вики-страниц по количеству ответов ботом."""
     if limit <= 0:
         return []
-    stats = _stats_from_bot_data(bot_data)
+    stats = _canonical_metrics(bot_data) or _stats_from_bot_data(bot_data)
     return nlargest(limit, _counter_items(stats.get("wiki_pages")), key=lambda x: x[1])
 
 
@@ -557,7 +557,7 @@ def get_top_questions(bot_data: dict[str, Any], limit: int = 10) -> list[tuple[s
     """Топ вопросов пользователей по частоте."""
     if limit <= 0:
         return []
-    stats = _stats_from_bot_data(bot_data)
+    stats = _canonical_metrics(bot_data) or _stats_from_bot_data(bot_data)
     return nlargest(limit, _counter_items(stats.get("questions")), key=lambda x: x[1])
 
 
@@ -580,9 +580,31 @@ def _counter_items(value: Any) -> list[tuple[str, int]]:
     ]
 
 
+def _canonical_metrics(bot_data: dict[str, Any]) -> dict[str, Any] | None:
+    """Возвращает агрегаты Telegram из ChatStore, если база уже наполнена."""
+    if not isinstance(bot_data, dict):
+        return None
+    chat_store = bot_data.get("chat_store")
+    metrics_reader = getattr(chat_store, "global_metrics", None)
+    if not callable(metrics_reader):
+        return None
+    try:
+        metrics = metrics_reader()
+    except Exception:
+        log.exception("Не удалось прочитать общую статистику из канонической базы")
+        return None
+    if not isinstance(metrics, dict):
+        return None
+    # Пустая новая база не должна обнулять сохраненную совместимую статистику
+    # до того, как в нее попадет первое Telegram-сообщение.
+    if _safe_int(metrics.get("total_incoming")) or _safe_int(metrics.get("total_answers")):
+        return metrics
+    return None
+
+
 def get_hourly_activity(bot_data: dict[str, Any]) -> list[int]:
     """Счётчики входящих сообщений по часам суток (24 элемента, индекс = час)."""
-    stats = _stats_from_bot_data(bot_data)
+    stats = _canonical_metrics(bot_data) or _stats_from_bot_data(bot_data)
     hourly = stats.get("hourly_activity")
     if isinstance(hourly, list) and len(hourly) == 24:
         return [max(0, _safe_int(value)) for value in hourly]
@@ -593,7 +615,7 @@ def get_top_users(bot_data: dict[str, Any], limit: int = 10) -> list[dict[str, A
     """Топ участников по числу входящих сообщений в разрешённых чатах."""
     if limit <= 0:
         return []
-    stats = _stats_from_bot_data(bot_data)
+    stats = _canonical_metrics(bot_data) or _stats_from_bot_data(bot_data)
     users = stats.get("user_messages") or {}
     rows: list[dict[str, Any]] = []
     if not isinstance(users, dict):
@@ -616,7 +638,7 @@ def get_top_users(bot_data: dict[str, Any], limit: int = 10) -> list[dict[str, A
 
 def get_stats_metrics(bot_data: dict[str, Any]) -> dict[str, Any]:
     """Возвращает метрики качества: уникальные вопросы/пользователи, коэффициент ответов."""
-    stats = _stats_from_bot_data(bot_data)
+    stats = _canonical_metrics(bot_data) or _stats_from_bot_data(bot_data)
     total_answers = max(0, _safe_int(stats.get("total_answers", 0)))
     total_incoming = max(0, _safe_int(stats.get("total_incoming", 0)))
     unique_questions = len(stats.get("questions")) if isinstance(stats.get("questions"), dict) else 0
@@ -632,6 +654,12 @@ def get_stats_metrics(bot_data: dict[str, Any]) -> dict[str, Any]:
         "answer_rate": answer_rate,
         "avg_answers_per_user": int(total_answers / unique_users) if unique_users > 0 else 0,
     }
+
+
+def get_total_answers(bot_data: dict[str, Any]) -> int:
+    """Возвращает общее число сохранённых ответов бота."""
+    stats = _canonical_metrics(bot_data) or _stats_from_bot_data(bot_data)
+    return max(0, _safe_int(stats.get("total_answers", 0)))
 
 
 def get_peak_hours(bot_data: dict[str, Any], limit: int = 3) -> list[dict[str, Any]]:
@@ -684,17 +712,38 @@ def get_daily_stats(
     if chat_store is not None:
         try:
             start_ts, end_ts = _daily_epoch_bounds(normalized_day)
-            stored_incoming = chat_store.count_chat_messages(
-                chat_id, start_ts, end_ts, topic_id=topic_id, role="user"
-            )
-            stored_answers = chat_store.count_chat_messages(
-                chat_id, start_ts, end_ts, topic_id=topic_id, role="bot"
-            )
+            daily_metrics = getattr(chat_store, "daily_metrics", None)
+            if callable(daily_metrics):
+                stored = daily_metrics(
+                    chat_id=chat_id,
+                    start_ts=start_ts,
+                    end_ts=end_ts,
+                    topic_id=topic_id,
+                )
+            else:
+                stored = {
+                    "total_incoming": chat_store.count_chat_messages(
+                        chat_id, start_ts, end_ts, topic_id=topic_id, role="user"
+                    ),
+                    "total_answers": chat_store.count_chat_messages(
+                        chat_id, start_ts, end_ts, topic_id=topic_id, role="bot"
+                    ),
+                }
+            stored_incoming = _safe_int(stored.get("total_incoming"))
+            stored_answers = _safe_int(stored.get("total_answers"))
             # До первой записи в новой базе сохраняем доступ к старой агрегированной
             # статистике. После появления сообщений источником становятся только SQL-данные.
             if stored_incoming or stored_answers:
-                result["total_incoming"] = stored_incoming
-                result["total_answers"] = stored_answers
+                result.update(
+                    {
+                        "total_incoming": stored_incoming,
+                        "total_answers": stored_answers,
+                        "hourly_activity": stored.get("hourly_activity", [0] * 24),
+                        "questions": stored.get("questions", {}),
+                        "wiki_pages": stored.get("wiki_pages", {}),
+                        "user_messages": stored.get("user_messages", {}),
+                    }
+                )
         except Exception:
             log.exception("Не удалось прочитать дневную статистику из общей базы")
     # Темы сводки не строятся из ответов бота. Поля topics/topic_label,
