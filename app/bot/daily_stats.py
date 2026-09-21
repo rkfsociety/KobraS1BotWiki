@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.bot.bot_stats import get_daily_stats, get_daily_top_topics
 from app.bot.daily_summary import format_daily_summary
-from app.bot.topic_classifier import classify_daily_topics
+from app.bot.topic_classifier import classify_daily_topics, select_topic_models
 from app.bot.review_mention import record_outgoing_bot_message
 
 log = logging.getLogger(__name__)
@@ -48,11 +48,25 @@ async def send_daily_stats(context) -> None:
 
     bot_data = application.bot_data
     day = _previous_local_day()
+    chat_store = bot_data.get("chat_store")
+    topic_models: tuple[str, ...] = ()
+    if chat_store is not None and getattr(settings, "literouter_enabled", False) and getattr(
+        settings, "literouter_api_key", ""
+    ):
+        topic_models = await select_topic_models(settings)
+        log.info("Модели тематизации на запуск %s: %s", day, ", ".join(topic_models) or "нет")
+
     for chat_id in chat_ids:
-        chat_store = bot_data.get("chat_store")
         if chat_store is not None:
             try:
-                await classify_daily_topics(chat_store, settings, chat_id=chat_id, day=day, limit=3)
+                await classify_daily_topics(
+                    chat_store,
+                    settings,
+                    chat_id=chat_id,
+                    day=day,
+                    limit=3,
+                    models=topic_models or None,
+                )
             except Exception:
                 log.exception("Не удалось классифицировать темы chat_id=%s day=%s", chat_id, day)
         daily = get_daily_stats(bot_data, chat_id=chat_id, topic_id=None, day=day)

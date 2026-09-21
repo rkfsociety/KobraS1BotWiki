@@ -73,6 +73,46 @@ async def test_send_daily_stats_uses_separate_group_scopes(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_send_daily_stats_discovers_models_once_and_classifies_groups_in_order(monkeypatch):
+    monkeypatch.setattr(daily_stats, "_previous_local_day", lambda: "2026-09-13")
+    select_models = AsyncMock(return_value=("best-model", "fallback-model"))
+    classify = AsyncMock()
+    monkeypatch.setattr(daily_stats, "select_topic_models", select_models)
+    monkeypatch.setattr(daily_stats, "classify_daily_topics", classify)
+    monkeypatch.setattr(
+        daily_stats,
+        "get_daily_stats",
+        lambda *_args, **_kwargs: {"total_incoming": 2},
+    )
+    monkeypatch.setattr(daily_stats, "get_daily_top_topics", lambda *_args, **_kwargs: [])
+    send_message = AsyncMock()
+    application = SimpleNamespace(
+        bot_data={
+            "settings": SimpleNamespace(
+                allowed_chat_ids=frozenset({-1002, -1001}),
+                literouter_enabled=True,
+                literouter_api_key="key",
+                daily_stats_topic_id=0,
+            ),
+            "chat_store": object(),
+        }
+    )
+    context = SimpleNamespace(
+        application=application,
+        bot=SimpleNamespace(
+            get_chat=AsyncMock(return_value=SimpleNamespace(is_forum=False)),
+            send_message=send_message,
+        ),
+    )
+
+    await daily_stats.send_daily_stats(context)
+
+    select_models.assert_awaited_once()
+    assert [call.kwargs["chat_id"] for call in classify.await_args_list] == [-1002, -1001]
+    assert all(call.kwargs["models"] == ("best-model", "fallback-model") for call in classify.await_args_list)
+
+
+@pytest.mark.asyncio
 async def test_send_daily_stats_continues_after_one_chat_error(monkeypatch):
     send_message = AsyncMock(side_effect=[RuntimeError("chat unavailable"), None])
     get_chat = AsyncMock(return_value=SimpleNamespace(is_forum=True))

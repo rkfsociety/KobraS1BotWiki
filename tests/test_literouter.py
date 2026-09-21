@@ -11,7 +11,7 @@ from app.bot.handlers._cmd_ii import (
     _looks_truncated,
     _split_telegram_text,
 )
-from app.bot.literouter import LiteRouterError, ask_literouter
+from app.bot.literouter import LiteRouterError, ask_literouter, list_literouter_models
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
 
@@ -106,6 +106,49 @@ def test_literouter_omits_max_tokens_when_unlimited(monkeypatch):
 
     assert result == "Готово"
     assert "max_tokens" not in captured["json"]
+
+
+def test_literouter_lists_models_for_current_key(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return {"data": [{"id": "first-model"}, {"id": "first-model"}, {"id": "second-model"}]}
+
+        text = ""
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, endpoint, **kwargs):
+            captured["endpoint"] = endpoint
+            captured["kwargs"] = kwargs
+            return FakeResponse()
+
+    monkeypatch.setattr("app.bot.literouter.httpx.AsyncClient", FakeClient)
+
+    result = asyncio.run(
+        list_literouter_models(
+            api_key="secret-value",
+            base_url="https://api.literouter.com/v1",
+            timeout_seconds=25,
+            cooldown_seconds=0,
+        )
+    )
+
+    assert result == ("first-model", "second-model")
+    assert captured["endpoint"] == "https://api.literouter.com/v1/models"
+    assert captured["kwargs"]["headers"]["Authorization"] == "Bearer secret-value"
+    assert captured["client_kwargs"]["headers"]["User-Agent"] == "KobraS1BotWiki/1.0"
 
 
 def test_literouter_rejects_non_https_base_url_without_request():

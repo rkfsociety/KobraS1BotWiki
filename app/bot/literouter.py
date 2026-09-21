@@ -13,6 +13,9 @@ class LiteRouterError(RuntimeError):
     """Ошибка запроса к LiteRouter без раскрытия API-ключа."""
 
 
+_USER_AGENT = "KobraS1BotWiki/1.0"
+
+
 _COOLDOWN_LOCK: asyncio.Lock | None = None
 _COOLDOWN_LOOP = None
 _NEXT_REQUEST_AT = 0.0
@@ -88,7 +91,7 @@ async def ask_literouter(
     messages: list[dict[str, str]],
     timeout_seconds: int,
     max_tokens: int | None,
-    cooldown_seconds: int = 5,
+    cooldown_seconds: int = 9,
 ) -> str:
     """Отправляет один non-streaming chat completion в LiteRouter."""
     key = (api_key or "").strip()
@@ -148,3 +151,61 @@ async def ask_literouter(
     if not answer:
         raise LiteRouterError("модель вернула пустой ответ")
     return answer
+
+
+async def list_literouter_models(
+    *,
+    api_key: str,
+    base_url: str,
+    timeout_seconds: int,
+    cooldown_seconds: int = 9,
+) -> tuple[str, ...]:
+    """Возвращает идентификаторы моделей, доступных текущему ключу LiteRouter."""
+    key = (api_key or "").strip()
+    if not key:
+        raise LiteRouterError("не задан LITEROUTER_API_KEY")
+
+    endpoint = f"{(base_url or '').strip().rstrip('/')}/models"
+    if not endpoint.startswith("https://"):
+        raise LiteRouterError("LITEROUTER_BASE_URL должен начинаться с https://")
+
+    await _wait_for_cooldown(cooldown_seconds)
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Accept": "application/json",
+        "User-Agent": _USER_AGENT,
+    }
+    try:
+        async with httpx.AsyncClient(
+            timeout=max(1, int(timeout_seconds)),
+            follow_redirects=False,
+            headers={"User-Agent": _USER_AGENT},
+        ) as client:
+            response = await client.get(endpoint, headers=headers)
+    except httpx.HTTPError as exc:
+        raise LiteRouterError(f"сетевой сбой: {type(exc).__name__}") from exc
+
+    if response.status_code >= 400:
+        detail = _error_detail(response, secret=key)
+        logging.warning("LiteRouter /models вернул HTTP %s: %s", response.status_code, detail)
+        raise LiteRouterError(f"провайдер вернул HTTP {response.status_code}: {detail}")
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise LiteRouterError("список моделей вернул некорректный JSON") from exc
+
+    raw_models = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(raw_models, list):
+        raise LiteRouterError("провайдер вернул список моделей в неизвестном формате")
+
+    models = tuple(
+        dict.fromkeys(
+            item["id"].strip()
+            for item in raw_models
+            if isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"].strip()
+        )
+    )
+    if not models:
+        raise LiteRouterError("провайдер вернул пустой список моделей")
+    return models

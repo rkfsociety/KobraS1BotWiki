@@ -9,13 +9,28 @@ from typing import Any
 
 from app.bot.bot_stats import _daily_epoch_bounds
 from app.bot.chat_store import ChatMessage, ChatStore
-from app.bot.literouter import LiteRouterError, ask_literouter
+from app.bot.literouter import LiteRouterError, ask_literouter, list_literouter_models
 
 log = logging.getLogger(__name__)
 
 _MAX_INPUT_MESSAGES = 600
 _MAX_MESSAGE_TEXT = 300
 _MAX_TOPICS = 10
+
+# /models не содержит оценки качества. Этот порядок — безопасный рейтинг именно
+# для короткой JSON-классификации; используются только бесплатные варианты.
+TOPIC_MODEL_PRIORITY = (
+    "deepseek-v4-flash-0731:free",
+    "deepseek-v4-flash:free",
+    "glm-5.3:free",
+    "gpt-oss-120b:free",
+    "deepseek-v3.2:free",
+    "glm-5.2:free",
+    "gemini-2.5-flash:free",
+    "qwen3.8-27b:free",
+    "gemma-4-31b-it:free",
+    "mistral-large-3:free",
+)
 
 
 def _normalized_text(text: str) -> str:
@@ -91,6 +106,35 @@ def _messages_for_prompt(rows: list[dict[str, Any]]) -> str:
     return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
 
 
+def _configured_models(settings: Any) -> tuple[str, ...]:
+    models = tuple(getattr(settings, "literouter_models", ()) or ())
+    if models:
+        return models
+    model = getattr(settings, "literouter_model", "")
+    return (model,) if model else ()
+
+
+async def select_topic_models(settings: Any) -> tuple[str, ...]:
+    """Выбирает доступные бесплатные модели в порядке рейтинга для тем."""
+    configured = _configured_models(settings)
+    try:
+        available = await list_literouter_models(
+            api_key=settings.literouter_api_key,
+            base_url=settings.literouter_base_url,
+            timeout_seconds=settings.literouter_timeout_seconds,
+            cooldown_seconds=getattr(settings, "literouter_cooldown_seconds", 9),
+        )
+    except LiteRouterError as exc:
+        log.warning("Не удалось получить список моделей LiteRouter: %s; используем настройку", exc)
+        return configured
+
+    available_set = set(available)
+    ranked = tuple(model for model in TOPIC_MODEL_PRIORITY if model in available_set)
+    configured_available = tuple(model for model in configured if model in available_set)
+    selected = tuple(dict.fromkeys((*ranked, *configured_available)))
+    return selected or configured
+
+
 async def classify_daily_topics(
     store: ChatStore,
     settings: Any,
@@ -98,6 +142,7 @@ async def classify_daily_topics(
     chat_id: int,
     day: str,
     limit: int = 3,
+    models: tuple[str, ...] | None = None,
 ) -> list[tuple[str, int]]:
     """Группирует сообщения дня через LiteRouter и сохраняет результат в SQLite."""
     if not getattr(settings, "literouter_enabled", False) or not getattr(settings, "literouter_api_key", ""):
@@ -119,9 +164,7 @@ async def classify_daily_topics(
         "Максимум 10 тем. Не выдумывай темы и индексы."
     )
     user = f"DATA_BEGIN\n{_messages_for_prompt(rows)}\nDATA_END"
-    models = tuple(getattr(settings, "literouter_models", ()) or ())
-    if not models:
-        models = (getattr(settings, "literouter_model", ""),)
+    models = models or _configured_models(settings)
 
     selected_model = ""
     parsed: list[tuple[str, int]] | None = None
@@ -136,7 +179,7 @@ async def classify_daily_topics(
                 messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
                 timeout_seconds=settings.literouter_timeout_seconds,
                 max_tokens=getattr(settings, "literouter_max_tokens", None),
-                cooldown_seconds=getattr(settings, "literouter_cooldown_seconds", 5),
+                cooldown_seconds=getattr(settings, "literouter_cooldown_seconds", 9),
             )
             parsed = _parse_result(answer, weights, limit=min(_MAX_TOPICS, max(1, limit)))
             if parsed is not None:
