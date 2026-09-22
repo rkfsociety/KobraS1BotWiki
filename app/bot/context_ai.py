@@ -162,7 +162,7 @@ async def classify_message_as_question(*, settings: Any, text: str) -> bool | No
                 model=model,
                 messages=messages,
                 timeout_seconds=settings.literouter_timeout_seconds,
-                max_tokens=64,
+                max_tokens=getattr(settings, "literouter_max_tokens", None),
                 cooldown_seconds=getattr(settings, "literouter_cooldown_seconds", 9),
             )
         except LiteRouterError as exc:
@@ -198,7 +198,7 @@ async def judge_wiki_relevance(*, settings: Any, question: str, document: Any) -
                 model=model,
                 messages=messages,
                 timeout_seconds=settings.literouter_timeout_seconds,
-                max_tokens=64,
+                max_tokens=getattr(settings, "literouter_max_tokens", None),
                 cooldown_seconds=getattr(settings, "literouter_cooldown_seconds", 9),
             )
         except LiteRouterError as exc:

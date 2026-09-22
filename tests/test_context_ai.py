@@ -47,6 +47,7 @@ def test_question_classifier_returns_decision_without_generating_answer(monkeypa
         literouter_base_url="https://api.example/v1",
         literouter_models=("classifier:free",),
         literouter_timeout_seconds=5,
+        literouter_max_tokens=None,
         literouter_cooldown_seconds=0,
     )
     calls: list[dict] = []
@@ -71,6 +72,7 @@ def test_wiki_relevance_rejects_article_that_only_matches_printer_model(monkeypa
         literouter_base_url="https://api.example/v1",
         literouter_models=("deepseek-v4-flash:free", "glm-5.2:free"),
         literouter_timeout_seconds=5,
+        literouter_max_tokens=None,
         literouter_cooldown_seconds=0,
     )
     document = SimpleNamespace(
