@@ -222,8 +222,15 @@ def save_ctx_to_disk(bot_data: dict[str, Any], *, force: bool = False) -> None:
 
 # ── утилиты ───────────────────────────────────────────────────────────────────
 
-def _ukey(user_id: int, chat_id: int) -> str:
-    return f"{chat_id}:{user_id}"
+def _ukey(user_id: int, chat_id: int, topic_id: int | None = None) -> str:
+    if topic_id is None:
+        return f"{chat_id}:{user_id}"
+    return f"{chat_id}:{topic_id}:{user_id}"
+
+
+def _chat_context_key(chat_id: int, topic_id: int | None) -> str:
+    """Ключ истории чата; темы форума никогда не смешиваются."""
+    return str(chat_id) if topic_id is None else f"{chat_id}:{topic_id}"
 
 
 def _words(text: str) -> list[str]:
@@ -243,11 +250,12 @@ def record_user_message(
     user_id: int,
     chat_id: int,
     text: str,
+    topic_id: int | None = None,
 ) -> None:
     """Записывает сообщение пользователя в его историю и в историю чата."""
     _ensure_loaded(bot_data)
     now = time.time()
-    ukey = _ukey(user_id, chat_id)
+    ukey = _ukey(user_id, chat_id, topic_id)
 
     # Пользовательская история
     msgs = _dict_store(bot_data, "user_ctx_msgs")
@@ -260,7 +268,7 @@ def record_user_message(
 
     # История чата (все пользователи)
     chat_msgs = _dict_store(bot_data, "chat_ctx_msgs")
-    cbuf = _list_buffer(chat_msgs, str(chat_id))
+    cbuf = _list_buffer(chat_msgs, _chat_context_key(chat_id, topic_id))
     cbuf.append({"user_id": user_id, "text": text[:300], "ts": now})
     cbuf[:] = _fresh_context_items(cbuf, now=now, ttl=_CHAT_TTL)
     if len(cbuf) > _CHAT_MSG_MAX:
@@ -277,11 +285,12 @@ def record_bot_answer(
     chat_id: int,
     answer_text: str,
     url: str = "",
+    topic_id: int | None = None,
 ) -> None:
     """Запоминает ответ бота пользователю (для обогащения последующих запросов)."""
     _ensure_loaded(bot_data)
     now = time.time()
-    ukey = _ukey(user_id, chat_id)
+    ukey = _ukey(user_id, chat_id, topic_id)
     ans = _dict_store(bot_data, "user_ctx_answers")
     buf = _list_buffer(ans, ukey)
     buf.append({"text": answer_text[:300], "url": url, "ts": now})
@@ -298,6 +307,7 @@ def enrich_query(
     user_id: int,
     chat_id: int,
     query: str,
+    topic_id: int | None = None,
 ) -> str:
     """
     Обогащает поисковый запрос контекстом диалога.
@@ -319,7 +329,7 @@ def enrich_query(
         return query
 
     now = time.time()
-    ukey = _ukey(user_id, chat_id)
+    ukey = _ukey(user_id, chat_id, topic_id)
 
     # Слова из прошлых ответов бота (самые релевантные — бот уже нашёл тему)
     ans_words: list[str] = []
@@ -337,7 +347,8 @@ def enrich_query(
 
     # Слова из контекста чата (другие пользователи — тема разговора)
     chat_words: list[str] = []
-    for m in reversed(bot_data.get("chat_ctx_msgs", {}).get(str(chat_id), [])[-5:]):
+    chat_key = _chat_context_key(chat_id, topic_id)
+    for m in reversed(bot_data.get("chat_ctx_msgs", {}).get(chat_key, [])[-5:]):
         if not _is_fresh_context_item(m, now=now, ttl=_CHAT_TTL):
             continue
         if m.get("user_id") == user_id:
@@ -363,6 +374,7 @@ def get_user_topic_hint(
     *,
     user_id: int,
     chat_id: int,
+    topic_id: int | None = None,
 ) -> str:
     """
     Возвращает строку из ключевых слов текущей темы пользователя
@@ -370,7 +382,7 @@ def get_user_topic_hint(
     """
     _ensure_loaded(bot_data)
     now = time.time()
-    ukey = _ukey(user_id, chat_id)
+    ukey = _ukey(user_id, chat_id, topic_id)
 
     words: list[str] = []
     for bucket_key, ttl in [

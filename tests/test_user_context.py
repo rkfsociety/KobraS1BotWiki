@@ -90,3 +90,17 @@ def test_runtime_context_recovers_from_corrupted_store_containers():
     assert bot_data["user_ctx_msgs"]["20:10"][-1]["text"] == "новый вопрос"
     assert bot_data["user_ctx_answers"]["20:10"][-1]["text"] == "ответ"
     assert bot_data["chat_ctx_msgs"]["20"][-1]["user_id"] == 10
+
+
+def test_chat_context_does_not_mix_forum_topics(monkeypatch):
+    monkeypatch.setattr("app.bot.user_context.time.time", lambda: 1000.0)
+    bot_data = {"_user_ctx_loaded": True}
+
+    record_user_message(bot_data, user_id=1, chat_id=20, topic_id=7, text="сопло забилось")
+    record_user_message(bot_data, user_id=2, chat_id=20, topic_id=8, text="ремень натянуть")
+    record_user_message(bot_data, user_id=1, chat_id=20, topic_id=7, text="это сделать")
+
+    query = enrich_query(bot_data, user_id=1, chat_id=20, topic_id=7, query="это сделать")
+
+    assert "сопло" in query
+    assert "ремень" not in query

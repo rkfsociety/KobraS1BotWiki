@@ -214,6 +214,43 @@ def test_telegram_messages_are_separated_by_group_and_topic(tmp_path: Path) -> N
         store.close()
 
 
+def test_recent_topic_messages_exclude_current_and_other_topics(tmp_path: Path) -> None:
+    store = ChatStore(tmp_path / "chat.sqlite3")
+    try:
+        store.add_telegram_message(
+            chat_id=-100,
+            topic_id=7,
+            telegram_message_id=10,
+            user_id=1,
+            text="из этой темы",
+        )
+        store.add_telegram_message(
+            chat_id=-100,
+            topic_id=8,
+            telegram_message_id=11,
+            user_id=2,
+            text="из другой темы",
+        )
+        store.add_telegram_message(
+            chat_id=-100,
+            topic_id=7,
+            telegram_message_id=12,
+            user_id=1,
+            text="текущий вопрос",
+        )
+
+        messages = store.list_recent_topic_messages(
+            -100,
+            7,
+            before_telegram_message_id=12,
+            limit=50,
+        )
+
+        assert [message.text for message in messages] == ["из этой темы"]
+    finally:
+        store.close()
+
+
 def test_daily_topics_are_replaced_per_group_and_day(tmp_path: Path) -> None:
     store = ChatStore(tmp_path / "chat.sqlite3")
     try:

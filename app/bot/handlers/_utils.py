@@ -239,6 +239,7 @@ async def _try_reply_manual_qa(
             user_id=uid,
             chat_id=chat_id,
             answer_text=ans,
+            topic_id=getattr(msg, "message_thread_id", None),
         )
 
     if apply_rate_limit:

@@ -407,6 +407,40 @@ class ChatStore:
             rows = self._connection.execute(query, parameters).fetchall()
         return [self._message_from_row(row) for row in rows]
 
+    def list_recent_topic_messages(
+        self,
+        chat_id: int,
+        topic_id: int | None,
+        *,
+        before_telegram_message_id: int,
+        limit: int = 50,
+    ) -> list[ChatMessage]:
+        """Возвращает предыдущие сообщения только из одного чата и темы.
+
+        ``None`` для topic_id означает General/обычный чат и фильтруется как
+        ``IS NULL``. Это намеренно отдельный метод: ``list_chat_messages`` с
+        topic_id=None используется статистикой как запрос всех тем.
+        """
+        if limit <= 0:
+            return []
+
+        topic_clause = "topic_id IS NULL" if topic_id is None else "topic_id = ?"
+        parameters: list[object] = [chat_id]
+        if topic_id is not None:
+            parameters.append(topic_id)
+        parameters.extend([before_telegram_message_id, max(1, int(limit))])
+        query = f"""
+            SELECT * FROM chat_messages
+            WHERE chat_id = ?
+              AND {topic_clause}
+              AND telegram_message_id < ?
+            ORDER BY telegram_message_id DESC, id DESC
+            LIMIT ?
+        """
+        with self._lock:
+            rows = self._connection.execute(query, parameters).fetchall()
+        return list(reversed([self._message_from_row(row) for row in rows]))
+
     def count_chat_messages(
         self,
         chat_id: int,

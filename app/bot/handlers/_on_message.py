@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import hashlib
 import time
 import traceback
 
@@ -18,6 +19,7 @@ from app.bot.clarify import (
     _try_send_error_code_clarify,
     _try_send_printer_clarify,
 )
+from app.bot.context_ai import generate_contextual_answer
 from app.bot.decision_log import log_seen_message, log_skip
 from app.bot.design_replies import _maybe_reply_printer_design_vs_question
 from app.bot.error_codes_wiki import _error_code_candidates, _pick_error_code_doc
@@ -61,6 +63,106 @@ from ._utils import (
     _trigger_source,
     _try_reply_manual_qa,
 )
+
+
+async def _try_context_ai_reply(
+    *,
+    update: Update,
+    msg,
+    context: ContextTypes.DEFAULT_TYPE,
+    settings,
+    rl: dict,
+    question: str,
+    topic_messages,
+) -> bool:
+    """Отвечает ИИ только если надёжного ответа вики не было."""
+    chat_id = update.effective_chat.id if update.effective_chat else msg.chat_id
+    if not getattr(settings, "literouter_enabled", False) or not getattr(settings, "literouter_api_key", ""):
+        return False
+
+    now = time.time()
+    spam_exempt = await user_exempt_from_wiki_reply_spam_limits(update, context)
+    last_reply_ts = _safe_runtime_timestamp(
+        _rate_limit_dict(rl, "last_reply_ts_by_chat").get(chat_id, 0.0)
+    )
+    if not spam_exempt and now - last_reply_ts < settings.cooldown_seconds:
+        return False
+
+    q = _rate_limit_queue(rl, chat_id)
+    cutoff = now - 60.0
+    while q and q[0] < cutoff:
+        q.popleft()
+    if not spam_exempt and len(q) >= settings.max_replies_per_minute:
+        return False
+
+    ai_key = "ai:" + hashlib.sha256(question.casefold().strip().encode("utf-8")).hexdigest()
+    last_url = _rate_limit_url_dict(rl, chat_id)
+    last_ai_ts = _safe_runtime_timestamp(last_url.get(ai_key, 0.0))
+    if not spam_exempt and now - last_ai_ts < settings.duplicate_window_seconds:
+        return False
+
+    answer, model, models_tried = await generate_contextual_answer(
+        settings=settings,
+        question=question,
+        topic_messages=topic_messages,
+    )
+    if not answer:
+        return False
+
+    body = f"🤖 {answer.strip()}"
+    sent = await reply_for_user(
+        msg,
+        settings,
+        body,
+        chat_store=context.application.bot_data.get("chat_store"),
+        source="ai_context",
+        disable_web_page_preview=True,
+        log_kind="ai_context",
+        log_extra={
+            "model": model,
+            "models_tried": models_tried,
+            "context_messages": len(topic_messages),
+            "topic_id": getattr(msg, "message_thread_id", None),
+        },
+        log_user_id=msg.from_user.id if msg.from_user else None,
+    )
+    _record_bot_answer_context(
+        context=context,
+        chat_id=chat_id,
+        bot_message_id=sent.message_id,
+        query=question,
+        url=None,
+    )
+    add_to_recent_replies(
+        context.application.bot_data,
+        question=question,
+        answer=answer,
+        url="",
+        source="ai_context",
+        chat_id=chat_id,
+    )
+    _record_stat(
+        context.application.bot_data,
+        url="",
+        question=question,
+        source="ai_context",
+        chat_id=chat_id,
+        topic_id=getattr(msg, "message_thread_id", None),
+        topic="AI по контексту темы",
+    )
+    if msg.from_user is not None:
+        _record_bot_ans(
+            context.application.bot_data,
+            user_id=msg.from_user.id,
+            chat_id=chat_id,
+            answer_text=answer,
+            topic_id=getattr(msg, "message_thread_id", None),
+        )
+
+    _rate_limit_dict(rl, "last_reply_ts_by_chat")[chat_id] = now
+    q.append(now)
+    last_url[ai_key] = now
+    return True
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -248,10 +350,34 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     # Контекст пользователя: запись сообщения + обогащение запроса контекстом диалога.
     _ctx_uid = msg.from_user.id if msg.from_user else None
+    topic_messages = []
+    chat_store = context.application.bot_data.get("chat_store")
+    if chat_store is not None and getattr(msg, "message_id", None) is not None:
+        try:
+            topic_messages = chat_store.list_recent_topic_messages(
+                chat_id,
+                topic_id,
+                before_telegram_message_id=msg.message_id,
+                limit=50,
+            )
+        except Exception:
+            logging.exception("Не удалось получить контекст текущей темы")
 
     if _ctx_uid is not None:
-        _record_user_msg(context.application.bot_data, user_id=_ctx_uid, chat_id=chat_id, text=text)
-        _ctx_text = _enrich_ctx_query(context.application.bot_data, user_id=_ctx_uid, chat_id=chat_id, query=text)
+        _record_user_msg(
+            context.application.bot_data,
+            user_id=_ctx_uid,
+            chat_id=chat_id,
+            topic_id=topic_id,
+            text=text,
+        )
+        _ctx_text = _enrich_ctx_query(
+            context.application.bot_data,
+            user_id=_ctx_uid,
+            chat_id=chat_id,
+            topic_id=topic_id,
+            query=text,
+        )
     else:
         _ctx_text = text
 
@@ -457,6 +583,16 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
 
     if not best_doc:
+        if await _try_context_ai_reply(
+            update=update,
+            msg=msg,
+            context=context,
+            settings=settings,
+            rl=rl,
+            question=text,
+            topic_messages=topic_messages,
+        ):
+            return
         if not is_err:
             add_missed_question(text=text, score=None, best_url=None, chat_id=chat_id)
         if settings.log_decisions:
@@ -486,6 +622,17 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
 
         if clarify_low in ("sent", "blocked"):
+            return
+
+        if await _try_context_ai_reply(
+            update=update,
+            msg=msg,
+            context=context,
+            settings=settings,
+            rl=rl,
+            question=text,
+            topic_messages=topic_messages,
+        ):
             return
 
         add_missed_question(
@@ -636,6 +783,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             chat_id=chat_id,
             answer_text=best_doc.title,
             url=url,
+            topic_id=topic_id,
         )
 
     # фиксируем отправку после успешного ответа
