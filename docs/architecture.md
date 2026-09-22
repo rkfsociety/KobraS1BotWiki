@@ -31,7 +31,7 @@
 | `layer_model_gate.py` | Отсев кандидатов вики по модели принтера |
 | `manual_qa.py` | Ручные Q&A (`/qaadd`, namespace `manual_qa` в SQLite) |
 | `literouter.py` | OpenAI-compatible клиент LiteRouter для `/ii`, классификации тем и контекстного AI-fallback |
-| `context_ai.py` | Контекст последних 50 сообщений текущей Telegram-темы и генерация ответа бесплатной `:free` моделью после безрезультатного поиска по вики |
+| `context_ai.py` | AI-gate `QUESTION/NOT_QUESTION`, контекст последних 50 сообщений текущей Telegram-темы и генерация ответа бесплатной `:free` моделью после безрезультатного поиска по вики |
 | `user_context.py` | Контекст диалога: история сообщений, обогащение запросов анафорой |
 | `bad_answers.py` | Хранение/загрузка ошибочных ответов (namespace `bad_answers` в SQLite) |
 | `reply_logging.py` | Лог исходящих ответов; лента `recent_replies` в SQLite |

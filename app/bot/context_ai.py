@@ -78,6 +78,62 @@ def build_contextual_answer_messages(question: str, context: str) -> list[dict[s
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
+def build_question_classification_messages(text: str) -> list[dict[str, str]]:
+    system = (
+        "Ты фильтр входящих сообщений поддержки 3D-принтеров. Определи, является ли сообщение "
+        "реальным вопросом или просьбой о помощи. QUESTION — это явный вопрос, просьба объяснить, "
+        "настроить или починить, а также понятное описание проблемы, где очевидно требуется помощь, "
+        "даже без знака вопроса. NOT_QUESTION — это обрывок без понятной просьбы, утверждение без "
+        "запроса помощи, приветствие, благодарность, шутка, спор или обычная беседа. "
+        "В первой строке выведи только один маркер: QUESTION или NOT_QUESTION. "
+        "Не отвечай на сообщение и не добавляй пояснений."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": f"СООБЩЕНИЕ:\n{text[:4000]}"},
+    ]
+
+
+def _parse_question_classification(answer: str) -> bool | None:
+    marker = (answer or "").strip().upper().split(maxsplit=1)[0].strip("`*_:#-.,!?()[]")
+    if marker == "QUESTION":
+        return True
+    if marker == "NOT_QUESTION":
+        return False
+    return None
+
+
+async def classify_message_as_question(*, settings: Any, text: str) -> bool | None:
+    """Запрашивает у бесплатной модели решение, нужно ли отвечать на сообщение."""
+    if not getattr(settings, "literouter_enabled", False) or not getattr(settings, "literouter_api_key", ""):
+        return None
+
+    models = _free_models(settings)
+    if not models:
+        return None
+
+    messages = build_question_classification_messages(text)
+    for model in models:
+        try:
+            answer = await ask_literouter(
+                api_key=settings.literouter_api_key,
+                base_url=settings.literouter_base_url,
+                model=model,
+                messages=messages,
+                timeout_seconds=settings.literouter_timeout_seconds,
+                max_tokens=64,
+                cooldown_seconds=getattr(settings, "literouter_cooldown_seconds", 9),
+            )
+        except LiteRouterError as exc:
+            logging.warning("Question classifier model failed model=%s: %s", model, exc)
+            continue
+        decision = _parse_question_classification(answer)
+        if decision is not None:
+            return decision
+        logging.warning("Question classifier returned invalid marker model=%s", model)
+    return None
+
+
 def _strip_marker(answer: str) -> str:
     body = answer.strip()
     for marker in ("AI_ANSWER", "NO_ANSWER"):

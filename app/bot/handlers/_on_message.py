@@ -19,7 +19,7 @@ from app.bot.clarify import (
     _try_send_error_code_clarify,
     _try_send_printer_clarify,
 )
-from app.bot.context_ai import generate_contextual_answer
+from app.bot.context_ai import classify_message_as_question, generate_contextual_answer
 from app.bot.decision_log import log_seen_message, log_skip
 from app.bot.design_replies import _maybe_reply_printer_design_vs_question
 from app.bot.error_codes_wiki import _error_code_candidates, _pick_error_code_doc
@@ -350,18 +350,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     # Контекст пользователя: запись сообщения + обогащение запроса контекстом диалога.
     _ctx_uid = msg.from_user.id if msg.from_user else None
-    topic_messages = []
-    chat_store = context.application.bot_data.get("chat_store")
-    if chat_store is not None and getattr(msg, "message_id", None) is not None:
-        try:
-            topic_messages = chat_store.list_recent_topic_messages(
-                chat_id,
-                topic_id,
-                before_telegram_message_id=msg.message_id,
-                limit=50,
-            )
-        except Exception:
-            logging.exception("Не удалось получить контекст текущей темы")
 
     if _ctx_uid is not None:
         _record_user_msg(
@@ -420,6 +408,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
     # Классификация может понадобиться двум gate-ам ниже; не считаем её дважды.
     looks_like_question: bool | None = None
+    triggered = False
 
     # В группах: на вопросы отвечаем без @; @ или reply нужны для прочих сообщений (если REQUIRE_TRIGGER).
     if can_reply and settings.require_trigger:
@@ -430,10 +419,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         )
         if not triggered:
             looks_like_question = index.looks_like_question(text)
-        if not triggered and not looks_like_question:
-            if settings.log_decisions:
-                log_skip(chat_id, "not_triggered", msg=msg)
-            return
 
     # Не отвечаем на команды и свои же/сервисные сообщения.
     if text.startswith("/"):
@@ -456,6 +441,16 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             log_skip(chat_id, "conversational_chatter", msg=msg)
         return
 
+    ai_question_decision: bool | None = None
+    if can_reply:
+        ai_question_decision = await classify_message_as_question(settings=settings, text=text)
+        if ai_question_decision is False:
+            if settings.log_decisions:
+                log_skip(chat_id, "ai_not_a_question", msg=msg)
+            return
+        if ai_question_decision is True:
+            looks_like_question = True
+
     if settings.questions_only:
         if looks_like_question is None:
             looks_like_question = index.looks_like_question(text)
@@ -464,12 +459,30 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 log_skip(chat_id, "not_a_question", msg=msg)
             return
 
+    if can_reply and settings.require_trigger and not triggered and ai_question_decision is None and not looks_like_question:
+        if settings.log_decisions:
+            log_skip(chat_id, "not_triggered", msg=msg)
+        return
+
     # Вне настроенного контекста отвечать нельзя, но вопрос сохраняем в общей очереди.
     if not can_reply:
         add_missed_question(text=text, score=None, best_url=None, chat_id=chat_id)
         if settings.log_decisions:
             log_skip(chat_id, "collect_only", msg=msg)
         return
+
+    topic_messages = []
+    chat_store = context.application.bot_data.get("chat_store")
+    if chat_store is not None and getattr(msg, "message_id", None) is not None:
+        try:
+            topic_messages = chat_store.list_recent_topic_messages(
+                chat_id,
+                topic_id,
+                before_telegram_message_id=msg.message_id,
+                limit=50,
+            )
+        except Exception:
+            logging.exception("Не удалось получить контекст текущей темы")
 
     # Короткий "help" без контекста — просим уточнить, вместо бессмысленного поиска.
     if _is_generic_help_without_context(text):
