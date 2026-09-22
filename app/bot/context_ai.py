@@ -6,6 +6,7 @@ from typing import Any, Iterable
 
 from app.bot.chat_store import ChatMessage
 from app.bot.literouter import LiteRouterError, ask_literouter
+from app.bot.topic_classifier import TOPIC_MODEL_PRIORITY
 
 
 MAX_TOPIC_CONTEXT_MESSAGES = 50
@@ -55,7 +56,11 @@ def _free_models(settings: Any) -> tuple[str, ...]:
     configured = tuple(getattr(settings, "literouter_models", ()) or ())
     if not configured:
         configured = (getattr(settings, "literouter_model", "") or "",)
-    return tuple(dict.fromkeys(model.strip() for model in configured if model.strip().endswith(":free")))
+    configured = tuple(dict.fromkeys(model.strip() for model in configured if model.strip().endswith(":free")))
+    configured_set = set(configured)
+    ranked = tuple(model for model in TOPIC_MODEL_PRIORITY if model in configured_set)
+    remainder = tuple(model for model in configured if model not in ranked)
+    return (*ranked, *remainder)
 
 
 def build_contextual_answer_messages(question: str, context: str) -> list[dict[str, str]]:

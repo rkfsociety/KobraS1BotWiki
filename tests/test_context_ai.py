@@ -67,7 +67,7 @@ def test_contextual_answer_uses_only_free_models_and_fallback(monkeypatch):
         literouter_enabled=True,
         literouter_api_key="key",
         literouter_base_url="https://api.example/v1",
-        literouter_models=("paid-model", "first:free", "second:free"),
+        literouter_models=("paid-model", "glm-5.2:free", "deepseek-v4-flash:free", "second:free"),
         literouter_timeout_seconds=5,
         literouter_max_tokens=300,
         literouter_cooldown_seconds=0,
@@ -76,7 +76,7 @@ def test_contextual_answer_uses_only_free_models_and_fallback(monkeypatch):
 
     async def ask(**kwargs):
         calls.append(kwargs["model"])
-        if kwargs["model"] == "first:free":
+        if kwargs["model"] == "deepseek-v4-flash:free":
             return "NO_ANSWER Точно ответить нельзя."
         return "AI_ANSWER Проверьте натяжение ремней."
 
@@ -90,5 +90,5 @@ def test_contextual_answer_uses_only_free_models_and_fallback(monkeypatch):
         )
     )
 
-    assert calls == ["first:free", "second:free"]
-    assert (answer, model, attempts) == ("Проверьте натяжение ремней.", "second:free", 2)
+    assert calls == ["deepseek-v4-flash:free", "glm-5.2:free"]
+    assert (answer, model, attempts) == ("Проверьте натяжение ремней.", "glm-5.2:free", 2)
