@@ -6,12 +6,14 @@ from types import SimpleNamespace
 from app.bot.chat_store import ChatMessage
 from app.bot.context_ai import (
     build_contextual_answer_messages,
+    build_context_selection_messages,
     build_question_classification_messages,
     build_wiki_relevance_messages,
     classify_message_as_question,
     format_topic_context,
     generate_contextual_answer,
     judge_wiki_relevance,
+    select_relevant_topic_messages,
 )
 
 
@@ -63,6 +65,78 @@ def test_question_classifier_returns_decision_without_generating_answer(monkeypa
     assert decision is False
     assert calls[0]["model"] == "classifier:free"
     assert calls[0]["messages"] == build_question_classification_messages("Что дверь не закрывалась")
+
+
+def test_context_selector_ignores_unrelated_messages(monkeypatch):
+    settings = SimpleNamespace(
+        literouter_enabled=True,
+        literouter_api_key="key",
+        literouter_base_url="https://api.example/v1",
+        literouter_models=("selector:free",),
+        literouter_timeout_seconds=5,
+        literouter_max_tokens=None,
+        literouter_cooldown_seconds=0,
+    )
+    history = [
+        _message(1, "user", "Kobra S1 печатает с пропусками"),
+        _message(2, "user", "Кто знает хороший рецепт борща?"),
+    ]
+    calls: list[dict] = []
+
+    async def ask(**kwargs):
+        calls.append(kwargs)
+        return "CONTEXT_IDS: 1"
+
+    monkeypatch.setattr("app.bot.context_ai.ask_literouter", ask)
+
+    selected, model, attempts = asyncio.run(
+        select_relevant_topic_messages(
+            settings=settings,
+            question="Что проверить, если Kobra S1 пропускает слои?",
+            topic_messages=history,
+        )
+    )
+
+    assert [message.id for message in selected] == [1]
+    assert (model, attempts) == ("selector:free", 1)
+    assert calls[0]["messages"] == build_context_selection_messages(
+        "Что проверить, если Kobra S1 пропускает слои?", history
+    )
+
+
+def test_contextual_answer_drops_history_when_selector_finds_no_match(monkeypatch):
+    settings = SimpleNamespace(
+        literouter_enabled=True,
+        literouter_api_key="key",
+        literouter_base_url="https://api.example/v1",
+        literouter_models=("answer:free",),
+        literouter_timeout_seconds=5,
+        literouter_max_tokens=None,
+        literouter_cooldown_seconds=0,
+    )
+    history = [_message(1, "user", "Это отдельный разговор про борщ")]
+    calls: list[dict] = []
+
+    async def ask(**kwargs):
+        calls.append(kwargs)
+        if kwargs["messages"] == build_context_selection_messages("что проверить?", history):
+            return "NO_RELEVANT_CONTEXT"
+        return "AI_ANSWER Проверьте натяжение ремней."
+
+    monkeypatch.setattr("app.bot.context_ai.ask_literouter", ask)
+
+    answer, model, attempts = asyncio.run(
+        generate_contextual_answer(
+            settings=settings,
+            question="что проверить?",
+            topic_messages=history,
+        )
+    )
+
+    assert (answer, model, attempts) == ("Проверьте натяжение ремней.", "answer:free", 1)
+    assert len(calls) == 2
+    assert "Это отдельный разговор про борщ" not in calls[1]["messages"][1]["content"]
+    assert "Предыдущих релевантных сообщений" in calls[1]["messages"][1]["content"]
 
 
 def test_wiki_relevance_rejects_article_that_only_matches_printer_model(monkeypatch):
@@ -119,6 +193,8 @@ def test_contextual_answer_uses_only_free_models_and_fallback(monkeypatch):
     calls: list[str] = []
 
     async def ask(**kwargs):
+        if "отбираешь историю" in kwargs["messages"][0]["content"]:
+            return "CONTEXT_IDS: 1"
         calls.append(kwargs["model"])
         if kwargs["model"] == "deepseek-v4-flash:free":
             return "NO_ANSWER Точно ответить нельзя."
