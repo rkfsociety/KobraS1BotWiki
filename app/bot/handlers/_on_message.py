@@ -19,7 +19,11 @@ from app.bot.clarify import (
     _try_send_error_code_clarify,
     _try_send_printer_clarify,
 )
-from app.bot.context_ai import classify_message_as_question, generate_contextual_answer
+from app.bot.context_ai import (
+    classify_message_as_question,
+    generate_contextual_answer,
+    judge_wiki_relevance,
+)
 from app.bot.decision_log import log_seen_message, log_skip
 from app.bot.design_replies import _maybe_reply_printer_design_vs_question
 from app.bot.error_codes_wiki import _error_code_candidates, _pick_error_code_doc
@@ -705,6 +709,27 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             best_url=url,
             hints=_model_slug_hints(text),
         )
+        return
+
+    wiki_relevance = await judge_wiki_relevance(
+        settings=settings,
+        question=text,
+        document=best_doc,
+    )
+    if wiki_relevance is False:
+        if await _try_context_ai_reply(
+            update=update,
+            msg=msg,
+            context=context,
+            settings=settings,
+            rl=rl,
+            question=text,
+            topic_messages=topic_messages,
+        ):
+            return
+        add_missed_question(text=text, score=best_score, best_url=None, chat_id=chat_id)
+        if settings.log_decisions:
+            log_skip(chat_id, "wiki_not_relevant", msg=msg, score=best_score, url=url)
         return
 
     # ---- антиспам (на чат); админы чата и allowlist — без ограничений ----

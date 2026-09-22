@@ -7,9 +7,11 @@ from app.bot.chat_store import ChatMessage
 from app.bot.context_ai import (
     build_contextual_answer_messages,
     build_question_classification_messages,
+    build_wiki_relevance_messages,
     classify_message_as_question,
     format_topic_context,
     generate_contextual_answer,
+    judge_wiki_relevance,
 )
 
 
@@ -60,6 +62,46 @@ def test_question_classifier_returns_decision_without_generating_answer(monkeypa
     assert decision is False
     assert calls[0]["model"] == "classifier:free"
     assert calls[0]["messages"] == build_question_classification_messages("Что дверь не закрывалась")
+
+
+def test_wiki_relevance_rejects_article_that_only_matches_printer_model(monkeypatch):
+    settings = SimpleNamespace(
+        literouter_enabled=True,
+        literouter_api_key="key",
+        literouter_base_url="https://api.example/v1",
+        literouter_models=("deepseek-v4-flash:free", "glm-5.2:free"),
+        literouter_timeout_seconds=5,
+        literouter_cooldown_seconds=0,
+    )
+    document = SimpleNamespace(
+        title="Kobra S1 Combo - FAQ",
+        url="https://wiki.anycubic.com/en/fdm-3d-printer/kobra-s1-combo/faq",
+        text="Ответы на часто задаваемые вопросы о настройке принтера.",
+    )
+    calls: list[dict] = []
+
+    async def ask(**kwargs):
+        calls.append(kwargs)
+        return "WIKI_NOT_RELEVANT"
+
+    monkeypatch.setattr("app.bot.context_ai.ask_literouter", ask)
+
+    decision = asyncio.run(
+        judge_wiki_relevance(
+            settings=settings,
+            question="Как рассчитать стоимость печати детали?",
+            document=document,
+        )
+    )
+
+    assert decision is False
+    assert calls[0]["model"] == "deepseek-v4-flash:free"
+    assert calls[0]["messages"] == build_wiki_relevance_messages(
+        "Как рассчитать стоимость печати детали?",
+        title=document.title,
+        url=document.url,
+        document_text=document.text,
+    )
 
 
 def test_contextual_answer_uses_only_free_models_and_fallback(monkeypatch):
