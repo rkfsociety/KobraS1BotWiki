@@ -994,13 +994,23 @@ def _read_sitemap_urls(
     extra_urls: tuple[str, ...] = (),
 ) -> list[str]:
 
-    with httpx.Client(timeout=30.0, follow_redirects=True, headers={"User-Agent": "WikiLinkBot/1.0"}) as client:
-        r = client.get(sitemap_url)
-        r.raise_for_status()
+    try:
+        with httpx.Client(timeout=30.0, follow_redirects=True, headers={"User-Agent": "WikiLinkBot/1.0"}) as client:
+            r = client.get(sitemap_url)
+            r.raise_for_status()
+        sitemap_text = r.text
+    except Exception as e:
+        snapshot_path = Path(__file__).resolve().parent.parent / "data" / "sitemap.xml"
+        if not snapshot_path.is_file():
+            raise
+        logging.warning(
+            "Не удалось загрузить sitemap (%s); используется локальная копия %s: %s",
+            sitemap_url,
+            snapshot_path,
+            e,
+        )
+        sitemap_text = snapshot_path.read_text(encoding="utf-8")
 
-
-
-    sitemap_text = r.text
     if len(sitemap_text.encode("utf-8")) > _MAX_SITEMAP_BYTES:
         raise ValueError("ответ sitemap превышает допустимый размер")
 

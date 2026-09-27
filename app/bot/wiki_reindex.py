@@ -30,6 +30,7 @@ class SitemapMonitor:
         self.state_file = self.cache_dir / "sitemap_state.json"
         self._state = self._load_state()
         self._check_lock = asyncio.Lock()
+        self._last_check_error: str | None = None
 
     def _load_state(self) -> dict[str, Any]:
         """Загружает сохранённое состояние sitemap."""
@@ -85,6 +86,10 @@ class SitemapMonitor:
                 if len(content.encode("utf-8")) > _MAX_SITEMAP_BYTES:
                     raise ValueError("ответ sitemap превышает допустимый размер")
 
+            if self._last_check_error is not None:
+                logging.info("Проверка sitemap восстановлена после ошибки: %s", self._last_check_error)
+                self._last_check_error = None
+
             # Вычисляем хеш контента sitemap
             new_hash = hashlib.sha256(content.encode()).hexdigest()
             new_url_count = content.count("<loc>")
@@ -112,7 +117,10 @@ class SitemapMonitor:
             return False, "Sitemap без изменений"
 
         except Exception as e:
-            logging.error("Ошибка при проверке sitemap: %s", e)
+            error = str(e)
+            if error != self._last_check_error:
+                logging.error("Ошибка при проверке sitemap: %s", e)
+                self._last_check_error = error
             return False, f"Ошибка: {e}"
 
 
@@ -153,16 +161,8 @@ class WikiReindexer:
 
             logging.info("Инициирована переиндексация вики: %s", reason)
 
-            # Очищаем состояние: сбрасываем next_idx и удаляем флаг done_notified
-            self.indexer._state.next_idx = 0
-            self.indexer._state.done_notified = False
-            self.indexer._state.urls = []
-            self.indexer.index.replace_docs([])
-            _atomic_write_text(self.indexer.cache_file, "[]\n")
-            self.indexer._state.cache_version = 2
-            self.indexer._save_state(self.indexer._state)
-
-            # Перезагружаем список URL из sitemap
+            # Получаем новый список до очистки, чтобы временная ошибка источника
+            # не стирала работающий индекс.
             from app.web_wiki_index import _read_sitemap_urls
 
             new_urls = await asyncio.to_thread(
@@ -172,6 +172,15 @@ class WikiReindexer:
                 base_url=self.indexer.base_url,
                 extra_urls=self.indexer.extra_urls,
             )
+
+            # Очищаем состояние: сбрасываем next_idx и удаляем флаг done_notified
+            self.indexer._state.next_idx = 0
+            self.indexer._state.done_notified = False
+            self.indexer._state.urls = []
+            self.indexer.index.replace_docs([])
+            _atomic_write_text(self.indexer.cache_file, "[]\n")
+            self.indexer._state.cache_version = 2
+            self.indexer._save_state(self.indexer._state)
 
             self.indexer._state.urls = new_urls
             self.indexer._save_state()

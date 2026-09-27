@@ -4,6 +4,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
+import logging
 from types import SimpleNamespace
 
 from app.bot.wiki_reindex_handler import handle_reindex_webhook
@@ -92,6 +93,47 @@ def test_unchanged_sitemap_does_not_rewrite_state(tmp_path, monkeypatch):
     assert monitor._state["last_check"] > 0
 
 
+def test_repeated_sitemap_failure_is_logged_once_until_recovery(tmp_path, monkeypatch, caplog):
+    monitor = SitemapMonitor("https://example.test/sitemap.xml", cache_dir=tmp_path)
+
+    class _Response:
+        text = "<urlset/>"
+
+        def __init__(self, fails):
+            self.fails = fails
+
+        def raise_for_status(self):
+            if self.fails:
+                raise RuntimeError("500 Internal Server Error")
+
+    class _Client:
+        responses = [True, True, False, True]
+
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, *_args, **_kwargs):
+            return _Response(self.responses.pop(0))
+
+    monkeypatch.setattr("app.bot.wiki_reindex.httpx.AsyncClient", _Client)
+    caplog.set_level(logging.ERROR)
+
+    async def run_checks():
+        for _ in range(4):
+            await monitor.check_for_changes()
+
+    asyncio.run(run_checks())
+
+    errors = [record for record in caplog.records if record.message.startswith("Ошибка при проверке sitemap:")]
+    assert len(errors) == 2
+
+
 def test_sitemap_monitor_rejects_oversized_response(tmp_path, monkeypatch):
     monitor = SitemapMonitor("https://example.test/sitemap.xml", cache_dir=tmp_path)
     monkeypatch.setattr("app.bot.wiki_reindex._MAX_SITEMAP_BYTES", 10)
@@ -167,6 +209,40 @@ def test_parallel_reindex_requests_do_not_duplicate_sitemap_check(tmp_path, monk
 
     assert asyncio.run(run_requests()) == [False, False]
     assert checks == 1
+
+
+def test_failed_sitemap_fetch_preserves_current_index(tmp_path, monkeypatch):
+    state = SimpleNamespace(next_idx=4, done_notified=True, urls=["https://wiki.test/old"])
+
+    class _Index:
+        def replace_docs(self, _docs):
+            raise AssertionError("existing index must not be cleared if loading sitemap fails")
+
+    indexer = SimpleNamespace(
+        _state=state,
+        index=_Index(),
+        sitemap_url="https://wiki.test/sitemap.xml",
+        max_pages=100,
+        base_url="https://wiki.test",
+        extra_urls=(),
+        cache_file=tmp_path / "cache.json",
+        _save_state=lambda *_args: None,
+    )
+    monitor = SimpleNamespace(check_for_changes=lambda: None)
+
+    async def failed_check():
+        return True, "Sitemap changed"
+
+    def fail_fetch(*_args, **_kwargs):
+        raise RuntimeError("500 Internal Server Error")
+
+    monkeypatch.setattr(monitor, "check_for_changes", failed_check)
+    monkeypatch.setattr("app.web_wiki_index._read_sitemap_urls", fail_fetch)
+
+    assert asyncio.run(WikiReindexer(indexer).reindex_if_needed(monitor)) is False
+    assert state.next_idx == 4
+    assert state.done_notified is True
+    assert state.urls == ["https://wiki.test/old"]
 
 
 def test_reindex_webhook_rejects_non_object_body(monkeypatch):

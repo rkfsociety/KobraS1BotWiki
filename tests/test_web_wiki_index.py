@@ -393,7 +393,7 @@ def test_sitemap_rejects_oversized_response_before_xml_parse(monkeypatch):
         )
 
 
-def test_sitemap_client_closes_when_request_fails(monkeypatch):
+def test_sitemap_client_closes_and_uses_snapshot_when_request_fails(monkeypatch, tmp_path):
     clients = []
 
     class Client:
@@ -412,15 +412,24 @@ def test_sitemap_client_closes_when_request_fails(monkeypatch):
             raise RuntimeError("network down")
 
     monkeypatch.setattr("app.web_wiki_index.httpx.Client", Client)
+    snapshot_root = tmp_path
+    (snapshot_root / "app").mkdir(parents=True)
+    (snapshot_root / "data").mkdir()
+    (snapshot_root / "data" / "sitemap.xml").write_text(
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        "<url><loc>https://wiki.test/en/home</loc></url></urlset>",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("app.web_wiki_index.__file__", str(snapshot_root / "app" / "web_wiki_index.py"))
 
-    with pytest.raises(RuntimeError, match="network down"):
-        _read_sitemap_urls(
-            "https://wiki.test/sitemap.xml",
-            max_pages=10,
-            base_url="https://wiki.test",
-        )
+    urls = _read_sitemap_urls(
+        "https://wiki.test/sitemap.xml",
+        max_pages=10,
+        base_url="https://wiki.test",
+    )
 
     assert clients and clients[0].closed
+    assert urls == ["https://wiki.test/en/home"]
 
 
 def test_fetch_docs_client_closes_when_unexpected_error(monkeypatch):
