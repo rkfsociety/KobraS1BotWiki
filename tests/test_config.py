@@ -38,6 +38,14 @@ def test_load_settings_uses_zero_for_daily_stats_general_topic(monkeypatch):
     assert load_settings().daily_stats_topic_id == 0
 
 
+def test_load_settings_allows_missing_optional_wiki_sitemap(monkeypatch):
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123:token")
+    monkeypatch.setenv("WIKI_BASE_URL", "https://wiki.example")
+    monkeypatch.setenv("WIKI_SITEMAP_URL", "")
+
+    assert load_settings().wiki_sitemap_url == ""
+
+
 def test_load_environment_files_loads_secrets_before_regular_env(monkeypatch):
     calls = []
     monkeypatch.setattr(

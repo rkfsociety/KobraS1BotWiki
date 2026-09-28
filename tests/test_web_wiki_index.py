@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import threading
+from contextlib import nullcontext
 
 import pytest
 import app.web_wiki_index as web_wiki_index
@@ -13,6 +15,8 @@ from app.web_wiki_index import (
     _fetch_docs,
     _looks_like_question,
     _load_cache,
+    _extract_page_from_html,
+    _normalize_wiki_url,
     _read_sitemap_urls,
     _save_cache,
 )
@@ -36,7 +40,7 @@ def test_indexer_normalizes_corrupted_state_without_refetching_valid_urls(tmp_pa
     cache_path = tmp_path / "cache.json"
     state_path.write_text(
         '{"cache_version": "2", "sitemap_url": 7, "base_url": null, '
-        '"max_pages": -1, "urls": [" https://wiki.test/a ", 3], '
+        '"max_pages": -1, "urls": [" https://wiki.test/en/a ", 3], '
         '"next_idx": -4, "done_notified": "false"}',
         encoding="utf-8",
     )
@@ -54,24 +58,24 @@ def test_indexer_normalizes_corrupted_state_without_refetching_valid_urls(tmp_pa
         max_pages=100,
     )
 
-    assert indexer._state.urls == ["https://wiki.test/a"]
+    assert "https://wiki.test/en/a" in indexer._state.urls
     assert indexer._state.next_idx == 0
     assert indexer._state.max_pages == 100
     assert indexer._state.done_notified is False
 
 
-def test_indexer_refetches_urls_when_saved_configuration_is_stale(tmp_path, monkeypatch):
+def test_indexer_does_not_refetch_urls_when_saved_configuration_is_stale(tmp_path, monkeypatch):
     state_path = tmp_path / "state.json"
     state_path.write_text(
         '{"cache_version": 2, "sitemap_url": "https://wiki.test/old.xml", '
         '"base_url": "https://wiki.test", "max_pages": 10, '
-        '"urls": ["https://wiki.test/old"], "next_idx": 1}',
+        '"urls": ["https://wiki.test/en/old"], "next_idx": 0}',
         encoding="utf-8",
     )
 
     monkeypatch.setattr(
         "app.web_wiki_index._read_sitemap_urls",
-        lambda *_args, **_kwargs: ["https://wiki.test/new"],
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("startup must not fetch")),
     )
     indexer = WebWikiIndexer(
         index=WebWikiIndex.empty(),
@@ -82,7 +86,7 @@ def test_indexer_refetches_urls_when_saved_configuration_is_stale(tmp_path, monk
         max_pages=20,
     )
 
-    assert indexer._state.urls == ["https://wiki.test/new"]
+    assert "https://wiki.test/en/old" in indexer._state.urls
     assert indexer._state.next_idx == 0
 
 
@@ -91,8 +95,8 @@ def test_indexer_caps_restored_urls_to_current_max_pages(tmp_path, monkeypatch):
     state_path.write_text(
         '{"cache_version": 2, "sitemap_url": "https://wiki.test/sitemap.xml", '
         '"base_url": "https://wiki.test", "max_pages": 2, '
-        '"urls": ["https://wiki.test/one", "https://wiki.test/two", '
-        '"https://wiki.test/three"], "next_idx": 99}',
+        '"urls": ["https://wiki.test/en/one", "https://wiki.test/en/two", '
+        '"https://wiki.test/en/three"], "next_idx": 0}',
         encoding="utf-8",
     )
     monkeypatch.setattr(
@@ -109,8 +113,25 @@ def test_indexer_caps_restored_urls_to_current_max_pages(tmp_path, monkeypatch):
         max_pages=2,
     )
 
-    assert indexer._state.urls == ["https://wiki.test/one", "https://wiki.test/two"]
-    assert indexer._state.next_idx == 2
+    assert indexer._state.urls[:2] == ["https://wiki.test/en/one", "https://wiki.test/en/two"]
+
+
+def test_seed_marks_page_limit_when_local_snapshot_is_truncated(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        web_wiki_index,
+        "_read_sitemap_snapshot_urls",
+        lambda *_args, **_kwargs: [
+            "https://wiki.test/en/a", "https://wiki.test/en/b", "https://wiki.test/en/c"
+        ],
+    )
+    indexer = WebWikiIndexer(
+        index=WebWikiIndex.empty(), cache_path=str(tmp_path / "cache.json"),
+        state_path=str(tmp_path / "state.json"), sitemap_url="",
+        base_url="https://wiki.test", max_pages=2, extra_urls=(),
+    )
+
+    assert indexer._state.limited is True
+    assert indexer._state.dropped_urls >= 1
 
 
 def test_extracts_wikijs_template_contents_instead_of_app_shell():
@@ -127,6 +148,108 @@ def test_extracts_wikijs_template_contents_instead_of_app_shell():
     assert "real article" in text
     assert "replace the hotend carefully" in text
     assert "navigation only" not in text
+
+
+def test_wiki_url_normalization_keeps_only_https_english_origin_urls():
+    base = "https://wiki.test"
+    assert _normalize_wiki_url("../en/setup?mode=1#top", base_url=base, source_url="https://wiki.test/en/home") == "https://wiki.test/en/setup"
+    assert _normalize_wiki_url("https://outside.test/en/page", base_url=base) is None
+    assert _normalize_wiki_url("http://wiki.test/en/page", base_url=base) is None
+    assert _normalize_wiki_url("https://wiki.test/zh/page", base_url=base) is None
+
+
+def test_page_parser_extracts_links_and_ignores_external_and_non_english_links():
+    title, text, links = _extract_page_from_html(
+        '<html><title>Setup</title><body><template slot="contents">'
+        '<p>English content</p><a href="../nozzle#part">Nozzle</a>'
+        '<a href="https://elsewhere.test/en/out">External</a>'
+        '<a href="/ja/setup">Japanese</a></template></body></html>',
+        "https://wiki.test/en/printer/home",
+        "https://wiki.test",
+    )
+    assert title == "Setup"
+    assert "english content" in text
+    assert links == ["https://wiki.test/en/nozzle"]
+
+
+def test_safe_http_get_rejects_external_redirect_before_following():
+    requested = []
+
+    class Response:
+        status_code = 302
+        headers = {"location": "https://outside.test/en/steal"}
+
+    class Client:
+        def stream(self, method, url, **kwargs):
+            requested.append(url)
+            return nullcontext(Response())
+
+    with pytest.raises(ValueError, match="redirect"):
+        web_wiki_index._safe_http_get(
+            Client(), "https://wiki.test/en/page", base_url="https://wiki.test", max_bytes=100
+        )
+    assert requested == ["https://wiki.test/en/page"]
+
+
+def test_upsert_docs_replaces_by_url_and_rebuilds_error_code_candidates():
+    old = WebWikiDoc("Error 11518", "https://wiki.test/en/error-codes/11518-code", "old text")
+    index = WebWikiIndex([old])
+    updated = WebWikiDoc("Error 11518", old.url, "new text")
+    index.upsert_docs([updated])
+    assert index.doc_count == 1
+    assert index.error_code_candidates("11518") == [updated]
+    assert index.search("new text")[0][0] == updated
+
+
+def test_legacy_cache_migrates_to_single_checkpoint_without_losing_documents(tmp_path):
+    cache_path = tmp_path / "wiki.json"
+    state_path = tmp_path / "state.json"
+    old_doc = WebWikiDoc("Old", "https://wiki.test/en/old", "last good article")
+    _save_cache(cache_path, [old_doc])
+    state_path.write_text(
+        '{"cache_version": 2, "urls": ["https://wiki.test/en/pending"], "next_idx": 0}',
+        encoding="utf-8",
+    )
+    indexer = WebWikiIndexer(
+        index=WebWikiIndex.empty(), cache_path=str(cache_path), state_path=str(state_path),
+        sitemap_url="", base_url="https://wiki.test", max_pages=10,
+    )
+    indexer.load_cached_docs()
+    indexer._save_state()
+
+    payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert payload["format"] == "anycubic-wiki-index"
+    assert payload["documents"][0]["text"] == "last good article"
+    assert "pending" in payload["state"]["urls"][0]
+    assert cache_path.with_name("wiki.json.legacy").is_file()
+    restored = WebWikiIndexer(
+        index=WebWikiIndex.empty(), cache_path=str(cache_path), state_path=str(state_path),
+        sitemap_url="", base_url="https://wiki.test", max_pages=10,
+    )
+    restored.load_cached_docs()
+    assert restored.index.doc_count == 1
+
+
+def test_failed_checkpoint_migration_keeps_legacy_cache_and_searchable_index(tmp_path, monkeypatch):
+    cache_path = tmp_path / "wiki.json"
+    state_path = tmp_path / "state.json"
+    original = '[{"title":"Old","url":"https://wiki.test/en/old","text":"last good article"}]'
+    cache_path.write_text(original, encoding="utf-8")
+    index = WebWikiIndex.empty()
+    indexer = WebWikiIndexer(
+        index=index, cache_path=str(cache_path), state_path=str(state_path), sitemap_url="",
+        base_url="https://wiki.test", max_pages=10,
+    )
+    indexer.load_cached_docs()
+    monkeypatch.setattr(
+        web_wiki_index, "_atomic_write_text", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("disk full"))
+    )
+
+    with pytest.raises(OSError, match="disk full"):
+        indexer._save_state()
+
+    assert cache_path.read_text(encoding="utf-8") == original
+    assert index.search("last good article")[0][0].url == "https://wiki.test/en/old"
 
 
 def test_replace_docs_rebuilds_search_blobs():
@@ -316,7 +439,9 @@ def test_add_docs_prepares_blobs_without_holding_index_lock(monkeypatch):
 
 def test_sitemap_urls_are_deduplicated_and_extra_urls_are_added(monkeypatch):
     class Response:
-        text = """
+        status_code = 200
+        headers = {"content-type": "application/xml"}
+        content = b"""
         <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
           <url><loc>https://wiki.test/en/a</loc></url>
           <url><loc>https://wiki.test/en/a</loc></url>
@@ -324,8 +449,8 @@ def test_sitemap_urls_are_deduplicated_and_extra_urls_are_added(monkeypatch):
         </urlset>
         """
 
-        def raise_for_status(self):
-            return None
+        def iter_bytes(self):
+            yield self.content
 
     clients = []
 
@@ -344,8 +469,8 @@ def test_sitemap_urls_are_deduplicated_and_extra_urls_are_added(monkeypatch):
             self.close()
             return False
 
-        def get(self, url):
-            return Response()
+        def stream(self, method, url, **kwargs):
+            return nullcontext(Response())
 
     monkeypatch.setattr("app.web_wiki_index.httpx.Client", Client)
 
@@ -356,7 +481,7 @@ def test_sitemap_urls_are_deduplicated_and_extra_urls_are_added(monkeypatch):
         extra_urls=("https://wiki.test/en/extra", "https://wiki.test/en/a"),
     )
 
-    assert urls == ["https://wiki.test/en/a", "https://wiki.test/en/extra"]
+    assert urls == ["https://wiki.test/en/extra", "https://wiki.test/en/a"]
     assert clients and clients[0].closed
 
 
@@ -364,10 +489,11 @@ def test_sitemap_rejects_oversized_response_before_xml_parse(monkeypatch):
     import app.web_wiki_index as wiki_index
 
     class Response:
-        text = "<urlset>" + ("x" * 100) + "</urlset>"
+        status_code = 200
+        headers = {"content-type": "application/xml"}
 
-        def raise_for_status(self):
-            return None
+        def iter_bytes(self):
+            yield ("<urlset>" + ("x" * 100) + "</urlset>").encode()
 
     class Client:
         def __init__(self, **kwargs):
@@ -379,15 +505,15 @@ def test_sitemap_rejects_oversized_response_before_xml_parse(monkeypatch):
         def __exit__(self, *args):
             return False
 
-        def get(self, url):
-            return Response()
+        def stream(self, method, url, **kwargs):
+            return nullcontext(Response())
 
     monkeypatch.setattr(wiki_index.httpx, "Client", Client)
     monkeypatch.setattr(wiki_index, "_MAX_SITEMAP_BYTES", 10)
 
     with pytest.raises(ValueError, match="sitemap"):
-        _read_sitemap_urls(
-            "https://wiki.test/sitemap.xml",
+        wiki_index._parse_sitemap_urls(
+            "<urlset>" + ("x" * 100) + "</urlset>",
             max_pages=10,
             base_url="https://wiki.test",
         )
@@ -408,7 +534,7 @@ def test_sitemap_client_closes_and_uses_snapshot_when_request_fails(monkeypatch,
             self.closed = True
             return False
 
-        def get(self, url):
+        def stream(self, method, url, **kwargs):
             raise RuntimeError("network down")
 
     monkeypatch.setattr("app.web_wiki_index.httpx.Client", Client)
@@ -432,7 +558,7 @@ def test_sitemap_client_closes_and_uses_snapshot_when_request_fails(monkeypatch,
     assert urls == ["https://wiki.test/en/home"]
 
 
-def test_fetch_docs_client_closes_when_unexpected_error(monkeypatch):
+def test_fetch_docs_client_closes_when_request_fails(monkeypatch):
     clients = []
 
     class Client:
@@ -447,12 +573,12 @@ def test_fetch_docs_client_closes_when_unexpected_error(monkeypatch):
             self.closed = True
             return False
 
-        def get(self, url):
+        def stream(self, method, url, **kwargs):
             raise KeyboardInterrupt
 
     monkeypatch.setattr("app.web_wiki_index.httpx.Client", Client)
 
-    with pytest.raises(KeyboardInterrupt):
+    with pytest.raises(RuntimeError, match="скачать страницы"):
         _fetch_docs(["https://wiki.test/page"])
 
     assert clients and clients[0].closed
@@ -463,7 +589,10 @@ def test_fetch_docs_skips_oversized_page_before_html_parse(monkeypatch):
 
     class Response:
         status_code = 200
-        text = "<html>" + ("x" * 100) + "</html>"
+        headers = {"content-type": "text/html"}
+
+        def iter_bytes(self):
+            yield ("<html>" + ("x" * 100) + "</html>").encode()
 
     class Client:
         def __init__(self, **kwargs):
@@ -476,8 +605,8 @@ def test_fetch_docs_skips_oversized_page_before_html_parse(monkeypatch):
             self.closed = True
             return False
 
-        def get(self, url):
-            return Response()
+        def stream(self, method, url, **kwargs):
+            return nullcontext(Response())
 
     monkeypatch.setattr(wiki_index.httpx, "Client", Client)
     monkeypatch.setattr(wiki_index, "_MAX_WIKI_PAGE_BYTES", 10)

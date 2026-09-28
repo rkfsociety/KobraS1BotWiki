@@ -328,10 +328,6 @@ def load_settings() -> Settings:
 
     sitemap_url = (os.getenv("WIKI_SITEMAP_URL") or "").strip()
 
-    if not sitemap_url:
-
-        raise RuntimeError("Не задан WIKI_SITEMAP_URL в .env / переменных окружения")
-
 
 
     cache_path = _resolve_path((os.getenv("CACHE_PATH") or ".cache/wiki_index.json").strip())

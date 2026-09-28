@@ -3,19 +3,27 @@ from __future__ import annotations
 
 
 import json
+import copy
+import hashlib
+import logging
+import os
+import random
+import shutil
 import tempfile
+import time
 
 import re
 import xml.etree.ElementTree as ET
 
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from heapq import nlargest
 
 from pathlib import Path
 
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
+from urllib.robotparser import RobotFileParser
 
 
 
@@ -24,8 +32,6 @@ import httpx
 from bs4 import BeautifulSoup
 
 from rapidfuzz import fuzz
-
-import logging
 
 import threading
 
@@ -353,9 +359,15 @@ class WebWikiDoc:
 _SEARCH_CACHE_SIZE = 500
 _ERROR_CODE_URL_RE = re.compile(r"/error-codes/(?P<code>\d+)-code(?:/|$)", re.IGNORECASE)
 _INDEX_CACHE_VERSION = 2
+_CHECKPOINT_FORMAT = "anycubic-wiki-index"
+_CHECKPOINT_VERSION = 1
 _MAX_INDEX_CACHE_BYTES = 64 * 1024 * 1024
 _MAX_SITEMAP_BYTES = 16 * 1024 * 1024
 _MAX_WIKI_PAGE_BYTES = 16 * 1024 * 1024
+_MAX_WIKI_QUEUE_URLS = 50000
+_MAX_REDIRECTS = 5
+_WIKI_USER_AGENT = "WikiLinkBot/1.0"
+_MIN_WIKI_REQUEST_INTERVAL_SECONDS = 1.0
 _DEFAULT_EXTRA_WIKI_URLS = (
     "https://wiki.anycubic.com/en/fdm-3d-printer/anycubic-kobra-x",
     "https://wiki.anycubic.com/en/fdm-3d-printer/kobra-4-combo",
@@ -604,6 +616,36 @@ class WebWikiIndex:
             self._version += 1
             self._search_cache.clear()
 
+    def upsert_docs(self, updated_docs: list[WebWikiDoc]) -> None:
+        """Заменяет совпавшие URL и добавляет новые без промежуточной пустой базы."""
+        if not updated_docs:
+            return
+
+        while True:
+            with self._lock:
+                version = self._version
+                by_url = {doc.url: doc for doc in self._docs}
+
+            for doc in updated_docs:
+                by_url[doc.url] = doc
+            docs = tuple(by_url.values())
+            blobs = tuple(_make_search_blob(doc) for doc in docs)
+            url_lower = tuple((doc.url or "").lower() for doc in docs)
+            blob_tokens = tuple(frozenset(blob.split()) for blob in blobs)
+            error_code_docs = _build_error_code_docs(docs)
+
+            with self._lock:
+                if version != self._version:
+                    continue
+                self._docs = docs
+                self._blobs = blobs
+                self._url_lower = url_lower
+                self._blob_tokens = blob_tokens
+                self._error_code_docs = error_code_docs
+                self._version += 1
+                self._search_cache.clear()
+                return
+
 
 
 
@@ -620,11 +662,37 @@ class WikiState:
 
     urls: list[str]
 
-    next_idx: int
+    next_idx: int = 0
 
     done_notified: bool = False
 
     cache_version: int = 0
+
+    page_meta: dict[str, dict[str, object]] = field(default_factory=dict)
+
+    status: str = "queued"
+
+    source: str = "seed"
+
+    cycle_started_at: float | None = None
+
+    cycle_completed_at: float | None = None
+
+    next_cycle_at: float = 0.0
+
+    limited: bool = False
+
+    dropped_urls: int = 0
+
+    last_error: str | None = None
+
+    last_request_at: float = 0.0
+
+    robots_txt: str | None = None
+
+    robots_fetched_at: float = 0.0
+
+    robots_retry_at: float = 0.0
 
 
 def _safe_nonnegative_int(value: object, default: int) -> int:
@@ -645,7 +713,7 @@ class WebWikiIndexer:
 
     """
 
-    Постепенно индексирует страницы по sitemap, сохраняя прогресс на диск.
+    Постепенно обходит статьи и сохраняет документы с очередью в checkpoint.
 
     """
 
@@ -671,6 +739,8 @@ class WebWikiIndexer:
 
         extra_urls: tuple[str, ...] = (),
 
+        refresh_hours: int = 24,
+
     ) -> None:
 
         self.index = index
@@ -687,6 +757,16 @@ class WebWikiIndexer:
 
         self.extra_urls = tuple(dict.fromkeys(_DEFAULT_EXTRA_WIKI_URLS + tuple(extra_urls)))
 
+        self.refresh_hours = max(1, int(refresh_hours))
+
+        self._crawler_lock = threading.Lock()
+
+        self._docs_by_url: dict[str, WebWikiDoc] = {}
+
+        self._checkpoint_is_current = False
+
+        self._legacy_docs: list[WebWikiDoc] = []
+
 
 
         self.cache_file.parent.mkdir(parents=True, exist_ok=True)
@@ -699,169 +779,163 @@ class WebWikiIndexer:
 
 
 
+    def _new_seed_state(self) -> WikiState:
+        home = urljoin(self.base_url + "/", "/en/home")
+        candidates = _dedupe_urls(
+            [*self.extra_urls, *_read_sitemap_snapshot_urls(self.base_url, 0)],
+            base_url=self.base_url,
+            max_pages=0,
+        )
+        ordered = [home] + sorted(
+            (url for url in candidates if url != home),
+            key=_crawl_priority,
+        )
+        all_urls = _dedupe_urls(ordered, base_url=self.base_url, max_pages=0)
+        urls = _dedupe_urls(all_urls, base_url=self.base_url, max_pages=self.max_pages)
+        dropped = max(0, len(all_urls) - len(urls))
+        return WikiState(
+            sitemap_url=self.sitemap_url,
+            base_url=self.base_url,
+            max_pages=self.max_pages,
+            urls=urls,
+            limited=dropped > 0,
+            dropped_urls=dropped,
+        )
+
     def _load_or_init_state(self) -> WikiState:
+        raw: object = None
+        try:
+            if self.cache_file.stat().st_size > _MAX_INDEX_CACHE_BYTES:
+                raise ValueError("wiki cache exceeds configured size limit")
+            raw = json.loads(self.cache_file.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            pass
+        except (OSError, ValueError, json.JSONDecodeError):
+            logging.warning("Wiki checkpoint не удалось прочитать; исходный файл сохранён")
 
-        if self.state_file.exists():
-
-            try:
-
-                raw = json.loads(self.state_file.read_text(encoding="utf-8"))
-
-                if not isinstance(raw, dict):
-                    raise ValueError("некорректный формат state")
-
-                raw_urls = raw.get("urls")
-                urls = (
-                    [url.strip() for url in raw_urls if isinstance(url, str) and url.strip()]
-                    if isinstance(raw_urls, list)
-                    else []
-                )
-                stored_sitemap_url = raw.get("sitemap_url")
-                stored_base_url = raw.get("base_url")
-                sitemap_url = (
-                    stored_sitemap_url.strip()
-                    if isinstance(stored_sitemap_url, str) and stored_sitemap_url.strip()
-                    else self.sitemap_url
-                )
-                base_url = (
-                    stored_base_url.strip()
-                    if isinstance(stored_base_url, str) and stored_base_url.strip()
-                    else self.base_url
-                )
-
-                cache_version = _safe_nonnegative_int(raw.get("cache_version"), 0)
-                st = WikiState(
-
-                    sitemap_url=sitemap_url,
-
-                    base_url=base_url,
-
-                    max_pages=_safe_nonnegative_int(raw.get("max_pages"), self.max_pages),
-
-                    urls=urls,
-
-                    next_idx=_safe_nonnegative_int(raw.get("next_idx"), 0),
-
-                    done_notified=raw.get("done_notified") if isinstance(raw.get("done_notified"), bool) else False,
-                    cache_version=cache_version,
-
-                )
-
-                config_matches = (
-                    st.sitemap_url == self.sitemap_url
-                    and st.base_url == self.base_url
-                    and st.max_pages == self.max_pages
-                )
-                if st.urls and cache_version >= _INDEX_CACHE_VERSION and config_matches:
-
-                    st.urls = _dedupe_urls(
-                        st.urls + list(self.extra_urls),
+        if isinstance(raw, dict) and raw.get("format") == _CHECKPOINT_FORMAT:
+            if raw.get("version") == _CHECKPOINT_VERSION:
+                docs = _docs_from_payload(raw.get("documents"))
+                self._docs_by_url = {doc.url: doc for doc in docs}
+                self._legacy_docs = docs
+                state = raw.get("state")
+                if isinstance(state, dict):
+                    self._checkpoint_is_current = True
+                    loaded_state = _state_from_payload(
+                        state,
+                        sitemap_url=self.sitemap_url,
                         base_url=self.base_url,
                         max_pages=self.max_pages,
                     )
+                    valid_queue = _dedupe_urls(
+                        loaded_state.urls, base_url=self.base_url, max_pages=0
+                    )
+                    loaded_state.urls = _dedupe_urls(
+                        valid_queue,
+                        base_url=self.base_url,
+                        max_pages=self.max_pages,
+                    )
+                    if len(loaded_state.urls) < len(valid_queue):
+                        loaded_state.limited = True
+                        loaded_state.dropped_urls += len(valid_queue) - len(loaded_state.urls)
+                    return loaded_state
+            logging.warning("Wiki checkpoint имеет неподдерживаемый формат; старый файл сохранён")
+            backup = self.cache_file.with_name(self.cache_file.name + ".legacy")
+            self._legacy_docs = _load_cache(backup)
+            self._docs_by_url = {doc.url: doc for doc in self._legacy_docs}
+            state = self._new_seed_state()
+            merged_urls = _dedupe_urls(
+                list(self._docs_by_url) + state.urls,
+                base_url=self.base_url,
+                max_pages=0,
+            )
+            state.urls = _dedupe_urls(merged_urls, base_url=self.base_url, max_pages=self.max_pages)
+            if len(state.urls) < len(merged_urls):
+                state.limited = True
+                state.dropped_urls += len(merged_urls) - len(state.urls)
+            state.last_error = "unsupported or damaged checkpoint; using preserved cache"
+            return state
 
-                    st.next_idx = min(st.next_idx, len(st.urls))
-
-                    return st
-
-            except Exception:
-
-                pass
-
-
-
-        urls = _read_sitemap_urls(
-            self.sitemap_url,
-            max_pages=self.max_pages,
+        if isinstance(raw, list):
+            docs = _load_cache(self.cache_file)
+        else:
+            legacy_backup = self.cache_file.with_name(self.cache_file.name + ".legacy")
+            docs = _load_cache(legacy_backup)
+        self._docs_by_url = {doc.url: doc for doc in docs}
+        self._legacy_docs = docs
+        state = self._new_seed_state()
+        legacy_urls: list[str] = []
+        try:
+            legacy = json.loads(self.state_file.read_text(encoding="utf-8"))
+            if isinstance(legacy, dict) and isinstance(legacy.get("urls"), list):
+                old_urls = [url for url in legacy["urls"] if isinstance(url, str)]
+                old_next = _safe_nonnegative_int(legacy.get("next_idx"), 0)
+                legacy_urls = old_urls[min(old_next, len(old_urls)) :]
+        except (OSError, json.JSONDecodeError):
+            pass
+        merged_urls = _dedupe_urls(
+            legacy_urls + list(self._docs_by_url) + state.urls,
             base_url=self.base_url,
-            extra_urls=self.extra_urls,
+            max_pages=0,
         )
+        state.urls = _dedupe_urls(merged_urls, base_url=self.base_url, max_pages=self.max_pages)
+        if len(state.urls) < len(merged_urls):
+            state.limited = True
+            state.dropped_urls += len(merged_urls) - len(state.urls)
+        state.source = "legacy-and-seed" if legacy_urls or docs else "seed"
+        return state
 
-        st = WikiState(
-
-            sitemap_url=self.sitemap_url,
-
-            base_url=self.base_url,
-
-            max_pages=self.max_pages,
-
-            urls=urls,
-
-            next_idx=0,
-
-            done_notified=False,
-            cache_version=0,
-
-        )
-
-        self._save_state(st)
-
-        return st
-
-
-
-    def _save_state(self, st: WikiState) -> None:
-
-        payload = {
-
-            "sitemap_url": st.sitemap_url,
-
-            "base_url": st.base_url,
-
-            "max_pages": st.max_pages,
-
-            "urls": st.urls,
-
-            "next_idx": st.next_idx,
-
-            "done_notified": st.done_notified,
-
-            "cache_version": st.cache_version,
-
+    def _checkpoint_payload(
+        self, state: WikiState, docs: dict[str, WebWikiDoc]
+    ) -> dict[str, object]:
+        return {
+            "format": _CHECKPOINT_FORMAT,
+            "version": _CHECKPOINT_VERSION,
+            "documents": [
+                {"title": doc.title, "url": doc.url, "text": doc.text}
+                for doc in docs.values()
+            ],
+            "state": _state_to_payload(state),
         }
 
-        _atomic_write_text(self.state_file, json.dumps(payload, ensure_ascii=False))
+    def _persist_checkpoint(
+        self, state: WikiState, docs: dict[str, WebWikiDoc]
+    ) -> None:
+        encoded = json.dumps(self._checkpoint_payload(state, docs), ensure_ascii=False)
+        if len(encoded.encode("utf-8")) > _MAX_INDEX_CACHE_BYTES:
+            raise ValueError("wiki checkpoint превышает допустимый размер")
+        if not self._checkpoint_is_current:
+            for legacy_path in (self.cache_file, self.state_file):
+                if legacy_path.is_file():
+                    backup = legacy_path.with_name(legacy_path.name + ".legacy")
+                    if not backup.exists():
+                        shutil.copy2(legacy_path, backup)
+        _atomic_write_text(self.cache_file, encoded)
+        persisted = json.loads(self.cache_file.read_text(encoding="utf-8"))
+        expected = json.loads(encoded)
+        if (
+            persisted != expected
+            or not isinstance(persisted, dict)
+            or persisted.get("format") != _CHECKPOINT_FORMAT
+            or persisted.get("version") != _CHECKPOINT_VERSION
+            or not isinstance(persisted.get("documents"), list)
+            or not isinstance(persisted.get("state"), dict)
+        ):
+            raise ValueError("wiki checkpoint read-back validation failed")
+        self._checkpoint_is_current = True
 
-
+    def _save_state(self, st: WikiState | None = None) -> None:
+        state = st or self._state
+        self._persist_checkpoint(state, self._docs_by_url)
+        self._state = state
 
     def load_cached_docs(self) -> None:
-
-        if self._state.cache_version < _INDEX_CACHE_VERSION:
-
-            self.index.replace_docs([])
-
-            _atomic_write_text(self.cache_file, "[]\n")
-
-            self._state.next_idx = 0
-
-            self._state.done_notified = False
-
-            self._state.cache_version = _INDEX_CACHE_VERSION
-
-            self._save_state(self._state)
-
-            logging.info("Старый кэш индекса сброшен для полной перестройки")
-
-            return
-
-        if not self.cache_file.exists():
-            self._state.next_idx = 0
-            self._save_state(self._state)
-            return
-
-        docs = _load_cache(self.cache_file)
-
-        if docs:
-
-            self.index.add_docs(docs)
-
-            logging.info("Загружен кэш индекса: %s (страниц: %d)", self.cache_file.as_posix(), len(docs))
+        self.index.replace_docs(self._legacy_docs)
+        if self._legacy_docs:
+            logging.info("Загружен кэш индекса: %d страниц", len(self._legacy_docs))
 
     def is_done(self) -> bool:
-
-        return self._state.next_idx >= len(self._state.urls)
-
-
+        return not self._state.urls and self._state.next_cycle_at > time.time()
 
     def is_done_notified(self) -> bool:
 
@@ -878,74 +952,319 @@ class WebWikiIndexer:
 
 
     def step(self, batch_size: int) -> int:
-
-        if self.is_done():
-
+        if not self._crawler_lock.acquire(blocking=False):
             return 0
+        try:
+            now = time.time()
+            state = copy.deepcopy(self._state)
+            docs = dict(self._docs_by_url)
+            if not state.urls and state.next_cycle_at <= now:
+                previous_meta = state.page_meta
+                state = self._new_seed_state()
+                state.page_meta = copy.deepcopy(previous_meta)
+                unbounded_queue = _dedupe_urls(
+                    list(docs) + state.urls,
+                    base_url=self.base_url,
+                    max_pages=0,
+                )
+                state.urls = _dedupe_urls(
+                    unbounded_queue, base_url=self.base_url, max_pages=self.max_pages
+                )
+                if len(state.urls) < len(unbounded_queue):
+                    state.limited = True
+                    state.dropped_urls += len(unbounded_queue) - len(state.urls)
+                state.cycle_started_at = now
+                state.next_cycle_at = now + self.refresh_hours * 3600
+                state.status = "running"
+                state.source = "scheduled-refresh"
+            if not state.urls:
+                return 0
 
+            state.status = "running"
+            state.cycle_started_at = state.cycle_started_at or now
+            changed_docs: list[WebWikiDoc] = []
+            processed = 0
+            client = httpx.Client(
+                timeout=httpx.Timeout(20.0, connect=10.0),
+                follow_redirects=False,
+                headers={"User-Agent": _WIKI_USER_AGENT},
+            )
+            try:
+                if not _refresh_robots_policy(client, state, self.base_url, now):
+                    state.status = "waiting-robots"
+                    self._persist_checkpoint(state, docs)
+                    self._state = state
+                    return 0
 
-
-        start = self._state.next_idx
-
-        end = min(len(self._state.urls), start + max(1, batch_size))
-
-        batch = self._state.urls[start:end]
-
-
-
-        new_docs: list[WebWikiDoc] = []
-
-        client = httpx.Client(timeout=30.0, follow_redirects=True, headers={"User-Agent": "WikiLinkBot/1.0"})
-
-        for url in batch:
-
-            for attempt in range(3):
-
-                try:
-
-                    r = client.get(url)
-
-                    if r.status_code == 200:
-
-                        title, text = _extract_text_from_html(r.text)
-
-                        new_docs.append(WebWikiDoc(title=title, url=url, text=text))
-
+                while processed < max(1, batch_size):
+                    due_index = _find_due_url(state.urls, state.page_meta, time.time())
+                    if due_index is None:
                         break
+                    url = state.urls.pop(due_index)
+                    meta = state.page_meta.setdefault(url, {})
+                    if not _robots_allows(state.robots_txt, url):
+                        meta.update(last_error="blocked by robots.txt", next_retry_at=0.0)
+                        processed += 1
+                        continue
 
-                    if r.status_code not in {408, 429, 500, 502, 503, 504}:
+                    delay = max(
+                        _MIN_WIKI_REQUEST_INTERVAL_SECONDS,
+                        _robots_crawl_delay(state.robots_txt),
+                    ) - (time.time() - state.last_request_at)
+                    if state.last_request_at and delay > 0:
+                        time.sleep(delay)
 
-                        break
+                    validators: dict[str, str] = {}
+                    if meta.get("etag"):
+                        validators["If-None-Match"] = str(meta["etag"])
+                    if meta.get("last_modified"):
+                        validators["If-Modified-Since"] = str(meta["last_modified"])
+                    state.last_request_at = time.time()
+                    try:
+                        response = _safe_http_get(
+                            client, url, base_url=self.base_url,
+                            max_bytes=_MAX_WIKI_PAGE_BYTES, headers=validators,
+                        )
+                        if response.status_code == 304 and url in docs:
+                            meta.update(
+                                last_checked_at=time.time(),
+                                last_success_at=time.time(),
+                                last_error=None,
+                                attempts=0,
+                                next_retry_at=0.0,
+                            )
+                        elif response.status_code == 304:
+                            response = _safe_http_get(
+                                client, url, base_url=self.base_url,
+                                max_bytes=_MAX_WIKI_PAGE_BYTES, headers={},
+                            )
+                            self._process_page_response(
+                                url, response, state, docs, changed_docs
+                            )
+                        else:
+                            self._process_page_response(
+                                url, response, state, docs, changed_docs
+                            )
+                    except Exception as exc:
+                        self._record_page_failure(url, meta, str(exc), time.time(), state=state)
+                    processed += 1
 
-                except Exception:
+                if not state.urls:
+                    state.status = "limited" if state.limited else "complete"
+                    state.cycle_completed_at = time.time()
+                    state.next_cycle_at = state.cycle_completed_at + self.refresh_hours * 3600
+                    state.done_notified = False
+                elif _find_due_url(state.urls, state.page_meta, time.time()) is None:
+                    state.status = "waiting-retry"
 
-                    if attempt == 2:
+                self._persist_checkpoint(state, docs)
+                if changed_docs:
+                    self.index.upsert_docs(changed_docs)
+                self._state = state
+                self._docs_by_url = docs
+                logging.info(
+                    "Индексация вики: status=%s queue=%d docs=%d updated=%d",
+                    state.status, len(state.urls), len(docs), len(changed_docs),
+                )
+                return len(changed_docs)
+            finally:
+                client.close()
+        finally:
+            self._crawler_lock.release()
 
-                        break
+    def _process_page_response(
+        self,
+        url: str,
+        response: WikiHttpResponse,
+        state: WikiState,
+        docs: dict[str, WebWikiDoc],
+        changed_docs: list[WebWikiDoc],
+    ) -> None:
+        meta = state.page_meta.setdefault(url, {})
+        if response.status_code != 200:
+            if response.status_code in {408, 425, 429, 500, 502, 503, 504}:
+                retry_after = (
+                    _parse_retry_after(response.headers["retry-after"])
+                    if response.status_code == 429 and response.headers.get("retry-after")
+                    else 0.0
+                )
+                self._record_page_failure(
+                    url, meta, f"HTTP {response.status_code}", time.time(),
+                    retry_after=retry_after,
+                    state=state,
+                )
+            else:
+                meta.update(
+                    last_error=f"HTTP {response.status_code}",
+                    last_checked_at=time.time(),
+                    next_retry_at=0.0,
+                )
+            return
 
-        client.close()
+        content_type = response.headers.get("content-type", "text/html").lower()
+        if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
+            meta.update(
+                last_error=f"non-HTML content: {content_type}",
+                last_checked_at=time.time(),
+                next_retry_at=0.0,
+            )
+            return
 
+        html_text = response.content.decode("utf-8", errors="replace")
+        title, text, links = _extract_page_from_html(html_text, response.url, self.base_url)
+        if _looks_like_error_page(title, text):
+            self._record_page_failure(url, meta, "error or challenge page", time.time(), state=state)
+            return
 
+        doc = WebWikiDoc(title=title, url=url, text=text)
+        if docs.get(url) != doc:
+            docs[url] = doc
+            changed_docs.append(doc)
+        meta.update(
+            links=links,
+            text_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            links_hash=hashlib.sha256("\n".join(links).encode("utf-8")).hexdigest(),
+            etag=response.headers.get("etag"),
+            last_modified=response.headers.get("last-modified"),
+            last_checked_at=time.time(),
+            last_success_at=time.time(),
+            last_error=None,
+            attempts=0,
+            next_retry_at=0.0,
+        )
+        state.last_error = None
+        self._enqueue_discovered(links, state, docs)
 
-        # обновляем индекс и сохраняем кэш (append через полную перезапись — проще и надёжнее)
+    def _enqueue_discovered(
+        self, links: list[str], state: WikiState, docs: dict[str, WebWikiDoc]
+    ) -> None:
+        known = set(state.urls) | set(docs)
+        for link in sorted((item for item in links if item not in known), key=_crawl_priority):
+            if len(state.urls) >= _MAX_WIKI_QUEUE_URLS:
+                state.limited = True
+                state.dropped_urls += 1
+                continue
+            if self.max_pages > 0 and len(known) >= self.max_pages:
+                state.limited = True
+                state.dropped_urls += 1
+                continue
+            state.urls.append(link)
+            known.add(link)
 
-        self.index.add_docs(new_docs)
+    def _record_page_failure(
+        self,
+        url: str,
+        meta: dict[str, object],
+        error: str,
+        now: float,
+        *,
+        retry_after: float = 0.0,
+        state: WikiState | None = None,
+    ) -> None:
+        attempts = _safe_nonnegative_int(meta.get("attempts"), 0) + 1
+        delay = max(
+            retry_after,
+            min(86400.0, 60.0 * (2 ** min(attempts - 1, 10))),
+        )
+        delay += random.uniform(0.0, min(30.0, delay * 0.1))
+        meta.update(
+            last_error=error,
+            attempts=attempts,
+            next_retry_at=now + delay,
+            last_checked_at=now,
+        )
+        if state is not None:
+            state.last_error = error
+            if url not in state.urls:
+                state.urls.append(url)
 
-        self._state.next_idx = end
+    def request_refresh(
+        self, urls: list[str] | None = None, *, source: str = "manual"
+    ) -> bool:
+        """Ставит обновление в общую очередь, не очищая текущий индекс."""
+        if not self._crawler_lock.acquire(blocking=False):
+            return False
+        try:
+            state = copy.deepcopy(self._state)
+            docs = dict(self._docs_by_url)
+            candidates = urls or list(docs) or self._new_seed_state().urls
+            state.urls = _dedupe_urls(
+                state.urls + candidates,
+                base_url=self.base_url,
+                max_pages=self.max_pages,
+            )
+            for url in state.urls:
+                state.page_meta.setdefault(url, {})["next_retry_at"] = 0.0
+            state.next_idx = 0
+            state.status = "queued"
+            state.source = source
+            state.cycle_started_at = None
+            state.limited = False
+            state.dropped_urls = 0
+            self._persist_checkpoint(state, docs)
+            self._state = state
+            return True
+        finally:
+            self._crawler_lock.release()
 
-        self._save_state(self._state)
+    def enqueue_urls(self, urls: list[str], *, source: str = "sitemap") -> int:
+        with self._crawler_lock:
+            state = copy.deepcopy(self._state)
+            docs = dict(self._docs_by_url)
+            known = set(state.urls)
+            added = 0
+            for url in sorted(
+                _dedupe_urls(urls, base_url=self.base_url), key=_crawl_priority
+            ):
+                if url in known:
+                    continue
+                if (
+                    self.max_pages > 0
+                    and url not in docs
+                    and len(set(docs) | known) >= self.max_pages
+                ):
+                    state.limited = True
+                    state.dropped_urls += 1
+                    continue
+                state.urls.append(url)
+                known.add(url)
+                added += 1
+            if added:
+                state.status = "queued"
+                state.source = source
+                self._persist_checkpoint(state, docs)
+                self._state = state
+            return added
 
-        _save_cache(self.cache_file, self.index_snapshot())
-
-
-
-        logging.info("Индексирование (постепенно): %d/%d (+%d, всего в памяти: %d)",
-
-                     end, len(self._state.urls), len(new_docs), self.index.doc_count)
-
-        return len(new_docs)
-
-
+    def status_snapshot(self) -> dict[str, object]:
+        state = self._state
+        now = time.time()
+        page_errors = [meta for meta in state.page_meta.values() if meta.get("last_error")]
+        delayed = sum(
+            1 for meta in page_errors
+            if (_safe_timestamp(meta.get("next_retry_at")) or 0.0) > now
+        )
+        return {
+            "status": state.status,
+            "documents": len(self._docs_by_url),
+            "queued": len(state.urls),
+            "delayed_errors": delayed,
+            "errors": len(page_errors),
+            "last_success_at": max(
+                (
+                    _safe_timestamp(meta.get("last_success_at")) or 0.0
+                    for meta in state.page_meta.values()
+                ),
+                default=0.0,
+            ),
+            "cycle_started_at": state.cycle_started_at,
+            "cycle_completed_at": state.cycle_completed_at,
+            "next_cycle_at": state.next_cycle_at,
+            "source": state.source,
+            "limited": state.limited,
+            "dropped_urls": state.dropped_urls,
+            "last_error": state.last_error,
+        }
 
     def index_snapshot(self) -> list[WebWikiDoc]:
 
@@ -959,30 +1278,316 @@ class WebWikiIndexer:
 
 
 
-def _dedupe_urls(urls: list[str], *, base_url: str, max_pages: int = 0) -> list[str]:
+@dataclass(frozen=True, slots=True)
+class WikiHttpResponse:
+    status_code: int
+    headers: dict[str, str]
+    content: bytes
+    url: str
 
-    result: list[str] = []
 
-    seen: set[str] = set()
+def _state_to_payload(state: WikiState) -> dict[str, object]:
+    return {
+        "sitemap_url": state.sitemap_url,
+        "base_url": state.base_url,
+        "max_pages": state.max_pages,
+        "urls": state.urls,
+        "next_idx": state.next_idx,
+        "done_notified": state.done_notified,
+        "cache_version": state.cache_version,
+        "page_meta": state.page_meta,
+        "status": state.status,
+        "source": state.source,
+        "cycle_started_at": state.cycle_started_at,
+        "cycle_completed_at": state.cycle_completed_at,
+        "next_cycle_at": state.next_cycle_at,
+        "limited": state.limited,
+        "dropped_urls": state.dropped_urls,
+        "last_error": state.last_error,
+        "last_request_at": state.last_request_at,
+        "robots_txt": state.robots_txt,
+        "robots_fetched_at": state.robots_fetched_at,
+        "robots_retry_at": state.robots_retry_at,
+    }
 
-    prefix = base_url.rstrip("/")
 
-    for raw_url in urls:
+def _state_from_payload(
+    raw: dict[str, object], *, sitemap_url: str, base_url: str, max_pages: int
+) -> WikiState:
+    urls = raw.get("urls")
+    raw_meta = raw.get("page_meta")
+    page_meta = (
+        {
+            key: value
+            for key, value in raw_meta.items()
+            if isinstance(key, str) and isinstance(value, dict)
+        }
+        if isinstance(raw_meta, dict)
+        else {}
+    )
+    return WikiState(
+        sitemap_url=sitemap_url,
+        base_url=base_url,
+        max_pages=max_pages,
+        urls=[url for url in urls if isinstance(url, str)] if isinstance(urls, list) else [],
+        next_idx=_safe_nonnegative_int(raw.get("next_idx"), 0),
+        done_notified=raw.get("done_notified") is True,
+        cache_version=_INDEX_CACHE_VERSION,
+        page_meta=page_meta,
+        status=str(raw.get("status") or "queued"),
+        source=str(raw.get("source") or "checkpoint"),
+        cycle_started_at=_safe_timestamp(raw.get("cycle_started_at")),
+        cycle_completed_at=_safe_timestamp(raw.get("cycle_completed_at")),
+        next_cycle_at=_safe_timestamp(raw.get("next_cycle_at")) or 0.0,
+        limited=raw.get("limited") is True,
+        dropped_urls=_safe_nonnegative_int(raw.get("dropped_urls"), 0),
+        last_error=raw.get("last_error") if isinstance(raw.get("last_error"), str) else None,
+        last_request_at=_safe_timestamp(raw.get("last_request_at")) or 0.0,
+        robots_txt=raw.get("robots_txt") if isinstance(raw.get("robots_txt"), str) else None,
+        robots_fetched_at=_safe_timestamp(raw.get("robots_fetched_at")) or 0.0,
+        robots_retry_at=_safe_timestamp(raw.get("robots_retry_at")) or 0.0,
+    )
 
-        url = raw_url.strip()
 
-        if not url or (url != prefix and not url.startswith(prefix + "/")) or url in seen:
+def _safe_timestamp(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return result if result >= 0 and result < float("inf") else None
 
+
+def _docs_from_payload(raw: object) -> list[WebWikiDoc]:
+    if not isinstance(raw, list):
+        return []
+    by_url: dict[str, WebWikiDoc] = {}
+    for item in raw:
+        if not isinstance(item, dict):
             continue
+        title = str(item.get("title") or "Wiki").strip() or "Wiki"
+        url = str(item.get("url") or "").strip()
+        text = str(item.get("text") or "").strip()
+        if url and text:
+            by_url[url] = WebWikiDoc(title=title, url=url, text=text)
+    return list(by_url.values())
 
+
+def _find_due_url(
+    urls: list[str], page_meta: dict[str, dict[str, object]], now: float
+) -> int | None:
+    for index, url in enumerate(urls):
+        if float(page_meta.get(url, {}).get("next_retry_at", 0) or 0) <= now:
+            return index
+    return None
+
+
+def _crawl_priority(url: str) -> tuple[int, str]:
+    normalized = url.lower()
+    if "kobra-s1" in normalized:
+        return (0, normalized)
+    if normalized.endswith("/en/home"):
+        return (1, normalized)
+    return (2, normalized)
+
+
+def _url_is_same_origin(url: str, base_url: str) -> bool:
+    try:
+        target = urlsplit(url)
+        base = urlsplit(base_url)
+        return (
+            target.scheme.lower() == "https"
+            and target.hostname is not None
+            and target.hostname.lower() == (base.hostname or "").lower()
+            and target.port == base.port
+            and not target.username
+            and not target.password
+        )
+    except ValueError:
+        return False
+
+
+def _normalize_wiki_url(
+    raw_url: str,
+    *,
+    base_url: str,
+    source_url: str | None = None,
+    allow_non_article_path: bool = False,
+) -> str | None:
+    if not isinstance(raw_url, str) or not raw_url.strip():
+        return None
+    candidate = urljoin(source_url or (base_url.rstrip("/") + "/"), raw_url.strip())
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        return None
+    if not _url_is_same_origin(candidate, base_url):
+        return None
+    path = parsed.path or "/"
+    if not allow_non_article_path and path != "/en" and not path.startswith("/en/"):
+        return None
+    return urlunsplit(("https", parsed.netloc.lower(), path, "", ""))
+
+
+def _safe_http_get(
+    client: httpx.Client,
+    url: str,
+    *,
+    base_url: str,
+    max_bytes: int,
+    headers: dict[str, str] | None = None,
+    allow_non_article_path: bool = False,
+) -> WikiHttpResponse:
+    current = _normalize_wiki_url(
+        url, base_url=base_url, allow_non_article_path=allow_non_article_path
+    )
+    if current is None:
+        raise ValueError("URL не входит в разрешённый origin/path")
+    for redirect_count in range(_MAX_REDIRECTS + 1):
+        with client.stream(
+            "GET", current, headers=headers or {}, follow_redirects=False
+        ) as response:
+            response_headers = {
+                key.lower(): value for key, value in response.headers.items()
+            }
+            if response.status_code in {301, 302, 303, 307, 308}:
+                location = response_headers.get("location")
+                if not location or redirect_count >= _MAX_REDIRECTS:
+                    raise ValueError("недопустимый или слишком длинный redirect")
+                target = _normalize_wiki_url(
+                    location,
+                    base_url=base_url,
+                    source_url=current,
+                    allow_non_article_path=allow_non_article_path,
+                )
+                if target is None:
+                    raise ValueError("redirect покидает разрешённый origin/path")
+                current = target
+                continue
+            if response.status_code == 304:
+                return WikiHttpResponse(304, response_headers, b"", current)
+            content = bytearray()
+            for chunk in response.iter_bytes():
+                content.extend(chunk)
+                if len(content) > max_bytes:
+                    raise ValueError("ответ превышает допустимый размер")
+            return WikiHttpResponse(
+                response.status_code, response_headers, bytes(content), current
+            )
+    raise ValueError("превышен лимит redirect")
+
+
+def _refresh_robots_policy(
+    client: httpx.Client, state: WikiState, base_url: str, now: float
+) -> bool:
+    if state.robots_txt is not None and now - state.robots_fetched_at < 86400:
+        return True
+    if state.robots_retry_at > now:
+        return False
+    try:
+        response = _safe_http_get(
+            client,
+            base_url.rstrip("/") + "/robots.txt",
+            base_url=base_url,
+            max_bytes=512 * 1024,
+            allow_non_article_path=True,
+        )
+        if response.status_code in {404, 410}:
+            state.robots_txt = ""
+        elif response.status_code in {401, 403}:
+            state.robots_txt = "User-agent: *\nDisallow: /"
+        elif response.status_code == 200:
+            state.robots_txt = response.content.decode("utf-8", errors="replace")
+        else:
+            state.robots_retry_at = now + 300
+            state.last_error = f"robots.txt HTTP {response.status_code}"
+            return False
+        state.robots_fetched_at = now
+        state.robots_retry_at = 0.0
+        return True
+    except Exception as exc:
+        state.robots_retry_at = now + 300
+        state.last_error = f"robots.txt: {exc}"
+        return False
+
+
+def _robots_allows(robots_txt: str | None, url: str) -> bool:
+    if robots_txt is None:
+        return False
+    parser = RobotFileParser()
+    parser.parse(robots_txt.splitlines())
+    return parser.can_fetch(_WIKI_USER_AGENT, url)
+
+
+def _robots_crawl_delay(robots_txt: str | None) -> float:
+    if not robots_txt:
+        return 0.0
+    parser = RobotFileParser()
+    parser.parse(robots_txt.splitlines())
+    try:
+        return max(0.0, float(parser.crawl_delay(_WIKI_USER_AGENT) or 0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _parse_retry_after(value: str) -> float:
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        from datetime import datetime, timezone
+        from email.utils import parsedate_to_datetime
+        try:
+            target = parsedate_to_datetime(value)
+            return max(0.0, (target - datetime.now(timezone.utc)).total_seconds())
+        except (TypeError, ValueError, OverflowError):
+            return 0.0
+
+
+def _read_sitemap_snapshot_urls(base_url: str, max_pages: int) -> list[str]:
+    path = Path(__file__).resolve().parent.parent / "data" / "sitemap.xml"
+    if not path.is_file():
+        return []
+    try:
+        return _parse_sitemap_urls(
+            path.read_text(encoding="utf-8"),
+            base_url=base_url,
+            max_pages=max_pages,
+        )
+    except (OSError, ValueError, ET.ParseError) as exc:
+        logging.warning("Локальный sitemap недоступен или некорректен: %s", exc)
+        return []
+
+
+def _parse_sitemap_urls(
+    content: str, *, base_url: str, max_pages: int
+) -> list[str]:
+    if len(content.encode("utf-8")) > _MAX_SITEMAP_BYTES:
+        raise ValueError("ответ sitemap превышает допустимый размер")
+    root = ET.fromstring(content)
+    if not root.tag.endswith(("urlset", "sitemapindex")):
+        raise ValueError("ответ sitemap не является XML-картой сайта")
+    ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    urls = [
+        loc.text.strip()
+        for loc in root.findall(".//sm:url/sm:loc", ns)
+        if loc.text and loc.text.strip()
+    ]
+    return _dedupe_urls(urls, base_url=base_url, max_pages=max_pages)
+
+
+def _dedupe_urls(urls: list[str], *, base_url: str, max_pages: int = 0) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    limit = min(max_pages, _MAX_WIKI_QUEUE_URLS) if max_pages > 0 else _MAX_WIKI_QUEUE_URLS
+    for raw_url in urls:
+        url = _normalize_wiki_url(raw_url, base_url=base_url)
+        if not url or url in seen:
+            continue
         seen.add(url)
-
         result.append(url)
-
-        if max_pages > 0 and len(result) >= max_pages:
-
+        if len(result) >= limit:
             break
-
     return result
 
 
@@ -993,57 +1598,72 @@ def _read_sitemap_urls(
     base_url: str,
     extra_urls: tuple[str, ...] = (),
 ) -> list[str]:
-
-    try:
-        with httpx.Client(timeout=30.0, follow_redirects=True, headers={"User-Agent": "WikiLinkBot/1.0"}) as client:
-            r = client.get(sitemap_url)
-            r.raise_for_status()
-        sitemap_text = r.text
-    except Exception as e:
-        snapshot_path = Path(__file__).resolve().parent.parent / "data" / "sitemap.xml"
-        if not snapshot_path.is_file():
-            raise
-        logging.warning(
-            "Не удалось загрузить sitemap (%s); используется локальная копия %s: %s",
-            sitemap_url,
-            snapshot_path,
-            e,
-        )
-        sitemap_text = snapshot_path.read_text(encoding="utf-8")
-
-    if len(sitemap_text.encode("utf-8")) > _MAX_SITEMAP_BYTES:
-        raise ValueError("ответ sitemap превышает допустимый размер")
-
-    root = ET.fromstring(sitemap_text)
-
-    ns = {"sm": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-
-
-
-    urls: list[str] = []
-
-    for loc in root.findall(".//sm:url/sm:loc", ns):
-
-        if loc.text:
-
-            url = loc.text.strip()
-
-            if not url.startswith(base_url.rstrip("/") + "/") and url != base_url.rstrip("/"):
-
-                continue
-
-            urls.append(url)
-
-    urls = _dedupe_urls(urls, base_url=base_url, max_pages=max_pages)
-
-    for url in _dedupe_urls(list(extra_urls), base_url=base_url):
-        if url not in urls:
-            urls.append(url)
-
-    return urls
+    discovered: list[str] = []
+    if sitemap_url.strip():
+        try:
+            with httpx.Client(
+                timeout=20.0,
+                follow_redirects=False,
+                headers={"User-Agent": _WIKI_USER_AGENT},
+            ) as client:
+                response = _safe_http_get(
+                    client,
+                    sitemap_url,
+                    base_url=base_url,
+                    max_bytes=_MAX_SITEMAP_BYTES,
+                    allow_non_article_path=True,
+                )
+            if response.status_code != 200:
+                raise ValueError(f"sitemap HTTP {response.status_code}")
+            discovered = _parse_sitemap_urls(
+                response.content.decode("utf-8", errors="replace"),
+                base_url=base_url,
+                max_pages=max_pages,
+            )
+        except Exception as exc:
+            logging.warning("Sitemap недоступен или некорректен; использую локальный список: %s", exc)
+    if not discovered:
+        discovered = _read_sitemap_snapshot_urls(base_url, max_pages)
+    return _dedupe_urls(
+        list(extra_urls) + discovered,
+        base_url=base_url,
+        max_pages=max_pages,
+    )
 
 
+def _extract_page_from_html(
+    html: str, source_url: str, base_url: str
+) -> tuple[str, str, list[str]]:
+    soup = BeautifulSoup(html, "html.parser")
+    title = (soup.title.get_text(strip=True) if soup.title else "").strip()
+    links = _dedupe_urls(
+        [
+            urljoin(source_url, anchor.get("href", ""))
+            for anchor in soup.find_all("a", href=True)
+        ],
+        base_url=base_url,
+    )
+    content = soup.find("template", attrs={"slot": "contents"})
+    text_source = content if content is not None else (soup.body or soup)
+    for tag in text_source(["script", "style", "noscript"]):
+        tag.decompose()
+    text = _normalize(f"{title}\n{text_source.get_text(' ', strip=True)}")
+    return title or "Wiki", text, links
 
+
+def _looks_like_error_page(title: str, text: str) -> bool:
+    if not text.strip():
+        return True
+    title_lower = title.lower()
+    if any(marker in title_lower for marker in (
+        "page not found", "404", "access denied", "forbidden", "captcha"
+    )):
+        return True
+    if len(text) < 120 and any(marker in text.lower() for marker in (
+        "verify you are human", "checking your browser", "access denied", "captcha"
+    )):
+        return True
+    return False
 
 
 def _extract_text_from_html(html: str) -> tuple[str, str]:
@@ -1076,29 +1696,34 @@ def _extract_text_from_html(html: str) -> tuple[str, str]:
 
 def _fetch_docs(urls: list[str]) -> list[WebWikiDoc]:
     docs: list[WebWikiDoc] = []
-    total = len(urls)
-    with httpx.Client(timeout=30.0, follow_redirects=True, headers={"User-Agent": "WikiLinkBot/1.0"}) as client:
-        for i, url in enumerate(urls, start=1):
+    with httpx.Client(
+        timeout=20.0,
+        follow_redirects=False,
+        headers={"User-Agent": _WIKI_USER_AGENT},
+    ) as client:
+        for url in urls:
             try:
-                r = client.get(url)
-                if r.status_code != 200:
+                response = _safe_http_get(
+                    client,
+                    url,
+                    base_url=url,
+                    max_bytes=_MAX_WIKI_PAGE_BYTES,
+                )
+                if response.status_code != 200:
                     continue
-                page_text = r.text
-                if len(page_text.encode("utf-8")) > _MAX_WIKI_PAGE_BYTES:
-                    logging.warning("Пропущена слишком большая страница wiki: %s", url)
+                content_type = response.headers.get("content-type", "text/html").lower()
+                if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
                     continue
-                title, text = _extract_text_from_html(page_text)
-                docs.append(WebWikiDoc(title=title, url=url, text=text))
+                title, text = _extract_text_from_html(
+                    response.content.decode("utf-8", errors="replace")
+                )
+                if not _looks_like_error_page(title, text):
+                    docs.append(WebWikiDoc(title=title, url=url, text=text))
             except Exception:
                 continue
-            if i % 50 == 0:
-                logging.info("Индексирование: %d/%d (успешно: %d)", i, total, len(docs))
     if not docs:
         raise RuntimeError("Не получилось скачать страницы вики для индекса")
     return docs
-
-
-
 
 
 def _save_cache(path: Path, docs: list[WebWikiDoc]) -> None:
@@ -1108,24 +1733,39 @@ def _save_cache(path: Path, docs: list[WebWikiDoc]) -> None:
     _atomic_write_text(path, json.dumps(payload, ensure_ascii=False))
 
 
+_ATOMIC_REPLACE_LOCK = threading.Lock()
+_ATOMIC_REPLACE_RETRIES = 5
+
+
 def _atomic_write_text(path: Path, content: str) -> None:
-    """Заменяет файл целиком, не оставляя частично записанный JSON при сбое."""
+    """Атомарно заменяет файл; Windows PermissionError повторяется ограниченно."""
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_name: str | None = None
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
         ) as temporary:
             temporary_name = temporary.name
             temporary.write(content)
             temporary.flush()
-        Path(temporary_name).replace(path)
+            os.fsync(temporary.fileno())
+        with _ATOMIC_REPLACE_LOCK:
+            for attempt in range(_ATOMIC_REPLACE_RETRIES):
+                try:
+                    Path(temporary_name).replace(path)
+                    break
+                except PermissionError:
+                    if os.name != "nt" or attempt == _ATOMIC_REPLACE_RETRIES - 1:
+                        raise
+                    time.sleep(0.01 * (2 ** attempt))
     finally:
         if temporary_name is not None:
             Path(temporary_name).unlink(missing_ok=True)
-
-
-
 
 
 def _load_cache(path: Path) -> list[WebWikiDoc]:

@@ -49,7 +49,7 @@ Windows-совместимость тестов и lock/atomic-write прове�
 
 ### Эксплуатация
 - [x] Health check endpoint (`/health`) — HTTP 200/503 для внешнего мониторинга
-- [x] Автопереиндексация при обновлении вики (мониторинг sitemap + webhook `/api/webhook/reindex`)
+- [x] Возобновляемый фоновый обход ссылок в английской вики с локальным checkpoint; sitemap и webhook `/api/webhook/reindex` остаются дополнительными источниками обновления
 
 ### Технический долг
 - [x] Разбить `text_heuristics.py` (4300+ строк) на подмодули по темам → пакет `app/bot/heuristics/`

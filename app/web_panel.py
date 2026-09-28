@@ -1092,6 +1092,10 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
         index_done = idxr.is_done() if idxr is not None else False
     except Exception:
         index_done = False
+    try:
+        index_snapshot = idxr.status_snapshot() if idxr is not None else {}
+    except Exception:
+        index_snapshot = {}
 
     def stat(n: Any, label: str) -> str:
         return f'<div class="stat"><div class="n">{html.escape(str(n))}</div><div class="l">{html.escape(label)}</div></div>'
@@ -1113,7 +1117,11 @@ def _dashboard(state: _PanelState, csrf: str = "", flash: str = "", replies_page
 
     stats = (
         stat(doc_count, "страниц вики в индексе")
-        + stat("готов" if index_done else "идёт…", "индексация")
+        + stat(index_snapshot.get("status", "готов" if index_done else "идёт…"), "индексация")
+        + stat(index_snapshot.get("queued", 0), "страниц в очереди")
+        + stat(index_snapshot.get("errors", 0), "ошибок страниц")
+        + stat(index_snapshot.get("delayed_errors", 0), "отложенных ошибок")
+        + stat("охват ограничен" if index_snapshot.get("limited") else "без лимита", "охват вики")
         + stat(len(qa), "ручных ответов")
         + stat(len(fixes), "фиксов ссылок")
         + stat(len(codes), "кодов ошибок")

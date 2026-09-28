@@ -37,33 +37,27 @@ def handle_reindex_webhook(body: dict[str, Any], application: Any) -> tuple[int,
         log.warning("wiki_reindex webhook: application или bot_data недоступны")
         return 503, {"status": "error", "message": "Application not ready"}
 
-    # Получаем переиндексер и монитор
+    # Обновление только ставится в checkpoint-очередь. Сетевой обход выполняет
+    # отдельная индексная job, поэтому webhook не зависит от доступности sitemap.
     reindexer = bot_data.get("wiki_reindexer")
-    monitor = bot_data.get("sitemap_monitor")
-
-    if not reindexer or not monitor:
-        log.warning("wiki_reindex webhook: reindexer или monitor недоступны")
+    indexer = getattr(reindexer, "indexer", None)
+    if indexer is None or not callable(getattr(indexer, "request_refresh", None)):
+        log.warning("wiki_reindex webhook: indexer недоступен")
         return 503, {"status": "error", "message": "Reindexer not available"}
-
-    # Отправляем в asyncio loop (вызывается из синхронного контекста)
-    import asyncio
-
     try:
-        loop = bot_data.get("main_loop")
-        if not loop:
-            return 503, {"status": "error", "message": "No event loop available"}
-
-        # Запускаем async задачу в фоновом loop
-        future = asyncio.run_coroutine_threadsafe(
-            reindexer.reindex_if_needed(monitor, force=True),
-            loop,
-        )
-        success = future.result(timeout=5.0)  # Ждём до 5 секунд
-
-        log.info("wiki_reindex webhook: успешно (переиндексация=%s)", success)
+        snapshot = indexer.status_snapshot()
+        already_active = snapshot.get("status") in {"queued", "running", "waiting-retry", "waiting-robots"}
+        accepted = indexer.request_refresh(source="webhook")
+        if not accepted:
+            already_active = True
+        snapshot = indexer.status_snapshot()
+        job_status = "already_running" if already_active else "queued"
         return 200, {
             "status": "ok",
-            "message": "Переиндексация инициирована" if success else "Переиндексация уже идёт",
+            "job_status": job_status,
+            "message": "Обновление уже выполняется" if already_active else "Обновление поставлено в очередь",
+            "queued": snapshot.get("queued", 0),
+            "documents": snapshot.get("documents", 0),
         }
 
     except Exception as e:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
@@ -19,6 +20,15 @@ def test_sitemap_state_save_is_atomic(tmp_path):
 
     assert json.loads(monitor.state_file.read_text(encoding="utf-8"))["hash"] == "abc"
     assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_empty_sitemap_is_an_accepted_link_crawl_configuration(tmp_path):
+    monitor = SitemapMonitor("", cache_dir=tmp_path)
+
+    assert asyncio.run(monitor.check_for_changes()) == (
+        False,
+        "sitemap не настроен; используется обход ссылок",
+    )
 
 
 def test_atomic_writer_survives_concurrent_replacements(tmp_path):
@@ -64,6 +74,10 @@ def test_unchanged_sitemap_does_not_rewrite_state(tmp_path, monkeypatch):
 
     class _Response:
         text = content
+        is_redirect = False
+
+        async def aiter_bytes(self):
+            yield self.text.encode()
 
         def raise_for_status(self):
             return None
@@ -78,8 +92,9 @@ def test_unchanged_sitemap_does_not_rewrite_state(tmp_path, monkeypatch):
         async def __aexit__(self, *_args):
             return None
 
-        async def get(self, *_args, **_kwargs):
-            return _Response()
+        @asynccontextmanager
+        async def stream(self, *_args, **_kwargs):
+            yield _Response()
 
     def save_state():
         nonlocal saves
@@ -98,6 +113,7 @@ def test_repeated_sitemap_failure_is_logged_once_until_recovery(tmp_path, monkey
 
     class _Response:
         text = "<urlset/>"
+        is_redirect = False
 
         def __init__(self, fails):
             self.fails = fails
@@ -105,6 +121,9 @@ def test_repeated_sitemap_failure_is_logged_once_until_recovery(tmp_path, monkey
         def raise_for_status(self):
             if self.fails:
                 raise RuntimeError("500 Internal Server Error")
+
+        async def aiter_bytes(self):
+            yield self.text.encode()
 
     class _Client:
         responses = [True, True, False, True]
@@ -118,8 +137,9 @@ def test_repeated_sitemap_failure_is_logged_once_until_recovery(tmp_path, monkey
         async def __aexit__(self, *_args):
             return None
 
-        async def get(self, *_args, **_kwargs):
-            return _Response(self.responses.pop(0))
+        @asynccontextmanager
+        async def stream(self, *_args, **_kwargs):
+            yield _Response(self.responses.pop(0))
 
     monkeypatch.setattr("app.bot.wiki_reindex.httpx.AsyncClient", _Client)
     caplog.set_level(logging.ERROR)
@@ -140,9 +160,13 @@ def test_sitemap_monitor_rejects_oversized_response(tmp_path, monkeypatch):
 
     class _Response:
         text = "x" * 100
+        is_redirect = False
 
         def raise_for_status(self):
             return None
+
+        async def aiter_bytes(self):
+            yield self.text.encode()
 
     class _Client:
         def __init__(self, *_args, **_kwargs):
@@ -154,8 +178,9 @@ def test_sitemap_monitor_rejects_oversized_response(tmp_path, monkeypatch):
         async def __aexit__(self, *_args):
             return None
 
-        async def get(self, *_args, **_kwargs):
-            return _Response()
+        @asynccontextmanager
+        async def stream(self, *_args, **_kwargs):
+            yield _Response()
 
     monkeypatch.setattr("app.bot.wiki_reindex.httpx.AsyncClient", _Client)
 
@@ -261,3 +286,29 @@ def test_reindex_webhook_reports_application_not_ready(monkeypatch):
 
     assert status == 503
     assert payload["message"] == "Application not ready"
+
+
+def test_reindex_webhook_returns_after_queueing_without_event_loop(monkeypatch):
+    monkeypatch.setenv("WIKI_REINDEX_SECRET", "secret")
+
+    class _Indexer:
+        def __init__(self):
+            self.queued = False
+
+        def status_snapshot(self):
+            return {"status": "complete" if not self.queued else "queued", "queued": 3, "documents": 7}
+
+        def request_refresh(self, *, source):
+            assert source == "webhook"
+            self.queued = True
+            return True
+
+    indexer = _Indexer()
+    application = SimpleNamespace(bot_data={"wiki_reindexer": SimpleNamespace(indexer=indexer)})
+    status, payload = handle_reindex_webhook({"secret": "secret"}, application)
+
+    assert status == 200
+    assert payload["status"] == "ok"
+    assert payload["job_status"] == "queued"
+    assert payload["queued"] == 3
+    assert indexer.queued

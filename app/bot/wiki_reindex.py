@@ -78,13 +78,22 @@ class SitemapMonitor:
         # Время последней проверки нужно для runtime-наблюдения, но не должно
         # заставлять переписывать state-файл при каждом неизменном опросе.
         self._state["last_check"] = time.time()
+        if not self.sitemap_url:
+            return False, "sitemap не настроен; используется обход ссылок"
         try:
-            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-                response = await client.get(self.sitemap_url, headers={"User-Agent": "WikiBot/1.0"})
-                response.raise_for_status()
-                content = response.text
-                if len(content.encode("utf-8")) > _MAX_SITEMAP_BYTES:
-                    raise ValueError("ответ sitemap превышает допустимый размер")
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=False) as client:
+                async with client.stream(
+                    "GET", self.sitemap_url, headers={"User-Agent": "WikiBot/1.0"}
+                ) as response:
+                    if response.is_redirect:
+                        raise ValueError("redirect sitemap запрещён")
+                    response.raise_for_status()
+                    content_bytes = bytearray()
+                    async for chunk in response.aiter_bytes():
+                        content_bytes.extend(chunk)
+                        if len(content_bytes) > _MAX_SITEMAP_BYTES:
+                            raise ValueError("ответ sitemap превышает допустимый размер")
+                    content = content_bytes.decode("utf-8", errors="replace")
 
             if self._last_check_error is not None:
                 logging.info("Проверка sitemap восстановлена после ошибки: %s", self._last_check_error)
@@ -161,31 +170,25 @@ class WikiReindexer:
 
             logging.info("Инициирована переиндексация вики: %s", reason)
 
-            # Получаем новый список до очистки, чтобы временная ошибка источника
-            # не стирала работающий индекс.
-            from app.web_wiki_index import _read_sitemap_urls
+            if force:
+                self.indexer.request_refresh(source="manual")
+                queued = self.indexer.status_snapshot()["queued"]
+            elif has_changes:
+                from app.web_wiki_index import _read_sitemap_urls
 
-            new_urls = await asyncio.to_thread(
-                _read_sitemap_urls,
-                self.indexer.sitemap_url,
-                max_pages=self.indexer.max_pages,
-                base_url=self.indexer.base_url,
-                extra_urls=self.indexer.extra_urls,
-            )
+                new_urls = await asyncio.to_thread(
+                    _read_sitemap_urls,
+                    self.indexer.sitemap_url,
+                    max_pages=self.indexer.max_pages,
+                    base_url=self.indexer.base_url,
+                    extra_urls=self.indexer.extra_urls,
+                )
+                self.indexer.enqueue_urls(new_urls, source="sitemap")
+                queued = self.indexer.status_snapshot()["queued"]
+            else:
+                return False
 
-            # Очищаем состояние: сбрасываем next_idx и удаляем флаг done_notified
-            self.indexer._state.next_idx = 0
-            self.indexer._state.done_notified = False
-            self.indexer._state.urls = []
-            self.indexer.index.replace_docs([])
-            _atomic_write_text(self.indexer.cache_file, "[]\n")
-            self.indexer._state.cache_version = 2
-            self.indexer._save_state(self.indexer._state)
-
-            self.indexer._state.urls = new_urls
-            self.indexer._save_state()
-
-            msg = f"✅ Переиндексация начата: {len(new_urls)} страниц в очереди. {reason}"
+            msg = f"✅ Обновление поставлено в очередь: {queued} страниц. {reason}"
             logging.info(msg)
 
             if self.notify_callback:

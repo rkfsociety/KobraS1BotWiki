@@ -253,6 +253,7 @@ def main() -> None:
         base_url=settings.wiki_base_url,
         max_pages=settings.wiki_max_pages,
         extra_urls=settings.extra_wiki_urls,
+        refresh_hours=settings.wiki_refresh_hours,
     )
     indexer.load_cached_docs()
 
@@ -402,7 +403,12 @@ def main() -> None:
                 and not idxr.is_done_notified()
             ):
                 mention = (st.notify_mention or "").strip()
-                text = "Индексация вики завершена."
+                snapshot = idxr.status_snapshot()
+                text = (
+                    "Доступная очередь вики обработана; охват ограничен настройкой WIKI_MAX_PAGES."
+                    if snapshot.get("limited")
+                    else "Доступная очередь индексации вики обработана."
+                )
                 if mention:
                     text = f"{mention} {text}"
                 try:
@@ -414,23 +420,18 @@ def main() -> None:
                         text=text,
                         source="wiki_index",
                     )
-                    idxr.mark_done_notified()
+                    await asyncio.to_thread(idxr.mark_done_notified)
                     logging.info("Отправлено уведомление о завершении индексации в чат %s", st.notify_chat_id)
                 except Exception as e:
                     logging.warning("Не удалось отправить уведомление: %s", e)
-            # Всё готово — отключаем дальнейшие запуски job, чтобы не спамить логами.
-            job = app.bot_data.get("index_job")
-            try:
-                if job:
-                    job.schedule_removal()
-                    app.bot_data["index_job"] = None
-                    logging.info("Индексация завершена — job index_step отключён")
-            except Exception:
-                pass
             return
         t0 = time.time()
         # step() блокирующий (httpx sync), выполняем в отдельном потоке
-        await asyncio.to_thread(idxr.step, st.index_batch_size)
+        try:
+            await asyncio.to_thread(idxr.step, st.index_batch_size)
+        except Exception:
+            logging.exception("Ошибка фонового шага индексации вики")
+            return
         dt = time.time() - t0
 
         # Если после шага всё закончилось — тоже уведомим.
@@ -441,7 +442,12 @@ def main() -> None:
             and not idxr.is_done_notified()
         ):
             mention = (st.notify_mention or "").strip()
-            text = "Индексация вики завершена."
+            snapshot = idxr.status_snapshot()
+            text = (
+                "Доступная очередь вики обработана; охват ограничен настройкой WIKI_MAX_PAGES."
+                if snapshot.get("limited")
+                else "Доступная очередь индексации вики обработана."
+            )
             if mention:
                 text = f"{mention} {text}"
             try:
@@ -453,21 +459,13 @@ def main() -> None:
                     text=text,
                     source="wiki_index",
                 )
-                idxr.mark_done_notified()
+                await asyncio.to_thread(idxr.mark_done_notified)
                 logging.info("Отправлено уведомление о завершении индексации в чат %s", st.notify_chat_id)
             except Exception as e:
                 logging.warning("Не удалось отправить уведомление: %s", e)
 
-        # Если индексация завершилась на этом шаге — отключаем job.
+        # Job остаётся активной для следующего планового цикла.
         if idxr.is_done():
-            job = app.bot_data.get("index_job")
-            try:
-                if job:
-                    job.schedule_removal()
-                    app.bot_data["index_job"] = None
-                    logging.info("Индексация завершена — job index_step отключён")
-            except Exception:
-                pass
             return
 
         if not st.auto_tune_indexer:
