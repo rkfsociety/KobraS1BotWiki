@@ -221,13 +221,15 @@ def format_wiki_card(*, lang: str, header_key: str, title: str, url: str, score:
     Заголовок (header_key) + статья как кликабельная ссылка + точность совпадения.
     Используется во всех ответах со ссылкой: основной поиск, /wiki, после уточнения модели и т.п.
     """
-    header = _t(lang, header_key).rstrip(": ").strip()
+    # Вики индексируется из английского источника, поэтому название статьи
+    # нельзя показывать как ответ. Все карточки вики остаются на русском.
+    _ = lang, title
+    header = _t("ru", header_key).rstrip(": ").strip()
     safe_url = html.escape(url or "")
-    safe_title = html.escape((title or "").strip()) or safe_url
-    match_line = html.escape(_t(lang, "match").format(score=score))
+    match_line = html.escape(_t("ru", "match").format(score=score))
     return (
         f"📚 <b>{html.escape(header)}</b>\n\n"
-        f"📄 <a href=\"{safe_url}\">{safe_title}</a>\n"
+        f"📄 <a href=\"{safe_url}\">Открыть статью в вики</a>\n"
         f"<i>🎯 {match_line}</i>"
     )
 
