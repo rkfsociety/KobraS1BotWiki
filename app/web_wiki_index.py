@@ -1656,8 +1656,8 @@ def _looks_like_error_page(title: str, text: str) -> bool:
         return True
     title_lower = title.lower()
     if any(marker in title_lower for marker in (
-        "page not found", "404", "access denied", "forbidden", "captcha"
-    )):
+        "page not found", "access denied", "forbidden", "captcha"
+    )) or re.search(r"(?<!\d)404(?!\d)", title_lower):
         return True
     if len(text) < 120 and any(marker in text.lower() for marker in (
         "verify you are human", "checking your browser", "access denied", "captcha"

@@ -14,12 +14,24 @@ from app.web_wiki_index import (
     _extract_text_from_html,
     _fetch_docs,
     _looks_like_question,
+    _looks_like_error_page,
     _load_cache,
     _extract_page_from_html,
     _normalize_wiki_url,
     _read_sitemap_urls,
     _save_cache,
 )
+
+
+def test_error_code_11404_title_is_not_mistaken_for_http_404():
+    assert not _looks_like_error_page(
+        "11404 Video stream startup failed | Anycubic Wiki",
+        "Подробное описание ошибки запуска видеопотока." * 10,
+    )
+
+
+def test_http_404_title_is_still_detected_as_error_page():
+    assert _looks_like_error_page("404 Not Found | Anycubic Wiki", "Страница не найдена.")
 
 
 def test_looks_like_question_reuses_bounded_cache():

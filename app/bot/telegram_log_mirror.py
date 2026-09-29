@@ -480,6 +480,12 @@ def format_log_for_telegram(record: logging.LogRecord, *, redact: str | None = N
 
 def _format_body(msg: str, record: logging.LogRecord) -> str | None:
 
+    # This periodic crawler snapshot is useful in the local journal, but would
+    # flood the Telegram log chat while a page is waiting for its retry window.
+    if msg.startswith("Индексация вики: status="):
+
+        return None
+
     if msg == "Индексация завершена — job index_step отключён":
         return None
 

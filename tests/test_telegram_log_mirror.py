@@ -266,6 +266,13 @@ def test_startup_noise_suppressed():
         assert format_log_for_telegram(record) is None, msg
 
 
+def test_repeated_wiki_index_status_is_not_mirrored():
+    msg = "Индексация вики: status=waiting-retry queue=1 docs=1633 updated=0"
+    record = logging.LogRecord("root", logging.INFO, "", 0, msg, (), None)
+
+    assert format_log_for_telegram(record) is None
+
+
 def test_incoming_text_for_log_includes_reply_quote():
     class _User:
         id = 1
