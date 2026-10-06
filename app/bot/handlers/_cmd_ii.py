@@ -9,7 +9,7 @@ from telegram.ext import ContextTypes
 
 from app.bot.ephemeral import schedule_delete_slash_command_and_reply
 from app.bot.i18n import _lang_from_message, _t
-from app.bot.literouter import LiteRouterError, ask_literouter
+from app.bot.literouter import LiteRouterError, ask_literouter, get_literouter_models, move_literouter_model_to_end
 from app.bot.reply_logging import add_to_recent_replies
 from app.bot.review_mention import (
     record_outgoing_bot_message,
@@ -259,7 +259,7 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if isinstance(index, WebWikiIndex):
         docs = _find_context_docs(index, question, settings)
 
-    models = tuple(getattr(settings, "literouter_models", ()) or ()) or (settings.literouter_model,)
+    models = get_literouter_models(settings)
     async def ask_models(
         messages: list[dict[str, str]],
         *,
@@ -292,6 +292,7 @@ async def cmd_ii(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 selected_model = model
                 break
             except LiteRouterError as exc:
+                move_literouter_model_to_end(settings, model)
                 last_error = exc
                 logging.warning("/ii model failed chat=%s model=%s: %s", command_msg.chat_id, model, exc)
         if answer is None and rejected_answer is not None:

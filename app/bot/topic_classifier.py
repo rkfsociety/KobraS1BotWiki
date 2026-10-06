@@ -9,29 +9,22 @@ from typing import Any
 
 from app.bot.bot_stats import _daily_epoch_bounds
 from app.bot.chat_store import ChatMessage, ChatStore
-from app.bot.literouter import LiteRouterError, ask_literouter, list_literouter_models
+from app.bot.literouter import (
+    LITEROUTER_MODEL_PRIORITY,
+    LiteRouterError,
+    ask_literouter,
+    get_literouter_models,
+    list_literouter_models,
+    move_literouter_model_to_end,
+    update_literouter_model_order,
+)
 
 log = logging.getLogger(__name__)
+TOPIC_MODEL_PRIORITY = LITEROUTER_MODEL_PRIORITY
 
 _MAX_INPUT_MESSAGES = 600
 _MAX_MESSAGE_TEXT = 300
 _MAX_TOPICS = 10
-
-# /models не содержит оценки качества. Этот порядок — общий безопасный рейтинг
-# бесплатных вариантов для тематизации и контекстного AI-ответа.
-TOPIC_MODEL_PRIORITY = (
-    "deepseek-v4-flash-0731:free",
-    "deepseek-v4-flash:free",
-    "glm-5.3:free",
-    "gpt-oss-120b:free",
-    "deepseek-v3.2:free",
-    "glm-5.2:free",
-    "gemini-2.5-flash:free",
-    "qwen3.8-27b:free",
-    "gemma-4-31b-it:free",
-    "mistral-large-3:free",
-)
-
 
 def _normalized_text(text: str) -> str:
     return " ".join(text.lower().split())
@@ -106,17 +99,8 @@ def _messages_for_prompt(rows: list[dict[str, Any]]) -> str:
     return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
 
 
-def _configured_models(settings: Any) -> tuple[str, ...]:
-    models = tuple(getattr(settings, "literouter_models", ()) or ())
-    if models:
-        return models
-    model = getattr(settings, "literouter_model", "")
-    return (model,) if model else ()
-
-
 async def select_topic_models(settings: Any) -> tuple[str, ...]:
-    """Выбирает доступные бесплатные модели в порядке рейтинга для тем."""
-    configured = _configured_models(settings)
+    """Обновляет доступные модели и возвращает их текущий порядок."""
     try:
         available = await list_literouter_models(
             api_key=settings.literouter_api_key,
@@ -124,15 +108,10 @@ async def select_topic_models(settings: Any) -> tuple[str, ...]:
             timeout_seconds=settings.literouter_timeout_seconds,
             cooldown_seconds=getattr(settings, "literouter_cooldown_seconds", 9),
         )
+        update_literouter_model_order(settings, available)
     except LiteRouterError as exc:
         log.warning("Не удалось получить список моделей LiteRouter: %s; используем настройку", exc)
-        return configured
-
-    available_set = set(available)
-    ranked = tuple(model for model in TOPIC_MODEL_PRIORITY if model in available_set)
-    configured_available = tuple(model for model in configured if model in available_set)
-    selected = tuple(dict.fromkeys((*ranked, *configured_available)))
-    return selected or configured
+    return get_literouter_models(settings)
 
 
 async def classify_daily_topics(
@@ -164,7 +143,7 @@ async def classify_daily_topics(
         "Максимум 10 тем. Не выдумывай темы и индексы."
     )
     user = f"DATA_BEGIN\n{_messages_for_prompt(rows)}\nDATA_END"
-    models = models or _configured_models(settings)
+    models = models or get_literouter_models(settings)
 
     selected_model = ""
     parsed: list[tuple[str, int]] | None = None
@@ -187,6 +166,7 @@ async def classify_daily_topics(
                 break
             raise LiteRouterError("модель вернула некорректную классификацию")
         except LiteRouterError as exc:
+            move_literouter_model_to_end(settings, model)
             log.warning("AI-классификация тем не удалась chat=%s model=%s: %s", chat_id, model, exc)
 
     if parsed is None:

@@ -6,8 +6,7 @@ import re
 from typing import Any, Iterable
 
 from app.bot.chat_store import ChatMessage
-from app.bot.literouter import LiteRouterError, ask_literouter
-from app.bot.topic_classifier import TOPIC_MODEL_PRIORITY
+from app.bot.literouter import LiteRouterError, ask_literouter, get_literouter_models, move_literouter_model_to_end
 
 
 MAX_TOPIC_CONTEXT_MESSAGES = 50
@@ -63,14 +62,7 @@ def _looks_truncated(answer: str) -> bool:
 
 
 def _free_models(settings: Any) -> tuple[str, ...]:
-    configured = tuple(getattr(settings, "literouter_models", ()) or ())
-    if not configured:
-        configured = (getattr(settings, "literouter_model", "") or "",)
-    configured = tuple(dict.fromkeys(model.strip() for model in configured if model.strip().endswith(":free")))
-    configured_set = set(configured)
-    ranked = tuple(model for model in TOPIC_MODEL_PRIORITY if model in configured_set)
-    remainder = tuple(model for model in configured if model not in ranked)
-    return (*ranked, *remainder)
+    return get_literouter_models(settings, free_only=True)
 
 
 def build_contextual_answer_messages(question: str, context: str) -> list[dict[str, str]]:
@@ -215,11 +207,13 @@ async def classify_message_as_question(*, settings: Any, text: str) -> bool | No
                 cooldown_seconds=getattr(settings, "literouter_cooldown_seconds", 9),
             )
         except LiteRouterError as exc:
+            move_literouter_model_to_end(settings, model)
             logging.warning("Question classifier model failed model=%s: %s", model, exc)
             continue
         decision = _parse_question_classification(answer)
         if decision is not None:
             return decision
+        move_literouter_model_to_end(settings, model)
         logging.warning("Question classifier returned invalid marker model=%s", model)
     return None
 
@@ -251,11 +245,13 @@ async def judge_wiki_relevance(*, settings: Any, question: str, document: Any) -
                 cooldown_seconds=getattr(settings, "literouter_cooldown_seconds", 9),
             )
         except LiteRouterError as exc:
+            move_literouter_model_to_end(settings, model)
             logging.warning("Wiki relevance model failed model=%s: %s", model, exc)
             continue
         decision = _parse_wiki_relevance(answer)
         if decision is not None:
             return decision
+        move_literouter_model_to_end(settings, model)
         logging.warning("Wiki relevance model returned invalid marker model=%s", model)
     return None
 
@@ -292,11 +288,13 @@ async def select_relevant_topic_messages(
                 cooldown_seconds=getattr(settings, "literouter_cooldown_seconds", 9),
             )
         except LiteRouterError as exc:
+            move_literouter_model_to_end(settings, model)
             logging.warning("Context selector model failed model=%s: %s", model, exc)
             continue
         indexes = _parse_context_selection(answer, len(candidates))
         if indexes is not None:
             return [candidates[index - 1][0] for index in indexes], model, attempts
+        move_literouter_model_to_end(settings, model)
         logging.warning("Context selector returned invalid marker model=%s", model)
     return [], None, attempts
 
@@ -353,6 +351,8 @@ async def generate_contextual_answer(
             body = _strip_marker(answer)
             if body:
                 return body, model, attempts
+            raise LiteRouterError("модель вернула пустой ответ")
         except LiteRouterError as exc:
+            move_literouter_model_to_end(settings, model)
             logging.warning("AI fallback model failed chat context model=%s: %s", model, exc)
     return None, None, attempts

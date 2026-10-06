@@ -11,7 +11,14 @@ from app.bot.handlers._cmd_ii import (
     _looks_truncated,
     _split_telegram_text,
 )
-from app.bot.literouter import LiteRouterError, ask_literouter, list_literouter_models
+from app.bot.literouter import (
+    LiteRouterError,
+    ask_literouter,
+    get_literouter_models,
+    list_literouter_models,
+    move_literouter_model_to_end,
+    update_literouter_model_order,
+)
 from app.web_wiki_index import WebWikiDoc, WebWikiIndex
 
 
@@ -149,6 +156,31 @@ def test_literouter_lists_models_for_current_key(monkeypatch):
     assert captured["endpoint"] == "https://api.literouter.com/v1/models"
     assert captured["kwargs"]["headers"]["Authorization"] == "Bearer secret-value"
     assert captured["client_kwargs"]["headers"]["User-Agent"] == "KobraS1BotWiki/1.0"
+
+
+def test_model_order_demotes_failed_models_and_refreshes_available_list():
+    settings = SimpleNamespace(
+        literouter_models=("rotation-first:free", "rotation-second:free"),
+    )
+
+    move_literouter_model_to_end(settings, "rotation-first:free")
+    assert get_literouter_models(settings) == ("rotation-second:free", "rotation-first:free")
+
+    refreshed = update_literouter_model_order(
+        settings,
+        ("rotation-first:free", "rotation-second:free", "new-model:free", "new-paid-model"),
+    )
+    assert refreshed == (
+        "rotation-second:free",
+        "rotation-first:free",
+        "new-model:free",
+    )
+
+    refreshed = update_literouter_model_order(
+        settings,
+        ("rotation-first:free", "new-model:free", "newer-model:free"),
+    )
+    assert refreshed == ("rotation-first:free", "new-model:free", "newer-model:free")
 
 
 def test_literouter_rejects_non_https_base_url_without_request():

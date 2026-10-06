@@ -6,10 +6,18 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from app.bot.lifecycle import _acquire_process_lock, _ensure_lock_available, _restore_clarify_pending
+from app.bot.lifecycle import (
+    LITEROUTER_MODEL_REFRESH_SECONDS,
+    _acquire_process_lock,
+    _ensure_lock_available,
+    _restore_clarify_pending,
+    _schedule_literouter_model_refresh,
+    refresh_literouter_models_job,
+)
 
 
 def test_entrypoint_installs_event_loop_without_deprecation_warning():
@@ -39,6 +47,30 @@ def test_restore_clarify_pending_skips_malformed_records():
     })
 
     assert restored == {(-100, 42): {"original": "вопрос"}}
+
+
+def test_literouter_model_refresh_is_scheduled_hourly():
+    captured = {}
+
+    class JobQueue:
+        def run_repeating(self, callback, **kwargs):
+            captured["callback"] = callback
+            captured.update(kwargs)
+            return "job"
+
+    application = SimpleNamespace(job_queue=JobQueue(), bot_data={})
+    settings = SimpleNamespace(literouter_enabled=True, literouter_api_key="key")
+
+    _schedule_literouter_model_refresh(application, settings)
+
+    assert captured == {
+        "callback": refresh_literouter_models_job,
+        "interval": 3600,
+        "first": 3600,
+        "name": "literouter_models_refresh",
+    }
+    assert application.bot_data["literouter_models_job"] == "job"
+    assert LITEROUTER_MODEL_REFRESH_SECONDS == 3600
 
 
 def test_lock_check_rejects_running_process(monkeypatch, tmp_path: Path):

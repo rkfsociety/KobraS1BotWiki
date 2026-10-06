@@ -76,6 +76,7 @@ from app.bot.moderation import flush_moderation_store, load_moderation_store
 from app.bot.bot_stats import flush_bot_stats, load_bot_stats
 from app.bot.command_menu import configure_command_menu
 from app.bot.daily_stats import DAILY_STATS_SEND_TIME, configured_daily_stats_chat_ids, send_daily_stats
+from app.bot.literouter import LiteRouterError, get_literouter_models, refresh_literouter_model_order
 from app.bot.panel_login import cmd_start
 from app.bot.reactions import on_message_reaction
 from app.bot.ops_notify import notify_ops
@@ -87,6 +88,40 @@ from app.config import Settings, load_environment_files, load_settings
 from app.error_codes_catalog import ensure_error_codes_catalog, merge_manual_overrides
 from app.resource_limits import apply_posix_virtual_memory_limit_mb
 from app.web_wiki_index import WebWikiIndex, WebWikiIndexer
+
+LITEROUTER_MODEL_REFRESH_SECONDS = 60 * 60
+
+
+async def _refresh_literouter_models(settings: Settings) -> None:
+    if not settings.literouter_enabled or not settings.literouter_api_key:
+        return
+    previous = get_literouter_models(settings)
+    try:
+        refreshed = await refresh_literouter_model_order(settings)
+    except LiteRouterError as exc:
+        logging.warning("Не удалось обновить список моделей LiteRouter: %s", exc)
+        return
+    if refreshed != previous:
+        logging.info("Список моделей LiteRouter обновлён: %s", ", ".join(refreshed))
+
+
+async def refresh_literouter_models_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Ежечасно актуализирует доступные модели LiteRouter."""
+    settings = context.application.bot_data.get("settings")
+    if settings is not None:
+        await _refresh_literouter_models(settings)
+
+
+def _schedule_literouter_model_refresh(application: Application, settings: Settings) -> None:
+    if not settings.literouter_enabled or not settings.literouter_api_key:
+        return
+    application.bot_data["literouter_models_job"] = application.job_queue.run_repeating(
+        refresh_literouter_models_job,
+        interval=LITEROUTER_MODEL_REFRESH_SECONDS,
+        first=LITEROUTER_MODEL_REFRESH_SECONDS,
+        name="literouter_models_refresh",
+    )
+    logging.info("Список моделей LiteRouter будет обновляться каждый час")
 
 
 def _restore_clarify_pending(store: object) -> dict[tuple[int, int], dict]:
@@ -290,6 +325,7 @@ def main() -> None:
         me = await application.bot.get_me()
         application.bot_data["bot_username"] = me.username
         application.bot_data["bot_id"] = me.id
+        await _refresh_literouter_models(settings)
         try:
             await configure_command_menu(application.bot)
             logging.info("Меню команд Telegram настроено")
@@ -591,6 +627,8 @@ def main() -> None:
             "Ежедневная статистика групп: %s чатов, отправка в General в 00:05 Europe/Kaliningrad",
             len(daily_stats_chat_ids),
         )
+
+    _schedule_literouter_model_refresh(app, settings)
 
     app.post_init = _post_init  # type: ignore[attr-defined]
 

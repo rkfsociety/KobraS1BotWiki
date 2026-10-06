@@ -4,6 +4,7 @@ import asyncio
 from types import SimpleNamespace
 
 from app.bot.chat_store import ChatMessage
+from app.bot.literouter import LiteRouterError, get_literouter_models
 from app.bot.context_ai import (
     build_contextual_answer_messages,
     build_context_selection_messages,
@@ -65,6 +66,37 @@ def test_question_classifier_returns_decision_without_generating_answer(monkeypa
     assert decision is False
     assert calls[0]["model"] == "classifier:free"
     assert calls[0]["messages"] == build_question_classification_messages("Что дверь не закрывалась")
+
+
+def test_question_classifier_moves_failed_model_to_end_for_next_request(monkeypatch):
+    settings = SimpleNamespace(
+        literouter_enabled=True,
+        literouter_api_key="key",
+        literouter_base_url="https://api.example/v1",
+        literouter_models=("rotation-bad:free", "rotation-good:free"),
+        literouter_timeout_seconds=5,
+        literouter_max_tokens=None,
+        literouter_cooldown_seconds=0,
+    )
+    calls: list[str] = []
+
+    async def ask(**kwargs):
+        calls.append(kwargs["model"])
+        if kwargs["model"] == "rotation-bad:free":
+            raise LiteRouterError("сетевой сбой: ReadTimeout")
+        return "QUESTION"
+
+    monkeypatch.setattr("app.bot.context_ai.ask_literouter", ask)
+
+    assert asyncio.run(classify_message_as_question(settings=settings, text="Вопрос?")) is True
+    assert get_literouter_models(settings, free_only=True) == (
+        "rotation-good:free",
+        "rotation-bad:free",
+    )
+
+    calls.clear()
+    assert asyncio.run(classify_message_as_question(settings=settings, text="Ещё вопрос?")) is True
+    assert calls == ["rotation-good:free"]
 
 
 def test_context_selector_ignores_unrelated_messages(monkeypatch):

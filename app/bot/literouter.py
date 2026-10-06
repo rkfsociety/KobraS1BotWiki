@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 import time
 from typing import Any
 
@@ -19,6 +20,110 @@ _USER_AGENT = "KobraS1BotWiki/1.0"
 _COOLDOWN_LOCK: asyncio.Lock | None = None
 _COOLDOWN_LOOP = None
 _NEXT_REQUEST_AT = 0.0
+_MODEL_ORDER_LOCK = threading.RLock()
+_MODEL_ORDERS: dict[tuple[str, ...], list[str]] = {}
+_MODEL_SYNCED: set[tuple[str, ...]] = set()
+
+LITEROUTER_MODEL_PRIORITY = (
+    "deepseek-v4-flash-0731:free",
+    "deepseek-v4-flash:free",
+    "glm-5.3:free",
+    "gpt-oss-120b:free",
+    "deepseek-v3.2:free",
+    "glm-5.2:free",
+    "gemini-2.5-flash:free",
+    "qwen3.8-27b:free",
+    "gemma-4-31b-it:free",
+    "mistral-large-3:free",
+)
+
+
+def _configured_models(settings: Any) -> tuple[str, ...]:
+    configured = tuple(getattr(settings, "literouter_models", ()) or ())
+    if not configured:
+        configured = (getattr(settings, "literouter_model", "") or "",)
+    return tuple(dict.fromkeys(model.strip() for model in configured if model.strip()))
+
+
+def _seed_model_order(configured: tuple[str, ...]) -> list[str]:
+    configured_set = set(configured)
+    ranked = [model for model in LITEROUTER_MODEL_PRIORITY if model in configured_set]
+    ranked.extend(model for model in configured if model not in configured_set.intersection(ranked))
+    return ranked
+
+
+def get_literouter_models(
+    settings: Any,
+    *,
+    free_only: bool = False,
+    configured_only: bool = False,
+) -> tuple[str, ...]:
+    """Возвращает текущий порядок моделей, включая обнаруженные бесплатные модели."""
+    configured = _configured_models(settings)
+    with _MODEL_ORDER_LOCK:
+        ordered = tuple(_MODEL_ORDERS.setdefault(configured, _seed_model_order(configured)))
+    configured_set = set(configured)
+    if configured_only:
+        ordered = tuple(model for model in ordered if model in configured_set)
+    if free_only:
+        ordered = tuple(model for model in ordered if model.endswith(":free"))
+    return ordered
+
+
+def move_literouter_model_to_end(settings: Any, model: str) -> None:
+    """Демотирует неответившую модель для всех последующих запросов этого списка."""
+    configured = _configured_models(settings)
+    with _MODEL_ORDER_LOCK:
+        ordered = _MODEL_ORDERS.setdefault(configured, _seed_model_order(configured))
+        if model in ordered and ordered[-1] != model:
+            ordered.remove(model)
+            ordered.append(model)
+        _MODEL_SYNCED.add(configured)
+
+
+def update_literouter_model_order(settings: Any, available_models: tuple[str, ...]) -> tuple[str, ...]:
+    """Удаляет недоступные модели и дописывает новые бесплатные, сохраняя demotions."""
+    configured = _configured_models(settings)
+    available = tuple(dict.fromkeys(model.strip() for model in available_models if model.strip()))
+    available_set = set(available)
+    with _MODEL_ORDER_LOCK:
+        previous = _MODEL_ORDERS.setdefault(configured, _seed_model_order(configured))
+        if configured not in _MODEL_SYNCED:
+            ordered = [
+                model
+                for model in LITEROUTER_MODEL_PRIORITY
+                if model in available_set and model.endswith(":free")
+            ]
+            included = set(ordered)
+            ordered.extend(model for model in configured if model in available_set and model not in included)
+            included.update(ordered)
+            ordered.extend(model for model in available if model.endswith(":free") and model not in included)
+        else:
+            ordered = [model for model in previous if model in available_set]
+            included = set(ordered)
+            ordered.extend(model for model in configured if model in available_set and model not in included)
+            included.update(ordered)
+            ordered.extend(
+                model
+                for model in LITEROUTER_MODEL_PRIORITY
+                if model in available_set and model.endswith(":free") and model not in included
+            )
+            included.update(ordered)
+            ordered.extend(model for model in available if model.endswith(":free") and model not in included)
+        _MODEL_ORDERS[configured] = ordered
+        _MODEL_SYNCED.add(configured)
+        return tuple(ordered)
+
+
+async def refresh_literouter_model_order(settings: Any) -> tuple[str, ...]:
+    """Синхронизирует runtime-список с актуальным GET /models."""
+    available = await list_literouter_models(
+        api_key=settings.literouter_api_key,
+        base_url=settings.literouter_base_url,
+        timeout_seconds=settings.literouter_timeout_seconds,
+        cooldown_seconds=0,
+    )
+    return update_literouter_model_order(settings, available)
 
 
 async def _wait_for_cooldown(seconds: int) -> None:
