@@ -1746,6 +1746,17 @@ def _make_handler(state: _PanelState) -> type[BaseHTTPRequestHandler]:
         server_version = "KobraPanel/1.0"
         _csrf = ""
 
+        def handle(self) -> None:
+            try:
+                super().handle()
+            except (ConnectionResetError, BrokenPipeError) as exc:
+                # The peer can disconnect before sending headers or while we reply.
+                # There is no socket left on which to send an HTTP error response.
+                self.close_connection = True
+                logging.getLogger(__name__).info(
+                    "panel: client disconnected (%s)", type(exc).__name__
+                )
+
         # тише в консоли — пишем свои строки через logging при желании
         def log_message(self, fmt: str, *args: Any) -> None:  # noqa: A003
             return

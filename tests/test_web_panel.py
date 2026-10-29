@@ -76,6 +76,44 @@ def _conn(port: int) -> http.client.HTTPConnection:
     return http.client.HTTPConnection("127.0.0.1", port, timeout=5)
 
 
+@pytest.mark.parametrize("error", [ConnectionResetError, BrokenPipeError])
+@pytest.mark.parametrize("stage", ["read", "write"])
+def test_handler_closes_disconnected_clients(error, stage, caplog):
+    from app.web_panel import _make_handler
+
+    class Stream:
+        def readline(self, _limit):
+            if stage == "read":
+                raise error("peer disconnected")
+            return b"GET / HTTP/9.9\r\n"
+
+        def write(self, _data):
+            raise error("peer disconnected")
+
+        def flush(self):
+            pass
+
+    handler = object.__new__(_make_handler(None))
+    handler.rfile = handler.wfile = Stream()
+    with caplog.at_level("INFO", logger="app.web_panel"):
+        handler.handle()
+    assert handler.close_connection is True
+    assert f"client disconnected ({error.__name__})" in caplog.text
+
+
+def test_handler_preserves_unexpected_errors():
+    from app.web_panel import _make_handler
+
+    class Stream:
+        def readline(self, _limit):
+            raise RuntimeError("unexpected failure")
+
+    handler = object.__new__(_make_handler(None))
+    handler.rfile = Stream()
+    with pytest.raises(RuntimeError, match="unexpected failure"):
+        handler.handle()
+
+
 def test_sort_missed_entries_uses_requested_order_once():
     entries = [
         {"text": "count-first", "count": 10, "score": 90, "ts": 100},
